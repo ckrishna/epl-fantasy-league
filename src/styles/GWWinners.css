@@ -1,38 +1,47 @@
-/* src/styles/GWWinners.css */
+/* src/styles/GWWinners.css - Enhanced */
 .gw-winners-page {
   background: white;
-  border-radius: 8px;
-  padding: 2rem;
-  box-shadow: var(--shadow);
+  border-radius: 12px;
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .gw-winners-page h2 {
+  color: #003d7a;
   margin-bottom: 0.5rem;
-  color: var(--primary);
+  font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
 .gw-winners-page > p {
-  color: #666;
+  color: #6b7280;
   margin-bottom: 2rem;
-  font-size: 0.95rem;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
 .winners-timeline {
   display: grid;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
 .gw-group {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
   padding: 1.5rem;
-  background: #f9f9f9;
+  background: linear-gradient(135deg, rgba(0, 61, 122, 0.02) 0%, transparent 100%);
+  transition: all 0.3s ease;
+}
+
+.gw-group:hover {
+  border-color: #003d7a;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
 .gw-group h3 {
-  color: var(--primary);
-  margin-bottom: 1rem;
-  font-size: 1.2rem;
+  color: #003d7a;
+  margin-bottom: 1.25rem;
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .winners-list {
@@ -43,34 +52,62 @@
 
 .winner-card {
   background: white;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.5rem;
   text-align: center;
   transition: all 0.3s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .winner-card:hover {
-  box-shadow: var(--shadow);
-  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  border-color: #ffb81c;
 }
 
 .winner-name {
-  font-weight: 600;
-  color: var(--neutral);
-  margin-bottom: 0.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
 }
 
 .winner-points {
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: var(--primary);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #003d7a;
   margin-bottom: 0.5rem;
 }
 
 .winner-prize {
-  font-size: 1.1rem;
-  color: var(--success);
-  font-weight: 600;
+  font-size: 1.25rem;
+  color: #10b981;
+  font-weight: 700;
 }
+
+@media (max-width: 768px) {
+  .gw-winners-page {
+    padding: 1.5rem 1rem;
+  }
+
+  .winners-list {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .gw-winners-page {
+    padding: 1rem;
+  }
+
+  .winners-list {
+    grid-template-columns: 1fr;
+  }
+
+  .winner-card {
+    padding: 1rem;
+  }
+}
+
