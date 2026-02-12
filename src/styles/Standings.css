@@ -1,0 +1,94 @@
+/* src/styles/Standings.css */
+.standings-page {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+
+.gw-selector {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.gw-selector label {
+  font-weight: 600;
+  color: var(--neutral);
+}
+
+.gw-selector input {
+  width: 80px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.standings-table thead {
+  background-color: var(--light);
+  border-bottom: 2px solid var(--border);
+}
+
+.standings-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--neutral);
+}
+
+.standings-table td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.standings-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.standings-table tbody tr.top-three {
+  background-color: #fffef0;
+  font-weight: 500;
+}
+
+.standings-table .rank {
+  font-size: 1.2rem;
+  text-align: center;
+  width: 50px;
+}
+
+.standings-table .manager-name {
+  font-weight: 600;
+}
+
+.standings-table .team-name {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.standings-table .points {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.standings-table .earnings {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.no-data {
+  text-align: center;
+  padding: 2rem;
+  color: #999;
+  font-style: italic;
+}
