@@ -1,4 +1,4 @@
-// src/pages/GWWinners.jsx
+// src/pages/GWWinners.jsx - Simplified
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
@@ -6,7 +6,6 @@ import '../styles/GWWinners.css';
 export default function GWWinners() {
   const [winners, setWinners] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [expandedManager, setExpandedManager] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -45,20 +44,6 @@ export default function GWWinners() {
     }))
     .sort((a, b) => b.wins - a.wins);
 
-  // Group winners by manager
-  const winnersByManager = {};
-  winners.forEach(w => {
-    if (!winnersByManager[w.manager_id]) {
-      winnersByManager[w.manager_id] = [];
-    }
-    winnersByManager[w.manager_id].push(w);
-  });
-
-  // Sort each manager's wins by gameweek descending
-  Object.keys(winnersByManager).forEach(id => {
-    winnersByManager[id].sort((a, b) => b.gameweek - a.gameweek);
-  });
-
   return (
     <div className="gw-winners-page">
       <h2>Gameweek Winners</h2>
@@ -80,55 +65,6 @@ export default function GWWinners() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Accordion View */}
-      <div className="winners-accordion">
-        <h3>Detailed Wins by Manager</h3>
-        {sortedStats.map((stat) => (
-          <div key={stat.manager_id} className="accordion-item">
-            <button
-              className="accordion-header"
-              onClick={() => setExpandedManager(
-                expandedManager === stat.manager_id ? null : stat.manager_id
-              )}
-            >
-              <span className="accordion-title">
-                {stat.manager_name} ({stat.wins} wins)
-              </span>
-              <span className="accordion-icon">
-                {expandedManager === stat.manager_id ? '▼' : '▶'}
-              </span>
-            </button>
-
-            {expandedManager === stat.manager_id && (
-              <div className="accordion-content">
-                <table className="mini-table">
-                  <thead>
-                    <tr>
-                      <th>GW</th>
-                      <th>Net Points</th>
-                      <th>Gross Points</th>
-                      <th>Transfer Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {winnersByManager[stat.manager_id].map(w => (
-                      <tr key={`${w.gameweek}-${w.manager_id}`}>
-                        <td className="gw-cell">{w.gameweek}</td>
-                        <td className="net-points"><strong>{w.points}</strong></td>
-                        <td>{w.gross_points}</td>
-                        <td className="transfer-cost">
-                          {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ))}
       </div>
 
       {/* Full Table View */}
