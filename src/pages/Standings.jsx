@@ -1,4 +1,4 @@
-// src/pages/Standings.jsx - Without Earnings
+// src/pages/Standings.jsx - Mobile cards, desktop table
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
 import '../styles/Standings.css';
@@ -22,6 +22,35 @@ export default function Standings() {
 
   return (
     <div className="standings-page">
+      <h2>League Standings</h2>
+      <p className="subtitle">Ranked by total points</p>
+
+      {/* Mobile Card View */}
+      <div className="standings-cards">
+        {standings.map((manager) => (
+          <div key={manager.manager_id} className="standings-card">
+            <div className="card-rank">
+              <span className="rank-badge">{manager.rank}</span>
+            </div>
+            <div className="card-info">
+              <h3 className="card-manager">{manager.manager_name}</h3>
+              <p className="card-team">{manager.team_name}</p>
+            </div>
+            <div className="card-stats">
+              <div className="stat">
+                <span className="stat-label">Total</span>
+                <span className="stat-value">{manager.total_points}</span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">This Week</span>
+                <span className="stat-value">{manager.points_this_week}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
       <table className="standings-table">
         <thead>
           <tr>
@@ -33,8 +62,8 @@ export default function Standings() {
           </tr>
         </thead>
         <tbody>
-          {standings.map((manager, idx) => (
-            <tr key={manager.manager_id} className={idx < 3 ? 'top-three' : ''}>
+          {standings.map((manager) => (
+            <tr key={manager.manager_id} className={manager.rank <= 3 ? 'top-three' : ''}>
               <td className="rank">{manager.rank}</td>
               <td className="manager-name">{manager.manager_name}</td>
               <td className="team-name">{manager.team_name}</td>

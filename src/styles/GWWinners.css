@@ -1,21 +1,22 @@
-/* src/styles/GWWinners.css - Simplified */
+/* src/styles/GWWinners.css - Mobile-first */
 .gw-winners-page {
   background: white;
   border-radius: 12px;
-  padding: clamp(1.5rem, 5vw, 2.5rem);
+  padding: clamp(1.5rem, 4vw, 2.5rem);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .gw-winners-page h2 {
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-weight: 700;
   color: #003d7a;
-  margin-bottom: 0.5rem;
-  font-size: clamp(1.5rem, 4vw, 2rem);
+  margin-bottom: 0.25rem;
 }
 
 .gw-winners-page > p {
   color: #6b7280;
-  margin-bottom: 2rem;
-  font-size: 1rem;
+  margin-bottom: clamp(1.5rem, 4vw, 2rem);
+  font-size: clamp(0.85rem, 2.5vw, 0.95rem);
   font-weight: 500;
 }
 
@@ -23,96 +24,91 @@
 .winners-dashboard {
   background: linear-gradient(135deg, rgba(0, 61, 122, 0.05) 0%, transparent 100%);
   border-radius: 10px;
-  padding: 2rem;
-  margin-bottom: 2rem;
+  padding: clamp(1.5rem, 3vw, 2rem);
+  margin-bottom: clamp(1.5rem, 4vw, 2rem);
   border: 1px solid #e5e7eb;
 }
 
 .winners-dashboard h3 {
   color: #003d7a;
-  margin-bottom: 1.5rem;
-  font-size: 1.1rem;
+  margin-bottom: clamp(1rem, 3vw, 1.5rem);
+  font-size: clamp(1rem, 3vw, 1.1rem);
   font-weight: 700;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr;
+  gap: clamp(0.75rem, 2vw, 1rem);
 }
 
 .stat-card {
   background: white;
   border: 2px solid #e5e7eb;
   border-radius: 10px;
-  padding: 1.5rem;
+  padding: clamp(1rem, 2.5vw, 1.25rem);
   text-align: center;
-  transition: all 0.3s ease;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.stat-card:hover {
-  border-color: #003d7a;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
 .stat-rank {
-  font-size: 2rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
   font-weight: 800;
   color: #ffb81c;
-  margin-bottom: 0.5rem;
+  margin-bottom: clamp(0.5rem, 1vw, 0.75rem);
 }
 
 .stat-name {
   font-weight: 700;
   color: #003d7a;
-  margin-bottom: 1rem;
-  font-size: 0.95rem;
+  margin-bottom: clamp(0.75rem, 2vw, 1rem);
+  font-size: clamp(0.9rem, 2.5vw, 0.95rem);
+  word-break: break-word;
 }
 
 .stat-wins {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  gap: clamp(0.25rem, 1vw, 0.5rem);
+  margin-bottom: clamp(0.5rem, 1vw, 0.75rem);
 }
 
 .wins-number {
-  font-size: 1.8rem;
+  font-size: clamp(1.5rem, 3vw, 1.8rem);
   font-weight: 800;
   color: #10b981;
 }
 
 .wins-label {
-  font-size: 0.8rem;
+  font-size: clamp(0.7rem, 1.5vw, 0.8rem);
   color: #6b7280;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .stat-avg {
-  font-size: 0.85rem;
+  font-size: clamp(0.8rem, 2vw, 0.85rem);
   color: #6b7280;
   font-weight: 500;
 }
 
 /* Table Section */
 .winners-table-section {
-  margin-top: 2rem;
+  margin-top: clamp(1.5rem, 4vw, 2rem);
 }
 
 .winners-table-section h3 {
   color: #003d7a;
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  margin-bottom: clamp(1rem, 2vw, 1.25rem);
+  font-size: clamp(1rem, 3vw, 1.1rem);
   font-weight: 700;
 }
 
 .winners-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
 }
 
 .winners-table thead {
@@ -121,23 +117,23 @@
 }
 
 .winners-table th {
-  padding: 1.25rem 1rem;
+  padding: clamp(0.875rem, 2vw, 1.25rem);
   text-align: left;
   font-weight: 700;
   color: #003d7a;
-  font-size: 0.9rem;
+  font-size: clamp(0.75rem, 1.5vw, 0.9rem);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .winners-table td {
-  padding: 1.25rem 1rem;
+  padding: clamp(0.875rem, 2vw, 1.25rem);
   border-bottom: 1px solid #e5e7eb;
   vertical-align: middle;
 }
 
 .winners-table tbody tr {
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .winners-table tbody tr:hover {
@@ -148,60 +144,52 @@
   font-weight: 700;
   color: #003d7a;
   text-align: center;
-  width: 60px;
+  width: clamp(45px, 8vw, 60px);
+  font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
 .manager-cell {
   color: #003d7a;
   font-weight: 700;
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
 }
 
 .team-cell {
   color: #6b7280;
-  font-size: 0.85rem;
+  font-size: clamp(0.75rem, 1.5vw, 0.85rem);
   font-weight: 500;
 }
 
 .gross-points {
   color: #6b7280;
   font-weight: 600;
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
 }
 
 .transfer-cost {
   color: #ef4444;
   font-weight: 600;
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
 }
 
 .net-points {
   color: #10b981;
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
 }
 
 .no-data {
   text-align: center;
-  padding: 3rem 2rem;
+  padding: clamp(2rem, 5vw, 3rem);
   color: #9ca3af;
   font-style: italic;
+  font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .gw-winners-page {
-    padding: 1.5rem 1rem;
-  }
-
+/* Tablet (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .winners-table {
-    font-size: 0.85rem;
-  }
-
-  .winners-table th,
-  .winners-table td {
-    padding: 0.875rem 0.5rem;
   }
 
   .team-cell {
@@ -209,17 +197,32 @@
   }
 }
 
-@media (max-width: 480px) {
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: clamp(1rem, 2vw, 1.25rem);
+  }
+
+  .stat-card:hover {
+    border-color: #003d7a;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .team-cell {
+    display: table-cell;
+  }
+}
+
+/* Small Mobile (< 480px) */
+@media (max-width: 479px) {
   .gw-winners-page {
-    padding: 1rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
   }
 
   .winners-dashboard {
-    padding: 1rem;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
+    padding: clamp(1rem, 2vw, 1.5rem);
   }
 
   .winners-table {
@@ -227,20 +230,24 @@
   }
 
   .winners-table th {
-    padding: 0.75rem 0.375rem;
+    padding: clamp(0.625rem, 1.5vw, 0.75rem);
     font-size: 0.7rem;
   }
 
   .winners-table td {
-    padding: 0.75rem 0.375rem;
-  }
-
-  .gw-cell {
-    width: 50px;
+    padding: clamp(0.625rem, 1.5vw, 0.75rem);
   }
 
   .gross-points,
   .transfer-cost {
     display: none;
+  }
+
+  .stat-card {
+    padding: clamp(0.75rem, 2vw, 1rem);
+  }
+
+  .stat-rank {
+    font-size: clamp(1.25rem, 3vw, 1.5rem);
   }
 }
