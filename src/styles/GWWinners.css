@@ -1,24 +1,171 @@
-/* src/styles/GWWinners.css - Simplified */
-.gw-winners-page {
-  background: white;
-  border-radius: 12px;
-  padding: clamp(1.5rem, 5vw, 2.5rem);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.gw-winners-page h2 {
-  color: #003d7a;
-  margin-bottom: 0.5rem;
-  font-size: clamp(1.5rem, 4vw, 2rem);
-}
-
-.gw-winners-page > p {
-  color: #6b7280;
+/* Dashboard Summary */
+.winners-dashboard {
+  background: linear-gradient(135deg, rgba(0, 61, 122, 0.05) 0%, transparent 100%);
+  border-radius: 10px;
+  padding: 2rem;
   margin-bottom: 2rem;
-  font-size: 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+.winners-dashboard h3 {
+  color: #003d7a;
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card:hover {
+  border-color: #003d7a;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.stat-rank {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #ffb81c;
+  margin-bottom: 0.5rem;
+}
+
+.stat-name {
+  font-weight: 700;
+  color: #003d7a;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.stat-wins {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.wins-number {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #10b981;
+}
+
+.wins-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.stat-avg {
+  font-size: 0.85rem;
+  color: #6b7280;
   font-weight: 500;
 }
 
+/* Accordion */
+.winners-accordion {
+  margin-bottom: 3rem;
+}
+
+.winners-accordion h3 {
+  color: #003d7a;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.accordion-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.accordion-header {
+  width: 100%;
+  padding: 1.25rem;
+  background: white;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #003d7a;
+}
+
+.accordion-header:hover {
+  background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
+}
+
+.accordion-title {
+  text-align: left;
+}
+
+.accordion-icon {
+  color: #6b7280;
+  font-size: 0.75rem;
+  margin-left: 1rem;
+}
+
+.accordion-content {
+  padding: 1rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.mini-table th {
+  background: white;
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #003d7a;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.mini-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Table Section */
+.winners-table-section {
+  margin-top: 2rem;
+}
+
+.winners-table-section h3 {
+  color: #003d7a;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* Keep existing table styles */
 .winners-table {
   width: 100%;
   border-collapse: collapse;
@@ -101,6 +248,10 @@
     padding: 1.5rem 1rem;
   }
 
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .winners-table {
     font-size: 0.85rem;
   }
@@ -118,6 +269,14 @@
 @media (max-width: 480px) {
   .gw-winners-page {
     padding: 1rem;
+  }
+
+  .winners-dashboard {
+    padding: 1rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
   }
 
   .winners-table {
