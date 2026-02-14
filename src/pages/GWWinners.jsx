@@ -9,8 +9,11 @@ export default function GWWinners() {
 
   useEffect(() => {
     setLoading(true);
-    getWinners(25).then(data => {
+    getWinners().then(data => {
       setWinners(data.winners || []);
+      setLoading(false);
+    }).catch(err => {
+      console.error('Error fetching winners:', err);
       setLoading(false);
     });
   }, []);
@@ -20,15 +23,14 @@ export default function GWWinners() {
   // Group by gameweek
   const byGW = {};
   winners.forEach(w => {
-    if (!byGW[w.gw]) byGW[w.gw] = [];
-    byGW[w.gw].push(w);
+    if (!byGW[w.gameweek]) byGW[w.gameweek] = [];
+    byGW[w.gameweek].push(w);
   });
 
   return (
     <div className="gw-winners-page">
       <h2>Gameweek Winners</h2>
-      <p>£5 per week to the highest scorer (split if tied)</p>
-
+      <p>Weekly winner - highest net points after transfers</p>
       <div className="winners-timeline">
         {Object.entries(byGW)
           .sort(([a], [b]) => parseInt(b) - parseInt(a))
@@ -37,17 +39,19 @@ export default function GWWinners() {
               <h3>Gameweek {gw}</h3>
               <div className="winners-list">
                 {gwWinners.map(w => (
-                  <div key={`${gw}-${w.name}`} className="winner-card">
-                    <p className="winner-name">{w.name}</p>
-                    <p className="winner-points">{w.points} points</p>
-                    <p className="winner-prize">£{w.prize.toFixed(2)}</p>
+                  <div key={`${gw}-${w.manager_id}`} className="winner-card">
+                    <p className="winner-name">{w.manager_name}</p>
+                    <p className="winner-team" style={{fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem'}}>{w.team_name}</p>
+                    <p className="winner-points">{w.points} pts</p>
+                    <p style={{fontSize: '0.75rem', color: '#999'}}>
+                      {w.transfer_cost > 0 ? `(${w.gross_points} - ${w.transfer_cost})` : 'No deductions'}
+                    </p>
                   </div>
                 ))}
               </div>
             </div>
           ))}
       </div>
-
       {winners.length === 0 && (
         <p className="no-data">No winner data available</p>
       )}
