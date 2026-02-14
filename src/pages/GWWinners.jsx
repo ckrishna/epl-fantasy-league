@@ -20,38 +20,42 @@ export default function GWWinners() {
 
   if (loading) return <div className="loading">Loading weekly winners...</div>;
 
-  // Group by gameweek
-  const byGW = {};
-  winners.forEach(w => {
-    if (!byGW[w.gameweek]) byGW[w.gameweek] = [];
-    byGW[w.gameweek].push(w);
-  });
-
   return (
     <div className="gw-winners-page">
       <h2>Gameweek Winners</h2>
-      <p>Weekly winner - highest net points after transfers</p>
-      <div className="winners-timeline">
-        {Object.entries(byGW)
-          .sort(([a], [b]) => parseInt(b) - parseInt(a))
-          .map(([gw, gwWinners]) => (
-            <div key={gw} className="gw-group">
-              <h3>Gameweek {gw}</h3>
-              <div className="winners-list">
-                {gwWinners.map(w => (
-                  <div key={`${gw}-${w.manager_id}`} className="winner-card">
-                    <p className="winner-name">{w.manager_name}</p>
-                    <p className="winner-team" style={{fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem'}}>{w.team_name}</p>
-                    <p className="winner-points">{w.points} pts</p>
-                    <p style={{fontSize: '0.75rem', color: '#999'}}>
-                      {w.transfer_cost > 0 ? `(${w.gross_points} - ${w.transfer_cost})` : 'No deductions'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
+      <p>Weekly winner determined by highest net points (after transfer costs)</p>
+      
+      <table className="winners-table">
+        <thead>
+          <tr>
+            <th>GW</th>
+            <th>Manager</th>
+            <th>Team</th>
+            <th>Gross Points</th>
+            <th>Transfer Cost</th>
+            <th>Net Points</th>
+          </tr>
+        </thead>
+        <tbody>
+          {winners.map((w, idx) => (
+            <tr key={`${w.gameweek}-${w.manager_id}`} className={idx < 3 ? 'top-three' : ''}>
+              <td className="gw-cell">{w.gameweek}</td>
+              <td className="manager-cell">
+                <strong>{w.manager_name}</strong>
+              </td>
+              <td className="team-cell">{w.team_name}</td>
+              <td className="gross-points">{w.gross_points}</td>
+              <td className="transfer-cost">
+                {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
+              </td>
+              <td className="net-points">
+                <strong>{w.points}</strong>
+              </td>
+            </tr>
           ))}
-      </div>
+        </tbody>
+      </table>
+
       {winners.length === 0 && (
         <p className="no-data">No winner data available</p>
       )}
