@@ -1,4 +1,4 @@
-// src/pages/GWWinners.jsx
+// src/pages/GWWinners.jsx - Updated
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
@@ -37,8 +37,8 @@ export default function GWWinners() {
           </tr>
         </thead>
         <tbody>
-          {winners.map((w, idx) => (
-            <tr key={`${w.gameweek}-${w.manager_id}`} className={idx < 3 ? 'top-three' : ''}>
+          {winners.map((w) => (
+            <tr key={`${w.gameweek}-${w.manager_id}`}>
               <td className="gw-cell">{w.gameweek}</td>
               <td className="manager-cell">
                 <strong>{w.manager_name}</strong>

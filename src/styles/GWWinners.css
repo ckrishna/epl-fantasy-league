@@ -1,4 +1,4 @@
-/* src/styles/GWWinners.css - Table format */
+/* src/styles/GWWinners.css - Simplified */
 .gw-winners-page {
   background: white;
   border-radius: 12px;
@@ -52,15 +52,6 @@
 
 .winners-table tbody tr:hover {
   background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
-}
-
-.winners-table tbody tr.top-three {
-  background: linear-gradient(90deg, rgba(255, 184, 28, 0.08) 0%, transparent 100%);
-  font-weight: 600;
-}
-
-.winners-table tbody tr.top-three:hover {
-  background: linear-gradient(90deg, rgba(255, 184, 28, 0.12) 0%, rgba(0, 61, 122, 0.03) 100%);
 }
 
 .gw-cell {
