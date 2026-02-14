@@ -1,4 +1,4 @@
-// src/pages/GWWinners.jsx - With dashboard summary
+// src/pages/GWWinners.jsx
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
