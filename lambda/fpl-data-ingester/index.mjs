@@ -2,7 +2,7 @@
 // Comprehensive FPL data ingestion - stores ALL granular data
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, BatchWriteCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, BatchWriteCommand, PutCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
 const SEASON = '2025/26';
@@ -368,6 +368,9 @@ export async function handler(event) {
       playerMap[player.id] = player;
     }
     const gameweeks = bootstrap.events;
+ // Get active gameweek (moved here so it's available throughout)
+    const activeGW = bootstrap.events.find(e => e.is_current)?.id || 26;
+    console.log(`Active GW: ${activeGW}`);
     
     // Get all managers
     console.log('Fetching league managers...');
@@ -382,10 +385,6 @@ export async function handler(event) {
       
       // Get full history for transfers/chips
       const eventHistory = await getManagerEventHistory(manager.entry_id);
-      
-      // Get active gameweek from bootstrap
-      const activeGW = bootstrap.events.find(e => e.is_current)?.id || 26;
-      console.log(`Active GW: ${activeGW}`);
       
       // Only fetch current GW and previous GW (already locked)
       const gwsToFetch = gameweeks.filter(gw => gw.id >= activeGW - 1 && gw.id <= activeGW);
@@ -439,6 +438,53 @@ export async function handler(event) {
     
     console.log('\n✅ Data ingestion complete!');
     
+// Calculate winners for all completed gameweeks
+    console.log('\nCalculating and caching winners...');
+    
+    try {
+      const allGWResult = await dynamodb.send(new ScanCommand({
+        TableName: 'fpl_entry_gameweek'
+      }));
+      
+      // Group by gameweek
+      const gwsWithData = {};
+      for (const item of allGWResult.Items || []) {
+        if (!gwsWithData[item.gameweek]) {
+          gwsWithData[item.gameweek] = [];
+        }
+        gwsWithData[item.gameweek].push(item);
+      }
+      
+      // For each GW, find winner and cache it
+      for (const [gw, managers] of Object.entries(gwsWithData)) {
+        const maxNetPoints = Math.max(...managers.map(m => (m.points_this_week || 0) - (m.transfer_cost || 0)));
+        const winners = managers.filter(m => (m.points_this_week || 0) - (m.transfer_cost || 0) === maxNetPoints);
+        
+        await dynamodb.send(new PutCommand({
+          TableName: 'gw-winners-cache',
+          Item: {
+            season: SEASON,
+            gameweek: parseInt(gw),
+            winners: winners.map(w => ({
+              entry_id: w.entry_id,
+              manager_name: w.manager_name,
+              team_name: w.team_name,
+              net_points: (w.points_this_week || 0) - (w.transfer_cost || 0),
+              gross_points: w.points_this_week,
+              transfer_cost: w.transfer_cost
+            })),
+            is_current: parseInt(gw) === activeGW,
+            last_synced: new Date().toISOString()
+          }
+        }));
+      }
+      console.log(`Cached winners for ${Object.keys(gwsWithData).length} gameweeks`);
+    } catch (err) {
+      console.error('Error calculating winners:', err);
+    }
+
+    console.log('\n✅ Calculating and caching winners complete!');
+
     return {
       statusCode: 200,
       body: JSON.stringify({

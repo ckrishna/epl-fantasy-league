@@ -12,14 +12,18 @@ export async function getStandings(gw = 25) {
   }
 }
 
-export async function getWinners(limit = 25) {
+export async function getWinners() {
   try {
-    const res = await fetch(`${API_BASE}/winners?limit=${limit}`);
+    const res = await fetch(`${API_BASE}/winners`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
     console.error('getWinners error:', err);
-    return { winners: [] };
+    return { 
+      active_gameweek: 26,
+      finished_gameweeks: [],
+      last_updated: null 
+    };
   }
 }
 
@@ -48,4 +52,3 @@ export async function queryStats(question) {
     return { error: err.message };
   }
 }
-

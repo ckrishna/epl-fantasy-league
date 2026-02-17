@@ -47,24 +47,26 @@ export async function handler(event) {
 
     console.log(`Path: ${path}`);
 
-    // GET /standings - Query from fpl_entry_gameweek
+// GET /standings - Scan all managers for a gameweek
     if (path.includes('/standings')) {
       const gw = queryParams.gw || '25';
       console.log(`Fetching standings for GW ${gw}`);
       
-      const result = await dynamodb.send(new QueryCommand({
+      const result = await dynamodb.send(new ScanCommand({
         TableName: 'fpl_entry_gameweek',
-        IndexName: 'gameweek-rank-index',
-        KeyConditionExpression: 'gameweek_rank = :gw',
+        FilterExpression: 'gameweek = :gw',
         ExpressionAttributeValues: {
-          ':gw': `${gw}#`
-        },
-        ScanIndexForward: true
+          ':gw': parseInt(gw)
+        }
       }));
 
       console.log(`Found ${result.Items?.length || 0} standings records`);
 
-      const standings = (result.Items || []).sort((a, b) => a.rank - b.rank);
+      const standings = (result.Items || []).sort((a, b) => {
+        const netA = (a.points_this_week || 0) - (a.transfer_cost || 0);
+        const netB = (b.points_this_week || 0) - (b.transfer_cost || 0);
+        return netB - netA;
+      });
 
       return {
         statusCode: 200,
@@ -253,6 +255,48 @@ export async function handler(event) {
         })
       };
     }
+
+// Calculate winners for all completed gameweeks
+    console.log('\nCalculating and caching winners...');
+    const gwsWithData = {};
+    
+    // Query all gameweeks from fpl_entry_gameweek
+    const allGWResult = await dynamodb.send(new ScanCommand({
+      TableName: 'fpl_entry_gameweek'
+    }));
+    
+    // Group by gameweek and find winner
+    for (const item of allGWResult.Items || []) {
+      if (!gwsWithData[item.gameweek]) {
+        gwsWithData[item.gameweek] = [];
+      }
+      gwsWithData[item.gameweek].push(item);
+    }
+    
+    // For each GW, find winner and cache it
+    for (const [gw, managers] of Object.entries(gwsWithData)) {
+      const maxNetPoints = Math.max(...managers.map(m => m.points_this_week - m.transfer_cost));
+      const winners = managers.filter(m => m.points_this_week - m.transfer_cost === maxNetPoints);
+      
+      await dynamodb.send(new PutCommand({
+        TableName: 'gw-winners-cache',
+        Item: {
+          season: SEASON,
+          gameweek: parseInt(gw),
+          winners: winners.map(w => ({
+            entry_id: w.entry_id,
+            manager_name: w.manager_name,
+            team_name: w.team_name,
+            net_points: w.points_this_week - w.transfer_cost,
+            gross_points: w.points_this_week,
+            transfer_cost: w.transfer_cost
+          })),
+          is_current: parseInt(gw) === activeGW,
+          last_synced: new Date().toISOString()
+        }
+      }));
+    }
+    console.log(`Cached winners for ${Object.keys(gwsWithData).length} gameweeks`);
 
     // Default 404
     return {

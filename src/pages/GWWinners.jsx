@@ -1,16 +1,36 @@
-// src/pages/GWWinners.jsx - Simplified
+// src/pages/GWWinners.jsx - Updated for new API response
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
 
 export default function GWWinners() {
   const [winners, setWinners] = useState([]);
+  const [activeGW, setActiveGW] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     getWinners().then(data => {
-      setWinners(data.winners || []);
+      // Flatten the nested structure: finished_gameweeks[].winners[] -> flat array
+      const flatWinners = [];
+      (data.finished_gameweeks || []).forEach(gwData => {
+        gwData.winners.forEach(winner => {
+          flatWinners.push({
+            gameweek: gwData.gameweek,
+            entry_id: winner.entry_id,
+            manager_name: winner.manager_name,
+            team_name: winner.team_name,
+            gross_points: winner.gross_points,
+            transfer_cost: winner.transfer_cost,
+            net_points: winner.net_points
+          });
+        });
+      });
+      
+      setWinners(flatWinners.reverse()); // Show newest first
+      setActiveGW(data.active_gameweek);
+      setLastUpdated(data.last_updated);
       setLoading(false);
     }).catch(err => {
       console.error('Error fetching winners:', err);
@@ -23,8 +43,8 @@ export default function GWWinners() {
   // Calculate manager stats
   const managerStats = {};
   winners.forEach(w => {
-    if (!managerStats[w.manager_id]) {
-      managerStats[w.manager_id] = {
+    if (!managerStats[w.entry_id]) {
+      managerStats[w.entry_id] = {
         manager_name: w.manager_name,
         team_name: w.team_name,
         wins: 0,
@@ -32,8 +52,8 @@ export default function GWWinners() {
         avg_points: 0
       };
     }
-    managerStats[w.manager_id].wins += 1;
-    managerStats[w.manager_id].total_points += w.points;
+    managerStats[w.entry_id].wins += 1;
+    managerStats[w.entry_id].total_points += w.net_points;
   });
 
   // Calculate averages and sort by wins
@@ -44,17 +64,30 @@ export default function GWWinners() {
     }))
     .sort((a, b) => b.wins - a.wins);
 
+  // Format last updated timestamp
+  const formatTime = (isoString) => {
+    if (!isoString) return 'N/A';
+    const date = new Date(isoString);
+    return date.toLocaleString();
+  };
+
   return (
     <div className="gw-winners-page">
       <h2>Gameweek Winners</h2>
       <p>Weekly winner determined by highest net points (after transfer costs)</p>
       
+      {/* Info bar */}
+      <div className="winners-info-bar">
+        <span className="active-gw">Active GW: <strong>{activeGW}</strong></span>
+        <span className="last-updated">Last updated: {formatTime(lastUpdated)}</span>
+      </div>
+      
       {/* Dashboard Summary */}
       <div className="winners-dashboard">
-        <h3>Manager Wins Summary</h3>
+        <h3>Manager Wins Summary (Top 5)</h3>
         <div className="stats-grid">
-          {sortedStats.map((stat, idx) => (
-            <div key={stat.manager_id} className="stat-card">
+          {sortedStats.slice(0, 5).map((stat, idx) => (
+            <div key={stat.manager_name} className="stat-card">
               <div className="stat-rank">#{idx + 1}</div>
               <div className="stat-name">{stat.manager_name}</div>
               <div className="stat-wins">
@@ -83,7 +116,7 @@ export default function GWWinners() {
           </thead>
           <tbody>
             {winners.map((w) => (
-              <tr key={`${w.gameweek}-${w.manager_id}`}>
+              <tr key={`${w.gameweek}-${w.entry_id}`}>
                 <td className="gw-cell">{w.gameweek}</td>
                 <td className="manager-cell">
                   <strong>{w.manager_name}</strong>
@@ -94,7 +127,7 @@ export default function GWWinners() {
                   {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
                 </td>
                 <td className="net-points">
-                  <strong>{w.points}</strong>
+                  <strong>{w.net_points}</strong>
                 </td>
               </tr>
             ))}
