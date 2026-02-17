@@ -28,7 +28,8 @@ export default function GWWinners() {
         });
       });
       
-      setWinners(flatWinners.reverse()); // Show newest first
+      // API already returns newest first
+      setWinners(flatWinners);
       setActiveGW(data.active_gameweek);
       setLastUpdated(data.last_updated);
       setLoading(false);
@@ -64,22 +65,67 @@ export default function GWWinners() {
     }))
     .sort((a, b) => b.wins - a.wins);
 
-  // Format last updated timestamp
+  // Format last updated timestamp with both timezones
   const formatTime = (isoString) => {
     if (!isoString) return 'N/A';
     const date = new Date(isoString);
-    return date.toLocaleString();
+    
+    // Pacific time (local)
+    const pacificTime = date.toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+    
+    // UTC time
+    const utcTime = date.toLocaleString('en-US', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+    
+    return {
+      pacific: pacificTime,
+      utc: utcTime
+    };
   };
+
+  const timeInfo = formatTime(lastUpdated);
 
   return (
     <div className="gw-winners-page">
       <h2>Gameweek Winners</h2>
       <p>Weekly winner determined by highest net points (after transfer costs)</p>
       
-      {/* Info bar */}
+      {/* Info bar - improved spacing */}
       <div className="winners-info-bar">
-        <span className="active-gw">Active GW: <strong>{activeGW}</strong></span>
-        <span className="last-updated">Last updated: {formatTime(lastUpdated)}</span>
+        <div className="info-item">
+          <span className="info-label">Active GW:</span>
+          <span className="info-value">{activeGW}</span>
+        </div>
+        <div className="info-item">
+          <span className="info-label">Last Updated:</span>
+          <div className="time-display">
+            <div className="time-row">
+              <span className="tz-label">Pacific:</span>
+              <span className="tz-time">{timeInfo.pacific}</span>
+            </div>
+            <div className="time-row">
+              <span className="tz-label">UTC:</span>
+              <span className="tz-time">{timeInfo.utc}</span>
+            </div>
+          </div>
+        </div>
       </div>
       
       {/* Dashboard Summary */}
@@ -102,7 +148,7 @@ export default function GWWinners() {
 
       {/* Full Table View */}
       <div className="winners-table-section">
-        <h3>All Gameweek Winners</h3>
+        <h3>All Gameweek Winners (Latest First)</h3>
         <table className="winners-table">
           <thead>
             <tr>

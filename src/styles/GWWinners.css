@@ -1,139 +1,186 @@
-/* src/styles/GWWinners.css - Mobile-first */
+/* src/styles/GWWinners.css - Enhanced */
 .gw-winners-page {
   background: white;
   border-radius: 12px;
-  padding: clamp(1.5rem, 4vw, 2.5rem);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .gw-winners-page h2 {
-  font-size: clamp(1.5rem, 5vw, 2rem);
-  font-weight: 700;
   color: #003d7a;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
 .gw-winners-page > p {
   color: #6b7280;
-  margin-bottom: clamp(1.5rem, 4vw, 2rem);
-  font-size: clamp(0.85rem, 2.5vw, 0.95rem);
+  margin-bottom: 2rem;
+  font-size: 1rem;
   font-weight: 500;
 }
 
-/* Dashboard Summary */
+/* Info bar */
+.winners-info-bar {
+  display: flex;
+  gap: 3rem;
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #f0f4f8;
+  border-radius: 8px;
+  border-left: 4px solid #003d7a;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-label {
+  font-weight: 700;
+  color: #003d7a;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.time-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+.time-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.tz-label {
+  font-weight: 600;
+  color: #003d7a;
+  min-width: 70px;
+}
+
+.tz-time {
+  color: #1f2937;
+}
+
+/* Winners dashboard */
 .winners-dashboard {
-  background: linear-gradient(135deg, rgba(0, 61, 122, 0.05) 0%, transparent 100%);
-  border-radius: 10px;
-  padding: clamp(1.5rem, 3vw, 2rem);
-  margin-bottom: clamp(1.5rem, 4vw, 2rem);
-  border: 1px solid #e5e7eb;
+  margin: 2rem 0;
 }
 
 .winners-dashboard h3 {
   color: #003d7a;
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
-  font-size: clamp(1rem, 3vw, 1.1rem);
-  font-weight: 700;
+  margin-bottom: 1.5rem;
+  font-size: 1.25rem;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: clamp(0.75rem, 2vw, 1rem);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
 }
 
 .stat-card {
   background: white;
   border: 2px solid #e5e7eb;
   border-radius: 10px;
-  padding: clamp(1rem, 2.5vw, 1.25rem);
+  padding: 1.5rem;
   text-align: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: #003d7a;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .stat-rank {
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  font-weight: 800;
   color: #ffb81c;
-  margin-bottom: clamp(0.5rem, 1vw, 0.75rem);
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
 }
 
 .stat-name {
+  color: #1f2937;
   font-weight: 700;
-  color: #003d7a;
-  margin-bottom: clamp(0.75rem, 2vw, 1rem);
-  font-size: clamp(0.9rem, 2.5vw, 0.95rem);
-  word-break: break-word;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
 }
 
 .stat-wins {
   display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: clamp(0.25rem, 1vw, 0.5rem);
-  margin-bottom: clamp(0.5rem, 1vw, 0.75rem);
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
 }
 
 .wins-number {
-  font-size: clamp(1.5rem, 3vw, 1.8rem);
+  font-size: 2rem;
   font-weight: 800;
-  color: #10b981;
+  color: #003d7a;
 }
 
 .wins-label {
-  font-size: clamp(0.7rem, 1.5vw, 0.8rem);
+  font-size: 0.85rem;
   color: #6b7280;
-  text-transform: uppercase;
   font-weight: 600;
 }
 
 .stat-avg {
-  font-size: clamp(0.8rem, 2vw, 0.85rem);
+  font-size: 0.9rem;
   color: #6b7280;
-  font-weight: 500;
 }
 
-/* Table Section */
+/* Winners table section */
 .winners-table-section {
-  margin-top: clamp(1.5rem, 4vw, 2rem);
+  margin: 2rem 0;
 }
 
 .winners-table-section h3 {
   color: #003d7a;
-  margin-bottom: clamp(1rem, 2vw, 1.25rem);
-  font-size: clamp(1rem, 3vw, 1.1rem);
-  font-weight: 700;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
 }
 
 .winners-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: clamp(0.85rem, 2vw, 0.95rem);
+  font-size: 0.95rem;
 }
 
 .winners-table thead {
-  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
   border-bottom: 2px solid #e5e7eb;
 }
 
 .winners-table th {
-  padding: clamp(0.875rem, 2vw, 1.25rem);
+  padding: 1rem;
   text-align: left;
   font-weight: 700;
   color: #003d7a;
-  font-size: clamp(0.75rem, 1.5vw, 0.9rem);
+  font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .winners-table td {
-  padding: clamp(0.875rem, 2vw, 1.25rem);
+  padding: 1rem;
   border-bottom: 1px solid #e5e7eb;
-  vertical-align: middle;
 }
 
 .winners-table tbody tr {
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .winners-table tbody tr:hover {
@@ -143,111 +190,57 @@
 .gw-cell {
   font-weight: 700;
   color: #003d7a;
-  text-align: center;
-  width: clamp(45px, 8vw, 60px);
-  font-size: clamp(0.9rem, 2vw, 1rem);
+  width: 50px;
 }
 
 .manager-cell {
   color: #003d7a;
-  font-weight: 700;
-  font-size: clamp(0.85rem, 2vw, 0.95rem);
+  font-weight: 600;
 }
 
 .team-cell {
   color: #6b7280;
-  font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-  font-weight: 500;
+  font-size: 0.9rem;
 }
 
-.gross-points {
-  color: #6b7280;
-  font-weight: 600;
-  font-size: clamp(0.85rem, 2vw, 0.95rem);
+.gross-points, .net-points {
+  font-weight: 700;
+  color: #003d7a;
 }
 
 .transfer-cost {
   color: #ef4444;
   font-weight: 600;
-  font-size: clamp(0.85rem, 2vw, 0.95rem);
-}
-
-.net-points {
-  color: #10b981;
-  font-weight: 700;
-  font-size: clamp(0.95rem, 2vw, 1.1rem);
 }
 
 .no-data {
   text-align: center;
-  padding: clamp(2rem, 5vw, 3rem);
+  padding: 2rem;
   color: #9ca3af;
   font-style: italic;
-  font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
-/* Tablet (768px - 1023px) */
-@media (min-width: 768px) and (max-width: 1023px) {
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .winners-info-bar {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .team-cell {
-    display: none;
-  }
-}
-
-/* Desktop (1024px+) */
-@media (min-width: 1024px) {
-  .stats-grid {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: clamp(1rem, 2vw, 1.25rem);
-  }
-
-  .stat-card:hover {
-    border-color: #003d7a;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
-  }
-
-  .team-cell {
-    display: table-cell;
-  }
-}
-
-/* Small Mobile (< 480px) */
-@media (max-width: 479px) {
-  .gw-winners-page {
-    padding: clamp(1rem, 3vw, 1.5rem);
-  }
-
-  .winners-dashboard {
-    padding: clamp(1rem, 2vw, 1.5rem);
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 
   .winners-table {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
   }
 
-  .winners-table th {
-    padding: clamp(0.625rem, 1.5vw, 0.75rem);
-    font-size: 0.7rem;
-  }
-
-  .winners-table td {
-    padding: clamp(0.625rem, 1.5vw, 0.75rem);
-  }
-
-  .gross-points,
-  .transfer-cost {
-    display: none;
-  }
-
-  .stat-card {
-    padding: clamp(0.75rem, 2vw, 1rem);
-  }
-
-  .stat-rank {
-    font-size: clamp(1.25rem, 3vw, 1.5rem);
+  .winners-table th, .winners-table td {
+    padding: 0.75rem 0.5rem;
   }
 }
