@@ -1,13 +1,12 @@
-// lambda/stats-api/index.mjs - Updated to fetch from FPL API for accurate net points
-// Queries FPL API for GW Winners with transfer cost deductions
+// lambda/stats-api/index.mjs - Updated with comprehensive data queries
+// Queries all 5 tables for rich data responses
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import https from 'https';
+import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
 const SEASON = '2025/26';
-const LEAGUE_ID = 212889;
+const FPL_API = 'https://fantasy.premierleague.com/api';
 
 // CORS headers
 const corsHeaders = {
@@ -17,21 +16,17 @@ const corsHeaders = {
   'Content-Type': 'application/json'
 };
 
-// Helper to fetch from FPL API
-function fetchFPLData(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on('error', reject);
-  });
+// Get current active gameweek from FPL API
+async function getActiveGameweek() {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`);
+    const data = await response.json();
+    const current = data.events.find(e => e.is_current);
+    return current ? current.id : null;
+  } catch (err) {
+    console.error('Error fetching active gameweek:', err);
+    return null;
+  }
 }
 
 export async function handler(event) {
@@ -52,183 +47,209 @@ export async function handler(event) {
 
     console.log(`Path: ${path}`);
 
-// GET /standings
-if (path.includes('/standings')) {
-  const gw = queryParams.gw || '25';
-  console.log(`Fetching standings for GW ${gw}`);
-  
-  const result = await dynamodb.send(new QueryCommand({
-    TableName: 'fpl_league_standings',
-    KeyConditionExpression: 'season_event = :se',
-    ExpressionAttributeValues: {
-      ':se': `${SEASON}#${gw}`
-    }
-  }));
-
-  console.log(`Found ${result.Items?.length || 0} standings records`);
-
-  // Remove earnings from response
-  const standings = (result.Items || [])
-    .sort((a, b) => a.rank - b.rank)
-    .map(item => ({
-      rank: item.rank,
-      manager_id: item.manager_id,
-      manager_name: item.manager_name,
-      team_name: item.team_name,
-      total_points: item.total_points,
-      points_this_week: item.points_this_week
-      // Removed: earnings
-    }));
-
-  return {
-    statusCode: 200,
-    headers: corsHeaders,
-    body: JSON.stringify({
-      gameweek: parseInt(gw),
-      standings: standings
-    })
-  };
-}
-
-// GET /winners - Calculate GW winners from FPL API with NET points (handles ties)
-if (path.includes('/winners')) {
-  console.log('Fetching GW winners from FPL API');
-  
-  const winners = [];
-  
-  // Fetch league data to get list of managers
-  let leagueData;
-  try {
-    leagueData = await fetchFPLData(`https://fantasy.premierleague.com/api/leagues-classic/${LEAGUE_ID}/standings/`);
-  } catch (err) {
-    console.error('Error fetching league data:', err);
-    return {
-      statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Failed to fetch league data' })
-    };
-  }
-
-  const managers = leagueData.standings.results.map(m => ({
-    id: m.entry,
-    name: m.player_name,
-    team_name: m.entry_name
-  }));
-
-  console.log(`Found ${managers.length} managers in league`);
-
-  // Query each gameweek from 1 to 25
-  for (let gw = 1; gw <= 25; gw++) {
-    const gwWinners = []; // Array to hold ALL winners for this GW
-    let maxNetPoints = -Infinity;
-
-    // Check each manager's score for this GW
-    for (const manager of managers) {
-      try {
-        const picksData = await fetchFPLData(
-          `https://fantasy.premierleague.com/api/entry/${manager.id}/event/${gw}/picks/`
-        );
-
-        if (picksData.entry_history) {
-          const grossPoints = picksData.entry_history.points;
-          const transferCost = picksData.entry_history.event_transfers_cost || 0;
-          const netPoints = grossPoints - transferCost;
-
-          console.log(`GW ${gw} - ${manager.name}: gross=${grossPoints}, cost=${transferCost}, net=${netPoints}`);
-
-          // Track max points
-          if (netPoints > maxNetPoints) {
-            maxNetPoints = netPoints;
-            gwWinners.length = 0; // Reset array, this is new max
-            gwWinners.push({
-              manager_name: manager.name,
-              team_name: manager.team_name,
-              manager_id: manager.id,
-              gross_points: grossPoints,
-              transfer_cost: transferCost,
-              net_points: netPoints
-            });
-          } else if (netPoints === maxNetPoints && netPoints !== -Infinity) {
-            // TIE - add to winners array
-            gwWinners.push({
-              manager_name: manager.name,
-              team_name: manager.team_name,
-              manager_id: manager.id,
-              gross_points: grossPoints,
-              transfer_cost: transferCost,
-              net_points: netPoints
-            });
-            console.log(`GW ${gw}: TIE! Added ${manager.name} with ${netPoints} points`);
-          }
-        }
-      } catch (err) {
-        console.log(`Error fetching GW ${gw} for manager ${manager.id}:`, err.message);
-      }
-    }
-
-    // Add ALL winners for this GW
-    if (gwWinners.length > 0) {
-      gwWinners.forEach(winner => {
-        winners.push({
-          gameweek: gw,
-          manager_name: winner.manager_name,
-          team_name: winner.team_name,
-          manager_id: winner.manager_id,
-          points: winner.net_points,
-          gross_points: winner.gross_points,
-          transfer_cost: winner.transfer_cost
-        });
-      });
-
-      if (gwWinners.length > 1) {
-        console.log(`GW ${gw}: ${gwWinners.length} winners tied with ${maxNetPoints} points`);
-      } else {
-        console.log(`GW ${gw} Winner: ${gwWinners[0].manager_name} with ${gwWinners[0].net_points} points`);
-      }
-    }
-  }
-
-  console.log(`Found ${winners.length} total winners (including ties)`);
-
-  return {
-    statusCode: 200,
-    headers: corsHeaders,
-    body: JSON.stringify({
-      winners: winners.reverse(),
-      total_winners: winners.length,
-      total_gameweeks: 25
-    })
-  };
-}
-
-    // GET /players/trending
-    if (path.includes('/players/trending')) {
-      console.log('Fetching trending players');
-      
+    // GET /standings - Query from fpl_entry_gameweek
+    if (path.includes('/standings')) {
       const gw = queryParams.gw || '25';
-      const limit = parseInt(queryParams.limit) || 10;
+      console.log(`Fetching standings for GW ${gw}`);
       
       const result = await dynamodb.send(new QueryCommand({
-        TableName: 'fpl_gameweek_data',
-        KeyConditionExpression: 'season_event = :se',
+        TableName: 'fpl_entry_gameweek',
+        IndexName: 'gameweek-rank-index',
+        KeyConditionExpression: 'gameweek_rank = :gw',
         ExpressionAttributeValues: {
-          ':se': `${SEASON}#${gw}`
+          ':gw': `${gw}#`
         },
-        Limit: 50
+        ScanIndexForward: true
       }));
 
-      const topScorers = (result.Items || [])
-        .sort((a, b) => (parseInt(b.points) || 0) - (parseInt(a.points) || 0))
-        .slice(0, limit);
+      console.log(`Found ${result.Items?.length || 0} standings records`);
 
-      console.log(`Found ${topScorers.length} top scorers`);
+      const standings = (result.Items || []).sort((a, b) => a.rank - b.rank);
 
       return {
         statusCode: 200,
         headers: corsHeaders,
         body: JSON.stringify({
           gameweek: parseInt(gw),
-          topScorers: topScorers
+          standings: standings,
+          last_updated: standings[0]?.last_synced || null,
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+
+    // GET /winners - Query from gw-winners-cache (zero external API calls!)
+    if (path.includes('/winners')) {
+      console.log('Fetching GW winners from cache');
+      
+      // Get active gameweek (one API call for reference only)
+      const activeGW = await getActiveGameweek();
+      
+      // Query all winners from cache
+      const result = await dynamodb.send(new ScanCommand({
+        TableName: 'gw-winners-cache',
+        FilterExpression: 'season = :season',
+        ExpressionAttributeValues: {
+          ':season': SEASON
+        }
+      }));
+
+      const winners = (result.Items || []).sort((a, b) => b.gameweek - a.gameweek);
+      const lastUpdated = winners.length > 0 ? winners[0].last_synced : null;
+
+      console.log(`Found ${winners.length} gameweeks with winner data`);
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          active_gameweek: activeGW,
+          last_updated: lastUpdated,
+          finished_gameweeks: winners.map(w => ({
+            gameweek: w.gameweek,
+            winners: w.winners,
+            winner_count: w.winners.length
+          })),
+          total_gameweeks_completed: winners.length,
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+
+    // GET /manager/{entry_id}/stats - Manager career stats
+    if (path.includes('/manager/') && path.includes('/stats')) {
+      const entryId = path.split('/')[3];
+      console.log(`Fetching stats for manager ${entryId}`);
+      
+      // Query gameweeks for this manager
+      const gwResult = await dynamodb.send(new QueryCommand({
+        TableName: 'fpl_entry_gameweek',
+        KeyConditionExpression: 'season_entry = :se',
+        ExpressionAttributeValues: {
+          ':se': `${SEASON}#${entryId}`
+        }
+      }));
+
+      const gameweeks = gwResult.Items || [];
+      
+      // Calculate stats
+      const stats = {
+        entry_id: parseInt(entryId),
+        total_points: gameweeks.reduce((sum, gw) => sum + gw.points_total, 0),
+        best_gw: Math.max(...gameweeks.map(gw => gw.points_this_week)),
+        worst_gw: Math.min(...gameweeks.map(gw => gw.points_this_week)),
+        avg_gw_points: (gameweeks.reduce((sum, gw) => sum + gw.points_this_week, 0) / gameweeks.length).toFixed(1),
+        gw_wins: gameweeks.filter(gw => gw.gw_winner).length,
+        total_transfers: gameweeks.reduce((sum, gw) => sum + gw.transfers_made, 0),
+        total_transfer_cost: gameweeks.reduce((sum, gw) => sum + gw.transfer_cost, 0),
+        gameweeks: gameweeks.length,
+        best_rank: Math.min(...gameweeks.map(gw => gw.rank)),
+        worst_rank: Math.max(...gameweeks.map(gw => gw.rank))
+      };
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          stats: stats,
+          last_updated: gameweeks[0]?.last_synced || null,
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+
+    // GET /picks/{entry_id}/gw/{gw} - Get specific gameweek picks
+    if (path.includes('/picks/') && path.includes('/gw/')) {
+      const pathParts = path.split('/');
+      const entryId = pathParts[2];
+      const gw = pathParts[4];
+      
+      console.log(`Fetching picks for manager ${entryId} GW ${gw}`);
+      
+      const result = await dynamodb.send(new QueryCommand({
+        TableName: 'fpl_entry_picks',
+        KeyConditionExpression: 'season_entry_gw = :sew',
+        ExpressionAttributeValues: {
+          ':sew': `${SEASON}#${entryId}#${gw}`
+        }
+      }));
+
+      const picks = result.Items || [];
+      
+      // Separate starters and bench
+      const starters = picks.filter(p => p.is_starter).sort((a, b) => a.squad_position - b.squad_position);
+      const bench = picks.filter(p => p.is_bench);
+      
+      // Calculate totals
+      const totalPoints = picks.reduce((sum, p) => sum + p.points, 0);
+      const captainPick = picks.find(p => p.is_captain);
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          entry_id: parseInt(entryId),
+          gameweek: parseInt(gw),
+          starters: starters,
+          bench: bench,
+          captain: captainPick,
+          total_points: totalPoints,
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+
+    // GET /transfers/{entry_id} - Transfer history
+    if (path.includes('/transfers/')) {
+      const entryId = path.split('/')[2];
+      console.log(`Fetching transfers for manager ${entryId}`);
+      
+      const result = await dynamodb.send(new QueryCommand({
+        TableName: 'fpl_entry_transfers',
+        KeyConditionExpression: 'season_entry = :se',
+        ExpressionAttributeValues: {
+          ':se': `${SEASON}#${entryId}`
+        }
+      }));
+
+      const transfers = result.Items || [];
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          entry_id: parseInt(entryId),
+          transfers: transfers,
+          total_transfers: transfers.length,
+          total_cost: transfers.reduce((sum, t) => sum + t.transfer_cost, 0),
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+
+    // GET /chips/{entry_id} - Chip usage history
+    if (path.includes('/chips/')) {
+      const entryId = path.split('/')[2];
+      console.log(`Fetching chips for manager ${entryId}`);
+      
+      const result = await dynamodb.send(new QueryCommand({
+        TableName: 'fpl_entry_chips',
+        KeyConditionExpression: 'season_entry = :se',
+        ExpressionAttributeValues: {
+          ':se': `${SEASON}#${entryId}`
+        }
+      }));
+
+      const chips = result.Items || [];
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          entry_id: parseInt(entryId),
+          chips: chips,
+          total_chips_used: chips.length,
+          timestamp: new Date().toISOString()
         })
       };
     }
