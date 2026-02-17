@@ -1,4 +1,4 @@
-/* src/styles/GWWinners.css - Enhanced */
+/* src/styles/GWWinners.css - Compact Summary */
 .gw-winners-page {
   background: white;
   border-radius: 12px;
@@ -19,73 +19,70 @@
   font-weight: 500;
 }
 
-/* Winners dashboard */
+/* Winners dashboard - Compact */
 .winners-dashboard {
   margin: 2rem 0;
 }
 
 .winners-dashboard h3 {
   color: #003d7a;
-  margin-bottom: 1.5rem;
-  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
 }
 
 .stat-card {
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 1.5rem;
+  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem;
   text-align: center;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .stat-card:hover {
   border-color: #003d7a;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .stat-rank {
   color: #ffb81c;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 800;
   margin-bottom: 0.5rem;
 }
 
-.stat-name {
-  color: #1f2937;
+.stat-team {
+  color: #003d7a;
   font-weight: 700;
-  margin-bottom: 1rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.stat-manager {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
 }
 
 .stat-wins {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin-bottom: 0.75rem;
-}
-
-.wins-number {
-  font-size: 2rem;
-  font-weight: 800;
+  font-size: 1rem;
+  font-weight: 700;
   color: #003d7a;
 }
 
-.wins-label {
-  font-size: 0.85rem;
-  color: #6b7280;
+.stat-wins span {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  display: block;
   font-weight: 600;
-}
-
-.stat-avg {
-  font-size: 0.9rem;
-  color: #6b7280;
+  margin-top: 0.25rem;
 }
 
 /* Winners table section */
@@ -152,11 +149,13 @@
 .gross-points, .net-points {
   font-weight: 700;
   color: #003d7a;
+  text-align: center;
 }
 
 .transfer-cost {
   color: #ef4444;
   font-weight: 600;
+  text-align: center;
 }
 
 .no-data {
@@ -172,18 +171,15 @@
   color: #6b7280;
 }
 
-/* Desktop only - hide on mobile */
 .desktop-only {
   display: table-cell;
 }
 
 @media (max-width: 768px) {
-  /* Hide on mobile */
   .desktop-only {
     display: none;
   }
 
-  /* Hide manager wins summary on mobile */
   .winners-dashboard {
     display: none;
   }
@@ -194,9 +190,5 @@
 
   .winners-table th, .winners-table td {
     padding: 0.75rem 0.5rem;
-  }
-
-  .gw-cell {
-    width: 40px;
   }
 }

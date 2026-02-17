@@ -1,281 +1,192 @@
-/* src/styles/Standings.css - Mobile-first */
+/* src/styles/Standings.css - Enhanced */
 .standings-page {
   background: white;
   border-radius: 12px;
-  padding: clamp(1.5rem, 4vw, 2.5rem);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.standings-page h2 {
-  font-size: clamp(1.5rem, 5vw, 2rem);
-  font-weight: 700;
-  color: #003d7a;
-  margin-bottom: 0.25rem;
-}
-
-.subtitle {
-  font-size: clamp(0.85rem, 2.5vw, 0.95rem);
-  color: #6b7280;
-  font-weight: 500;
-  margin-bottom: clamp(1.5rem, 4vw, 2rem);
-}
-
-/* ===== MOBILE CARD VIEW (DEFAULT) ===== */
+/* Mobile Card View */
 .standings-cards {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: clamp(1rem, 3vw, 1.25rem);
+  gap: 1rem;
   margin-bottom: 2rem;
 }
 
-.standings-table {
-  display: none;
-}
-
 .standings-card {
-  background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  padding: clamp(1rem, 3vw, 1.25rem);
-  display: grid;
-  grid-template-columns: 50px 1fr auto;
-  gap: clamp(0.75rem, 2vw, 1rem);
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   align-items: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .card-rank {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 40px;
 }
 
 .rank-badge {
+  background: #003d7a;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 45px;
-  height: 45px;
-  background: linear-gradient(135deg, #003d7a 0%, #1e5fa8 100%);
-  color: white;
   font-weight: 800;
-  font-size: clamp(1.1rem, 3vw, 1.25rem);
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 61, 122, 0.2);
+  font-size: 1.1rem;
 }
 
 .card-info {
-  min-width: 0;
-}
-
-.card-manager {
-  font-size: clamp(0.95rem, 2.5vw, 1.05rem);
-  font-weight: 700;
-  color: #003d7a;
-  margin-bottom: 0.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1;
 }
 
 .card-team {
-  font-size: clamp(0.8rem, 2vw, 0.85rem);
+  margin: 0;
+  color: #003d7a;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.card-manager {
+  margin: 0.25rem 0 0 0;
   color: #6b7280;
+  font-size: 0.85rem;
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .card-stats {
   display: flex;
-  flex-direction: column;
-  gap: clamp(0.5rem, 1.5vw, 0.75rem);
-  text-align: right;
-  min-width: 70px;
+  gap: 1.5rem;
 }
 
 .stat {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.25rem;
 }
 
 .stat-label {
-  font-size: clamp(0.7rem, 1.5vw, 0.75rem);
+  font-size: 0.75rem;
   color: #9ca3af;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   font-weight: 600;
+  text-transform: uppercase;
 }
 
 .stat-value {
-  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #003d7a;
+}
+
+/* Desktop Table View */
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  display: none;
+}
+
+.standings-table thead {
+  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.standings-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 700;
+  color: #003d7a;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.standings-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.standings-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.standings-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
+}
+
+.standings-table tbody tr.top-three {
+  background: linear-gradient(90deg, rgba(255, 184, 28, 0.08) 0%, transparent 100%);
+}
+
+.rank {
   font-weight: 800;
   color: #003d7a;
+  width: 50px;
+  text-align: center;
 }
 
-/* Top 3 styling */
-.standings-card:has(.rank-badge) {
-  position: relative;
+.team-manager {
+  flex: 1;
 }
 
-.standings-cards > .standings-card:nth-child(1) .rank-badge {
-  background: linear-gradient(135deg, #ffb81c 0%, #ffa500 100%);
+.team-name {
+  font-weight: 700;
   color: #003d7a;
+  font-size: 1rem;
 }
 
-.standings-cards > .standings-card:nth-child(2) .rank-badge {
-  background: linear-gradient(135deg, #c0c0c0 0%, #808080 100%);
-  color: white;
+.manager-name {
+  color: #6b7280;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
-.standings-cards > .standings-card:nth-child(3) .rank-badge {
-  background: linear-gradient(135deg, #cd7f32 0%, #8b4513 100%);
-  color: white;
+.week-points {
+  font-weight: 700;
+  color: #f59e0b;
+  text-align: center;
 }
 
-/* ===== DESKTOP TABLE VIEW ===== */
-@media (min-width: 1024px) {
+.points {
+  font-weight: 800;
+  color: #003d7a;
+  text-align: center;
+}
+
+.no-data {
+  text-align: center;
+  padding: 2rem;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #6b7280;
+}
+
+/* Desktop view */
+@media (min-width: 769px) {
   .standings-cards {
     display: none;
   }
 
   .standings-table {
     display: table;
-    width: 100%;
-    border-collapse: collapse;
-    font-size: clamp(0.9rem, 1.5vw, 0.95rem);
-  }
-
-  .standings-table thead {
-    background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-    border-bottom: 2px solid #e5e7eb;
-  }
-
-  .standings-table th {
-    padding: clamp(1rem, 2vw, 1.25rem);
-    text-align: left;
-    font-weight: 700;
-    color: #003d7a;
-    font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .standings-table td {
-    padding: clamp(1rem, 2vw, 1.25rem);
-    border-bottom: 1px solid #e5e7eb;
-    vertical-align: middle;
-  }
-
-  .standings-table tbody tr {
-    transition: background-color 0.2s ease;
-  }
-
-  .standings-table tbody tr:hover {
-    background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
-  }
-
-  .standings-table tbody tr.top-three {
-    background: linear-gradient(90deg, rgba(255, 184, 28, 0.08) 0%, transparent 100%);
-  }
-
-  .standings-table tbody tr.top-three:hover {
-    background: linear-gradient(90deg, rgba(255, 184, 28, 0.12) 0%, rgba(0, 61, 122, 0.03) 100%);
-  }
-
-  .standings-table .rank {
-    font-size: clamp(1.1rem, 2vw, 1.3rem);
-    text-align: center;
-    width: 60px;
-    font-weight: 700;
-    color: #003d7a;
-  }
-
-  .standings-table .manager-name {
-    font-weight: 700;
-    color: #003d7a;
-  }
-
-  .standings-table .team-name {
-    color: #6b7280;
-    font-size: clamp(0.85rem, 1.5vw, 0.9rem);
-    font-weight: 500;
-  }
-
-  .standings-table .points {
-    font-size: clamp(1rem, 1.5vw, 1.15rem);
-    font-weight: 800;
-    color: #003d7a;
-  }
-
-  .standings-table .week-points {
-    color: #f59e0b;
-    font-weight: 700;
-    font-size: clamp(0.95rem, 1.5vw, 1.05rem);
   }
 }
 
-/* No Data */
-.no-data {
-  text-align: center;
-  padding: clamp(2rem, 5vw, 3rem);
-  color: #9ca3af;
-  font-style: italic;
-  font-size: clamp(0.9rem, 2vw, 1rem);
-}
-
-/* Tablet Optimization (768px - 1023px) */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .standings-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .standings-card {
-    grid-template-columns: 45px 1fr;
-    gap: clamp(0.75rem, 2vw, 1rem);
-  }
-
-  .card-stats {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    justify-content: flex-end;
-    gap: clamp(1rem, 3vw, 1.5rem);
-  }
-}
-
-/* Small Mobile (< 480px) */
-@media (max-width: 479px) {
+@media (max-width: 768px) {
   .standings-page {
-    padding: clamp(1rem, 3vw, 1.5rem);
-  }
-
-  .standings-card {
-    grid-template-columns: 40px 1fr auto;
-    gap: clamp(0.5rem, 1.5vw, 0.75rem);
-    padding: clamp(0.75rem, 2vw, 1rem);
-  }
-
-  .rank-badge {
-    width: 40px;
-    height: 40px;
-    font-size: clamp(1rem, 2.5vw, 1.1rem);
-  }
-
-  .card-manager {
-    font-size: clamp(0.9rem, 2vw, 0.95rem);
-  }
-
-  .card-team {
-    font-size: clamp(0.75rem, 1.5vw, 0.8rem);
-  }
-
-  .stat-value {
-    font-size: clamp(0.95rem, 2vw, 1.1rem);
-  }
-
-  .card-stats {
-    min-width: 60px;
+    padding: 1.5rem 1rem;
   }
 }

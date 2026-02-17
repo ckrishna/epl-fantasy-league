@@ -1,4 +1,4 @@
-// src/pages/GWWinners.jsx - Updated with mobile improvements
+// src/pages/GWWinners.jsx - Updated with compact summary
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
@@ -6,21 +6,19 @@ import '../styles/GWWinners.css';
 export default function GWWinners() {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     getWinners().then(data => {
-      // Flatten the nested structure: finished_gameweeks[].winners[] -> flat array
       const flatWinners = [];
       (data.finished_gameweeks || []).forEach(gwData => {
         gwData.winners.forEach(winner => {
           flatWinners.push({
             gameweek: gwData.gameweek,
             entry_id: winner.entry_id,
-            manager_name: winner.manager_name,  // This is the team name
-            team_name: winner.team_name,        // This is the player name
+            manager_name: winner.manager_name,
+            team_name: winner.team_name,
             gross_points: winner.gross_points,
             transfer_cost: winner.transfer_cost,
             net_points: winner.net_points
@@ -30,7 +28,6 @@ export default function GWWinners() {
       
       setWinners(flatWinners);
       setActiveGW(data.active_gameweek);
-      setLastUpdated(data.last_updated);
       setLoading(false);
     }).catch(err => {
       console.error('Error fetching winners:', err);
@@ -40,7 +37,6 @@ export default function GWWinners() {
 
   if (loading) return <div className="loading">Loading weekly winners...</div>;
 
-  // Calculate manager stats
   const managerStats = {};
   winners.forEach(w => {
     if (!managerStats[w.entry_id]) {
@@ -48,20 +44,14 @@ export default function GWWinners() {
         manager_name: w.manager_name,
         team_name: w.team_name,
         wins: 0,
-        total_points: 0,
-        avg_points: 0
+        total_points: 0
       };
     }
     managerStats[w.entry_id].wins += 1;
     managerStats[w.entry_id].total_points += w.net_points;
   });
 
-  // Calculate averages and sort by wins
   const sortedStats = Object.values(managerStats)
-    .map(stat => ({
-      ...stat,
-      avg_points: (stat.total_points / stat.wins).toFixed(1)
-    }))
     .sort((a, b) => b.wins - a.wins);
 
   return (
@@ -69,19 +59,16 @@ export default function GWWinners() {
       <h2>Gameweek Winners</h2>
       <p>Weekly winner determined by highest net points (after transfer costs)</p>
       
-      {/* Manager Wins Summary - hidden on mobile */}
+      {/* Manager Wins Summary - Compact */}
       <div className="winners-dashboard">
-        <h3>Manager Wins Summary (Top 5)</h3>
+        <h3>Top Winners</h3>
         <div className="stats-grid">
           {sortedStats.slice(0, 5).map((stat, idx) => (
             <div key={stat.manager_name} className="stat-card">
               <div className="stat-rank">#{idx + 1}</div>
-              <div className="stat-name">{stat.manager_name}</div>
-              <div className="stat-wins">
-                <span className="wins-number">{stat.wins}</span>
-                <span className="wins-label">wins</span>
-              </div>
-              <div className="stat-avg">Avg: {stat.avg_points} pts</div>
+              <div className="stat-team">{stat.team_name}</div>
+              <div className="stat-manager">{stat.manager_name}</div>
+              <div className="stat-wins">{stat.wins} <span>wins</span></div>
             </div>
           ))}
         </div>
@@ -106,9 +93,7 @@ export default function GWWinners() {
               <tr key={`${w.gameweek}-${w.entry_id}`}>
                 <td className="gw-cell">{w.gameweek}</td>
                 <td className="team-cell desktop-only">{w.team_name}</td>
-                <td className="manager-cell">
-                  <strong>{w.manager_name}</strong>
-                </td>
+                <td className="manager-cell">{w.manager_name}</td>
                 <td className="gross-points desktop-only">{w.gross_points}</td>
                 <td className="transfer-cost desktop-only">
                   {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}

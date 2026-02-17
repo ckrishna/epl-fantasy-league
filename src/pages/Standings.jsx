@@ -1,4 +1,4 @@
-// src/pages/Standings.jsx - Show active gameweek standings
+// src/pages/Standings.jsx - Updated for new API response
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
 import '../styles/Standings.css';
@@ -10,14 +10,11 @@ export default function Standings() {
 
   useEffect(() => {
     setLoading(true);
-    // Fetch standings for active gameweek
     getStandings(activeGW).then(data => {
-      // Update active GW from API response
       if (data.active_gameweek) {
         setActiveGW(data.active_gameweek);
       }
       
-      // Sort by total points (season ranking)
       const sorted = (data.standings || [])
         .sort((a, b) => b.points_total - a.points_total)
         .map((manager, idx) => ({
@@ -47,17 +44,17 @@ export default function Standings() {
               <span className="rank-badge">{manager.rank}</span>
             </div>
             <div className="card-info">
-              <h3 className="card-manager">{manager.manager_name}</h3>
-              <p className="card-team">{manager.team_name}</p>
+              <h3 className="card-team">{manager.team_name}</h3>
+              <p className="card-manager">{manager.manager_name}</p>
             </div>
             <div className="card-stats">
               <div className="stat">
-                <span className="stat-label">Total</span>
-                <span className="stat-value">{manager.points_total}</span>
-              </div>
-              <div className="stat">
                 <span className="stat-label">GW {activeGW}</span>
                 <span className="stat-value">{manager.points_this_week}</span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Total</span>
+                <span className="stat-value">{manager.points_total}</span>
               </div>
             </div>
           </div>
@@ -69,20 +66,21 @@ export default function Standings() {
         <thead>
           <tr>
             <th>RANK</th>
-            <th>MANAGER</th>
-            <th>TEAM</th>
+            <th>TEAM & MANAGER</th>
+            <th>GW {activeGW}</th>
             <th>TOTAL POINTS</th>
-            <th>GW {activeGW} POINTS</th>
           </tr>
         </thead>
         <tbody>
           {standings.map((manager) => (
             <tr key={manager.entry_id} className={manager.rank <= 3 ? 'top-three' : ''}>
               <td className="rank">{manager.rank}</td>
-              <td className="manager-name">{manager.team_name}</td>
-              <td className="team-name">{manager.manager_name}</td>
-              <td className="points">{manager.points_total}</td>
+              <td className="team-manager">
+                <div className="team-name">{manager.team_name}</div>
+                <div className="manager-name">{manager.manager_name}</div>
+              </td>
               <td className="week-points">{manager.points_this_week}</td>
+              <td className="points">{manager.points_total}</td>
             </tr>
           ))}
         </tbody>
