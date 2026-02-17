@@ -1,9 +1,21 @@
-/* src/styles/Standings.css - Enhanced */
+/* src/styles/Standings.css - Enhanced with medals */
 .standings-page {
   background: white;
   border-radius: 12px;
   padding: clamp(1.5rem, 5vw, 2.5rem);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.standings-page h2 {
+  color: #003d7a;
+  margin-bottom: 0.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.standings-page > .subtitle {
+  color: #6b7280;
+  margin-bottom: 2rem;
+  font-size: 0.95rem;
 }
 
 /* Mobile Card View */
@@ -21,26 +33,46 @@
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   align-items: center;
+  transition: all 0.2s ease;
+}
+
+.standings-card.top-1 {
+  background: linear-gradient(135deg, rgba(255, 184, 28, 0.1) 0%, rgba(255, 184, 28, 0.05) 100%);
+  border-color: #ffb81c;
+}
+
+.standings-card.top-2 {
+  background: linear-gradient(135deg, rgba(192, 192, 192, 0.1) 0%, rgba(192, 192, 192, 0.05) 100%);
+  border-color: #c0c0c0;
+}
+
+.standings-card.top-3 {
+  background: linear-gradient(135deg, rgba(205, 127, 50, 0.1) 0%, rgba(205, 127, 50, 0.05) 100%);
+  border-color: #cd7f32;
 }
 
 .card-rank {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
+  min-width: 50px;
 }
 
 .rank-badge {
-  background: #003d7a;
-  color: white;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 1.1rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+}
+
+.standings-card:not(.top-1):not(.top-2):not(.top-3) .rank-badge {
+  background: #003d7a;
+  color: white;
+  font-size: 1.2rem;
 }
 
 .card-info {
@@ -116,21 +148,35 @@
 
 .standings-table tbody tr {
   transition: all 0.2s ease;
+  background: white;
 }
 
 .standings-table tbody tr:hover {
   background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
 }
 
-.standings-table tbody tr.top-three {
+.standings-table tbody tr.top-1 {
   background: linear-gradient(90deg, rgba(255, 184, 28, 0.08) 0%, transparent 100%);
+}
+
+.standings-table tbody tr.top-2 {
+  background: linear-gradient(90deg, rgba(192, 192, 192, 0.08) 0%, transparent 100%);
+}
+
+.standings-table tbody tr.top-3 {
+  background: linear-gradient(90deg, rgba(205, 127, 50, 0.08) 0%, transparent 100%);
 }
 
 .rank {
   font-weight: 800;
   color: #003d7a;
-  width: 50px;
+  width: 60px;
   text-align: center;
+  font-size: 1.3rem;
+}
+
+.medal {
+  font-size: 1.5rem;
 }
 
 .team-manager {

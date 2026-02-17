@@ -1,4 +1,4 @@
-// src/pages/Standings.jsx - Updated for new API response
+// src/pages/Standings.jsx - Updated with medal icons
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
 import '../styles/Standings.css';
@@ -29,6 +29,14 @@ export default function Standings() {
     });
   }, []);
 
+  // Get medal for rank
+  const getMedal = (rank) => {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return null;
+  };
+
   if (loading) return <div className="loading">Loading standings...</div>;
 
   return (
@@ -39,9 +47,11 @@ export default function Standings() {
       {/* Mobile Card View */}
       <div className="standings-cards">
         {standings.map((manager) => (
-          <div key={manager.entry_id} className="standings-card">
+          <div key={manager.entry_id} className={`standings-card ${manager.rank <= 3 ? `top-${manager.rank}` : ''}`}>
             <div className="card-rank">
-              <span className="rank-badge">{manager.rank}</span>
+              <span className="rank-badge">
+                {getMedal(manager.rank) || manager.rank}
+              </span>
             </div>
             <div className="card-info">
               <h3 className="card-team">{manager.team_name}</h3>
@@ -73,8 +83,14 @@ export default function Standings() {
         </thead>
         <tbody>
           {standings.map((manager) => (
-            <tr key={manager.entry_id} className={manager.rank <= 3 ? 'top-three' : ''}>
-              <td className="rank">{manager.rank}</td>
+            <tr key={manager.entry_id} className={manager.rank <= 3 ? `top-${manager.rank}` : ''}>
+              <td className="rank">
+                {getMedal(manager.rank) ? (
+                  <span className="medal">{getMedal(manager.rank)}</span>
+                ) : (
+                  manager.rank
+                )}
+              </td>
               <td className="team-manager">
                 <div className="team-name">{manager.team_name}</div>
                 <div className="manager-name">{manager.manager_name}</div>
