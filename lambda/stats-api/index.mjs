@@ -47,37 +47,53 @@ export async function handler(event) {
 
     console.log(`Path: ${path}`);
 
-// GET /standings - Scan all managers for a gameweek
+
+// GET /standings - Show standings for requested GW or active GW
     if (path.includes('/standings')) {
-      const gw = queryParams.gw || '25';
-      console.log(`Fetching standings for GW ${gw}`);
-      
-      const result = await dynamodb.send(new ScanCommand({
-        TableName: 'fpl_entry_gameweek',
-        FilterExpression: 'gameweek = :gw',
-        ExpressionAttributeValues: {
-          ':gw': parseInt(gw)
-        }
-      }));
+      try {
+        // Get active gameweek from FPL API
+        const bootstrapRes = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/');
+        const bootstrap = await bootstrapRes.json();
+        const activeGW = bootstrap.events.find(e => e.is_current)?.id;
+        
+        // Use requested GW or active GW
+        const gwToFetch = queryParams.gw ? parseInt(queryParams.gw) : activeGW;
+        
+        console.log(`Fetching standings for GW ${gwToFetch} (active: ${activeGW})`);
+        
+        const result = await dynamodb.send(new ScanCommand({
+          TableName: 'fpl_entry_gameweek',
+          FilterExpression: 'gameweek = :gw',
+          ExpressionAttributeValues: {
+            ':gw': gwToFetch
+          }
+        }));
 
-      console.log(`Found ${result.Items?.length || 0} standings records`);
+        const standings = (result.Items || []).sort((a, b) => {
+          const netA = (a.points_this_week || 0) - (a.transfer_cost || 0);
+          const netB = (b.points_this_week || 0) - (b.transfer_cost || 0);
+          return netB - netA;
+        });
 
-      const standings = (result.Items || []).sort((a, b) => {
-        const netA = (a.points_this_week || 0) - (a.transfer_cost || 0);
-        const netB = (b.points_this_week || 0) - (b.transfer_cost || 0);
-        return netB - netA;
-      });
-
-      return {
-        statusCode: 200,
-        headers: corsHeaders,
-        body: JSON.stringify({
-          gameweek: parseInt(gw),
-          standings: standings,
-          last_updated: standings[0]?.last_synced || null,
-          timestamp: new Date().toISOString()
-        })
-      };
+        return {
+          statusCode: 200,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            gameweek: gwToFetch,
+            active_gameweek: activeGW,
+            standings: standings,
+            last_updated: standings[0]?.last_synced || null,
+            timestamp: new Date().toISOString()
+          })
+        };
+      } catch (err) {
+        console.error('Error fetching standings:', err);
+        return {
+          statusCode: 500,
+          headers: corsHeaders,
+          body: JSON.stringify({ error: err.message })
+        };
+      }
     }
 
     // GET /winners - Query from gw-winners-cache (zero external API calls!)

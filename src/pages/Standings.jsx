@@ -1,4 +1,4 @@
-// src/pages/Standings.jsx - Updated for new API response
+// src/pages/Standings.jsx - Show active gameweek standings
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
 import '../styles/Standings.css';
@@ -6,12 +6,18 @@ import '../styles/Standings.css';
 export default function Standings() {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [gw, setGw] = useState(25);
+  const [activeGW, setActiveGW] = useState(26);
 
   useEffect(() => {
     setLoading(true);
-    getStandings(gw).then(data => {
-      // Sort by total points (season ranking), not this week's points
+    // Fetch standings for active gameweek
+    getStandings(activeGW).then(data => {
+      // Update active GW from API response
+      if (data.active_gameweek) {
+        setActiveGW(data.active_gameweek);
+      }
+      
+      // Sort by total points (season ranking)
       const sorted = (data.standings || [])
         .sort((a, b) => b.points_total - a.points_total)
         .map((manager, idx) => ({
@@ -24,7 +30,7 @@ export default function Standings() {
       console.error('Error fetching standings:', err);
       setLoading(false);
     });
-  }, [gw]);
+  }, []);
 
   if (loading) return <div className="loading">Loading standings...</div>;
 
@@ -50,7 +56,7 @@ export default function Standings() {
                 <span className="stat-value">{manager.points_total}</span>
               </div>
               <div className="stat">
-                <span className="stat-label">This Week</span>
+                <span className="stat-label">GW {activeGW}</span>
                 <span className="stat-value">{manager.points_this_week}</span>
               </div>
             </div>
@@ -66,7 +72,7 @@ export default function Standings() {
             <th>MANAGER</th>
             <th>TEAM</th>
             <th>TOTAL POINTS</th>
-            <th>GW {gw} POINTS</th>
+            <th>GW {activeGW} POINTS</th>
           </tr>
         </thead>
         <tbody>
