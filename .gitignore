@@ -1,9 +1,25 @@
+# Dependencies
 node_modules/
-dist/
+*/node_modules/
+
+# Environment
 .env
 .env.local
+.env.*.local
+
+# Build
+dist/
+build/
+
+# Deployment
+*.zip
 .DS_Store
-*.log
-*.swp
 .vscode/
 .idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+*.swp
+.idea/dd
