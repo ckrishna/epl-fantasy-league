@@ -19,60 +19,6 @@
   font-weight: 500;
 }
 
-/* Info bar */
-.winners-info-bar {
-  display: flex;
-  gap: 3rem;
-  margin: 2rem 0;
-  padding: 1.5rem;
-  background: #f0f4f8;
-  border-radius: 8px;
-  border-left: 4px solid #003d7a;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.info-label {
-  font-weight: 700;
-  color: #003d7a;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.info-value {
-  color: #1f2937;
-  font-weight: 600;
-  font-size: 1rem;
-}
-
-.time-display {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
-}
-
-.time-row {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.tz-label {
-  font-weight: 600;
-  color: #003d7a;
-  min-width: 70px;
-}
-
-.tz-time {
-  color: #1f2937;
-}
-
 /* Winners dashboard */
 .winners-dashboard {
   margin: 2rem 0;
@@ -226,14 +172,20 @@
   color: #6b7280;
 }
 
+/* Desktop only - hide on mobile */
+.desktop-only {
+  display: table-cell;
+}
+
 @media (max-width: 768px) {
-  .winners-info-bar {
-    flex-direction: column;
-    gap: 1.5rem;
+  /* Hide on mobile */
+  .desktop-only {
+    display: none;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* Hide manager wins summary on mobile */
+  .winners-dashboard {
+    display: none;
   }
 
   .winners-table {
@@ -242,5 +194,9 @@
 
   .winners-table th, .winners-table td {
     padding: 0.75rem 0.5rem;
+  }
+
+  .gw-cell {
+    width: 40px;
   }
 }

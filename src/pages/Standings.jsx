@@ -79,8 +79,8 @@ export default function Standings() {
           {standings.map((manager) => (
             <tr key={manager.entry_id} className={manager.rank <= 3 ? 'top-three' : ''}>
               <td className="rank">{manager.rank}</td>
-              <td className="manager-name">{manager.manager_name}</td>
-              <td className="team-name">{manager.team_name}</td>
+              <td className="manager-name">{manager.team_name}</td>
+              <td className="team-name">{manager.manager_name}</td>
               <td className="points">{manager.points_total}</td>
               <td className="week-points">{manager.points_this_week}</td>
             </tr>

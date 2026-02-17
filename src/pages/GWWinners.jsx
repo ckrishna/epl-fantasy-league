@@ -1,4 +1,4 @@
-// src/pages/GWWinners.jsx - Updated for new API response
+// src/pages/GWWinners.jsx - Updated with mobile improvements
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
@@ -19,8 +19,8 @@ export default function GWWinners() {
           flatWinners.push({
             gameweek: gwData.gameweek,
             entry_id: winner.entry_id,
-            manager_name: winner.manager_name,
-            team_name: winner.team_name,
+            manager_name: winner.manager_name,  // This is the team name
+            team_name: winner.team_name,        // This is the player name
             gross_points: winner.gross_points,
             transfer_cost: winner.transfer_cost,
             net_points: winner.net_points
@@ -28,7 +28,6 @@ export default function GWWinners() {
         });
       });
       
-      // API already returns newest first
       setWinners(flatWinners);
       setActiveGW(data.active_gameweek);
       setLastUpdated(data.last_updated);
@@ -65,70 +64,12 @@ export default function GWWinners() {
     }))
     .sort((a, b) => b.wins - a.wins);
 
-  // Format last updated timestamp with both timezones
-  const formatTime = (isoString) => {
-    if (!isoString) return 'N/A';
-    const date = new Date(isoString);
-    
-    // Pacific time (local)
-    const pacificTime = date.toLocaleString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-    
-    // UTC time
-    const utcTime = date.toLocaleString('en-US', {
-      timeZone: 'UTC',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-    
-    return {
-      pacific: pacificTime,
-      utc: utcTime
-    };
-  };
-
-  const timeInfo = formatTime(lastUpdated);
-
   return (
     <div className="gw-winners-page">
       <h2>Gameweek Winners</h2>
       <p>Weekly winner determined by highest net points (after transfer costs)</p>
       
-      {/* Info bar - improved spacing */}
-      <div className="winners-info-bar">
-        <div className="info-item">
-          <span className="info-label">Active GW:</span>
-          <span className="info-value">{activeGW}</span>
-        </div>
-        <div className="info-item">
-          <span className="info-label">Last Updated:</span>
-          <div className="time-display">
-            <div className="time-row">
-              <span className="tz-label">Pacific:</span>
-              <span className="tz-time">{timeInfo.pacific}</span>
-            </div>
-            <div className="time-row">
-              <span className="tz-label">UTC:</span>
-              <span className="tz-time">{timeInfo.utc}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Dashboard Summary */}
+      {/* Manager Wins Summary - hidden on mobile */}
       <div className="winners-dashboard">
         <h3>Manager Wins Summary (Top 5)</h3>
         <div className="stats-grid">
@@ -148,15 +89,15 @@ export default function GWWinners() {
 
       {/* Full Table View */}
       <div className="winners-table-section">
-        <h3>All Gameweek Winners (Latest First)</h3>
+        <h3>All Gameweek Winners</h3>
         <table className="winners-table">
           <thead>
             <tr>
               <th>GW</th>
+              <th className="desktop-only">Team</th>
               <th>Manager</th>
-              <th>Team</th>
-              <th>Gross Points</th>
-              <th>Transfer Cost</th>
+              <th className="desktop-only">Gross Points</th>
+              <th className="desktop-only">Transfer Cost</th>
               <th>Net Points</th>
             </tr>
           </thead>
@@ -164,12 +105,12 @@ export default function GWWinners() {
             {winners.map((w) => (
               <tr key={`${w.gameweek}-${w.entry_id}`}>
                 <td className="gw-cell">{w.gameweek}</td>
+                <td className="team-cell desktop-only">{w.team_name}</td>
                 <td className="manager-cell">
                   <strong>{w.manager_name}</strong>
                 </td>
-                <td className="team-cell">{w.team_name}</td>
-                <td className="gross-points">{w.gross_points}</td>
-                <td className="transfer-cost">
+                <td className="gross-points desktop-only">{w.gross_points}</td>
+                <td className="transfer-cost desktop-only">
                   {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
                 </td>
                 <td className="net-points">

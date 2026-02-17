@@ -50,9 +50,19 @@ export default function App() {
         {activeTab === 'help' && <Help />}
       </main>
 
-      <footer className="app-footer">
-        <p>Last updated: {new Date().toLocaleTimeString()}</p>
-      </footer>
+<footer className="app-footer">
+  <p>
+    Last updated: {new Date().toLocaleString('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })} UTC
+  </p>
+</footer>
     </div>
   );
 }
