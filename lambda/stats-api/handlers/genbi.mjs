@@ -1,8 +1,6 @@
 import { getGWWinners, dynamodb } from '../utils/dynamodb.mjs';
-import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { callClaude } from '../utils/bedrock.mjs';
-
-const SEASON = '2025/26';
+import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 async function getLatestGameweek() {
   try {
@@ -15,12 +13,12 @@ async function getLatestGameweek() {
   }
 }
 
-async function getPlayerDataForGW(gw) {
+async function getPlayerDataForGW(gw, seasonId) {
   try {
     const result = await dynamodb.send(new QueryCommand({
-      TableName: 'fpl_gameweek_data',
-      KeyConditionExpression: 'season_event = :se',
-      ExpressionAttributeValues: { ':se': `${SEASON}#${gw}` }
+      TableName: 'player_event_stats',
+      KeyConditionExpression: 'season_id = :sid AND begins_with(gameweek_player, :gw)',
+      ExpressionAttributeValues: { ':sid': seasonId, ':gw': `${gw}#` }
     }));
     return result.Items || [];
   } catch (err) {
@@ -43,30 +41,67 @@ async function getOurLeaguePicks(gw) {
   }
 }
 
+async function getSeasonId() {
+  try {
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'seasons',
+      FilterExpression: '#c = :curr',
+      ExpressionAttributeNames: { '#c': 'current' },
+      ExpressionAttributeValues: { ':curr': true }
+    }));
+    
+    if (result.Items && result.Items.length > 0) {
+      return result.Items[0].season_id;
+    }
+    throw new Error('No current season found');
+  } catch (err) {
+    console.error('Failed to get season_id', err);
+    throw err;
+  }
+}
+
+
 async function callClaudeWithContext(question, leagueContext) {
-  const systemPrompt = `You are a Fantasy Premier League analyst.
 
-KEY INSIGHT: A "differential" is a player with HIGH POINTS but LOW OWNERSHIP %.
 
-PLAYER DATA (GW${leagueContext.gameweek}):
-${JSON.stringify(leagueContext.players_gw_data, null, 2)}
+const systemPrompt = `You are a Fantasy Premier League analyst analyzing captain picks from our league.
+
+DATA STRUCTURE:
+- our_league_picks: Array of {manager: "Manager Name", player: "Player Name", position: "Position", is_captain: true/false}
+- These are ACTUAL FPL PLAYERS picked by our league MANAGERS
+- When is_captain=true, that player was captained by that manager
 
 Each player has:
-- name, team, position, points, minutes, goals, assists
+- name, team_name, position, points, minutes, goals, assists
 - ownership: global ownership percentage in FPL
 
-OUR LEAGUE PICKS (GW${leagueContext.gameweek}):
-${JSON.stringify(leagueContext.our_league_picks.slice(0, 15), null, 2)}
-
+KEY INSIGHT: A "differential" is a player with HIGH POINTS but LOW OWNERSHIP %.
 TO FIND DIFFERENTIALS:
 1. Look for players with high points (8+) AND low ownership (<10%)
 2. Check if our league managers also picked them
 3. If high points + low global ownership = differential
 
-RECENT GW WINNERS:
-${JSON.stringify(leagueContext.gw_winners.slice(0, 3), null, 2)}
+PLAYER DATA (GW${leagueContext.gameweek}):
+${JSON.stringify(leagueContext.players_gw_data, null, 2)}
 
+OUR LEAGUE MANAGER PICKS (GW${leagueContext.gameweek}):
+${JSON.stringify(leagueContext.our_league_picks.slice(0, 20), null, 2)}
+
+ANALYSIS RULES:
+1. Find PLAYERS (not managers) where is_captain = true
+2. Look up each captained PLAYER in the player data
+3. Report PLAYER name + points scored + manager who captained them
+4. Identify which FPL PLAYERS were the best captain choices
+
+Example: "Virgil van Dijk captained by Michael Kojo Brown scored 17 points"
+NOT: "Michael Kojo Brown captained Michael Kojo Brown"
+
+GW WINS SUMMARY (Total wins by manager):
+${JSON.stringify(leagueContext.winners_summary, null, 2)}
+RECENT GW WINNERS (All ${leagueContext.gw_winners.length} gameweeks):
+${JSON.stringify(leagueContext.gw_winners, null, 2)}
 Answer the user's question using this data.`;
+
 
   const payload = {
     anthropic_version: 'bedrock-2023-05-31',
@@ -111,24 +146,42 @@ export async function handleGenBI(body, corsHeaders) {
   }
 
   try {
+    const seasonId = await getSeasonId();
     const gw = await getLatestGameweek();
     const gwWinners = await getGWWinners();
-    const playerData = await getPlayerDataForGW(gw);
+// Transform gw_winners into cleaner format
+const winnersByManager = {};
+gwWinners.forEach(gw => {
+  if (gw.winners && Array.isArray(gw.winners)) {
+    gw.winners.forEach(winner => {
+      const managerName = winner.manager_name || winner.M?.manager_name?.S;
+      if (managerName) {
+        winnersByManager[managerName] = (winnersByManager[managerName] || 0) + 1;
+      }
+    });
+  }
+});
+    const playerData = await getPlayerDataForGW(gw, seasonId);
     const ourPicks = await getOurLeaguePicks(gw);
 
     const leagueContext = {
       gameweek: gw,
-      gw_winners: gwWinners.slice(0, 5),
-      players_gw_data: playerData
-        .sort((a, b) => b.points - a.points)
-        .slice(0, 50)
-        .map(p => ({
-          name: p.name,
-          team: p.team_name,
-          position: p.position,
-          points: p.points,
-          ownership: p.selected_by_percent
-        })),
+      gw_winners: gwWinners,
+  winners_summary: winnersByManager,  // ← Add this
+players_gw_data: playerData
+  .sort((a, b) => {
+    const bPoints = typeof b.points === 'object' ? parseInt(b.points.N) : parseInt(b.points);
+    const aPoints = typeof a.points === 'object' ? parseInt(a.points.N) : parseInt(a.points);
+    return bPoints - aPoints;
+  })
+  .slice(0, 50)
+  .map(p => ({
+    name: typeof p.name === 'object' ? p.name.S : p.name,
+    team_name: typeof p.team_name === 'object' ? p.team_name.S : p.team_name,
+    position: typeof p.position === 'object' ? p.position.S : p.position,
+    points: typeof p.points === 'object' ? parseInt(p.points.N) : p.points,
+    ownership: typeof p.selected_by_percent === 'object' ? p.selected_by_percent.S : p.selected_by_percent
+  })),
       our_league_picks: ourPicks.map(pick => ({
         manager: pick.manager_name,
         player: pick.player_name,
