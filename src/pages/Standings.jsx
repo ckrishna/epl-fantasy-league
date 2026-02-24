@@ -51,7 +51,7 @@ useEffect(() => {
       {/* Mobile Card View */}
       <div className="standings-cards">
         {standings.map((manager) => (
-          <div key={manager.entry_id} className={`standings-card ${manager.rank <= 3 ? `top-${manager.rank}` : ''}`}>
+          <div key={manager.manager_id} className={`standings-card ${manager.rank <= 3 ? `top-${manager.rank}` : ''}`}>
             <div className="card-rank">
               <span className="rank-badge">
                 {getMedal(manager.rank) || manager.rank}
@@ -68,7 +68,7 @@ useEffect(() => {
               </div>
               <div className="stat">
                 <span className="stat-label">Total</span>
-                <span className="stat-value">{manager.points_total}</span>
+                <span className="stat-value">{manager.total_points}</span>
               </div>
             </div>
           </div>
@@ -87,7 +87,7 @@ useEffect(() => {
         </thead>
         <tbody>
           {standings.map((manager) => (
-            <tr key={manager.entry_id} className={manager.rank <= 3 ? `top-${manager.rank}` : ''}>
+            <tr key={manager.manager_id} className={manager.rank <= 3 ? `top-${manager.rank}` : ''}>
               <td className="rank">
                 {getMedal(manager.rank) ? (
                   <span className="medal">{getMedal(manager.rank)}</span>
@@ -100,7 +100,7 @@ useEffect(() => {
                 <div className="manager-name">{manager.manager_name}</div>
               </td>
               <td className="week-points">{manager.points_this_week}</td>
-              <td className="points">{manager.points_total}</td>
+              <td className="points">{manager.total_points}</td>
             </tr>
           ))}
         </tbody>
