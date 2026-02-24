@@ -1,9 +1,10 @@
 // src/api/client.js
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api';
 
-export async function getStandings(gw = 25) {
+export async function getStandings(gw = null) {
   try {
-    const res = await fetch(`${API_BASE}/standings?gw=${gw}`);
+    const url = gw ? `${API_BASE}/standings?gw=${gw}` : `${API_BASE}/standings`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -27,7 +28,7 @@ export async function getWinners() {
   }
 }
 
-export async function getTrendingPlayers(gw = 25, limit = 10) {
+export async function getTrendingPlayers(gw = null, limit = 10) {
   try {
     const res = await fetch(`${API_BASE}/players/trending?gw=${gw}&limit=${limit}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -1,8 +1,8 @@
 import { queryLeagueStandings, getActiveGameweek } from '../utils/dynamodb.mjs';
 
 export async function handleStandings(queryParams, corsHeaders) {
-  const gw = queryParams.gw ? parseInt(queryParams.gw) : 25;
   const activeGW = await getActiveGameweek();
+  const gw = queryParams.gw ? parseInt(queryParams.gw) : activeGW;
   
   const standings = (await queryLeagueStandings(gw))
     .map(item => ({

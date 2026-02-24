@@ -20,7 +20,7 @@ useEffect(() => {
     }
     
     const sorted = (data.standings || [])
-      .sort((a, b) => b.points_total - a.points_total)
+      .sort((a, b) => b.total_points - a.total_points)
       .map((manager, idx) => ({
         ...manager,
         rank: idx + 1
