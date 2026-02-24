@@ -247,7 +247,58 @@ export async function handler(event) {
     }
     
     logger.info('Winners cached', { gameweeks: winnersCount });
-    
+
+    // Calculate and store cumulative standings
+    logger.info('Calculating league standings...');
+let standingsCount = 0;
+
+for (const manager of managers) {
+  try {
+    // Query all gameweek records for this manager
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'fpl_entry_gameweek',
+      FilterExpression: 'season_entry = :se',
+      ExpressionAttributeValues: { ':se': `${SEASON}#${manager.entry_id}` }
+    }));
+
+     // Get LATEST gameweek only (don't sum all GWs!)
+    const latestRecord = (result.Items || [])
+      .sort((a, b) => {
+        const aGW = a.gameweek?.N ? parseInt(a.gameweek.N) : (a.gameweek || 0);
+        const bGW = b.gameweek?.N ? parseInt(b.gameweek.N) : (b.gameweek || 0);
+        return bGW - aGW;
+      })[0];
+
+    const totalPoints = latestRecord 
+      ? parseInt(latestRecord.points_total?.N || latestRecord.points_total || 0)
+      : 0;
+
+    // Store in standings
+    await dynamodb.send(new PutCommand({
+      TableName: 'fpl_league_standings',
+      Item: {
+        season_event: `${SEASON}#${activeGW}`,
+        manager_id: manager.entry_id,
+        manager_name: manager.manager_name,
+        team_name: manager.team_name,
+        total_points: totalPoints,
+        points_this_week: latestRecord ? parseInt(latestRecord.points_this_week || 0) : 0,  // ← ADD
+        transfer_cost: latestRecord ? parseInt(latestRecord.transfer_cost || 0) : 0,       // ← ADD
+        rank: 0, // Will be calculated later
+        last_synced: new Date().toISOString()
+      }
+    }));
+
+    standingsCount += 1;
+    dbWriteCount += 1;
+  } catch (err) {
+    logger.error(`Failed to calculate standings for ${manager.manager_name}`, err);
+  }
+}
+
+logger.info('Standings calculated and stored', { count: standingsCount });
+
+
     const totalDuration = Date.now() - runStartTime;
     
     logger.info('✅ Data ingestion complete', {
@@ -255,7 +306,8 @@ export async function handler(event) {
       api_calls: apiCallCount,
       db_writes: dbWriteCount,
       managers: managers.length,
-      gameweeks: gwsToFetch.length
+      gameweeks: gwsToFetch.length,
+  standings: standingsCount  // ← Add this
     });
     
     logger.metric('ingestion_duration', totalDuration, 'ms');

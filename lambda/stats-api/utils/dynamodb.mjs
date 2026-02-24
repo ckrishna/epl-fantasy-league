@@ -4,10 +4,10 @@ import { DynamoDBDocumentClient, ScanCommand, QueryCommand } from '@aws-sdk/lib-
 export const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
 
 export async function queryLeagueStandings(gw) {
-  const result = await dynamodb.send(new ScanCommand({
-    TableName: 'fpl_entry_gameweek',
-    FilterExpression: 'gameweek = :gw',
-    ExpressionAttributeValues: { ':gw': parseInt(gw) }
+  const result = await dynamodb.send(new QueryCommand({
+    TableName: 'fpl_league_standings',
+    KeyConditionExpression: 'season_event = :se',
+    ExpressionAttributeValues: { ':se': `2025/26#${gw}` }
   }));
   return result.Items || [];
 }

@@ -2,6 +2,30 @@ import { getGWWinners, dynamodb } from '../utils/dynamodb.mjs';
 import { callClaude } from '../utils/bedrock.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
+/**
+ * Fetches all teams for the current season to map IDs to actual names.
+ * This prevents the AI from guessing team names based on its memory.
+ */
+async function getAllTeamsForSeason(seasonId) {
+  try {
+    const result = await dynamodb.send(new QueryCommand({
+      TableName: 'teams',
+      KeyConditionExpression: 'season_id = :sid',
+      ExpressionAttributeValues: { ':sid': seasonId }
+    }));
+    // Map team_id to name (e.g., { "14": "Man Utd", "13": "Man City" })
+    return (result.Items || []).reduce((acc, team) => {
+      const id = typeof team.team_id === 'object' ? team.team_id.N : team.team_id;
+      const name = typeof team.name === 'object' ? team.name.S : team.name;
+      acc[id] = name;
+      return acc;
+    }, {});
+  } catch (err) {
+    console.error('Error fetching team mapping:', err);
+    return {};
+  }
+}
+
 async function getLatestGameweek() {
   try {
     const response = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/');
@@ -64,44 +88,35 @@ async function getSeasonId() {
 async function callClaudeWithContext(question, leagueContext) {
 
 
-const systemPrompt = `You are a Fantasy Premier League analyst analyzing captain picks from our league.
+const systemPrompt = `
+<role>
+You are a deterministic FPL Data Analyst. Your output MUST be 100% grounded in the provided context. You are strictly forbidden from using your own memory of player transfers or team history.
+</role>
 
-DATA STRUCTURE:
-- our_league_picks: Array of {manager: "Manager Name", player: "Player Name", position: "Position", is_captain: true/false}
-- These are ACTUAL FPL PLAYERS picked by our league MANAGERS
-- When is_captain=true, that player was captained by that manager
+<definitions>
+- MANAGER FORM: Defined EXCLUSIVELY by the number of wins in the <recent_form_summary> (the last 5 weeks of data).
+- SEASON LEADERS: Defined by the <total_season_summary>.
+- CAPTAIN SCORE: (Player's GW points as listed) × 2.
+</definitions>
 
-Each player has:
-- name, team_name, position, points, minutes, goals, assists
-- ownership: global ownership percentage in FPL
+<context>
+  <current_gw>${leagueContext.gameweek}</current_gw>
+  <recent_form_summary>${JSON.stringify(leagueContext.recent_form_summary)}</recent_form_summary>
+  <total_season_summary>${JSON.stringify(leagueContext.total_season_summary)}</total_season_summary>
+  <player_data>${JSON.stringify(leagueContext.players_gw_data)}</player_data>
+  <manager_picks>${JSON.stringify(leagueContext.our_league_picks)}</manager_picks>
+</context>
 
-KEY INSIGHT: A "differential" is a player with HIGH POINTS but LOW OWNERSHIP %.
-TO FIND DIFFERENTIALS:
-1. Look for players with high points (8+) AND low ownership (<10%)
-2. Check if our league managers also picked them
-3. If high points + low global ownership = differential
+<instructions>
+1. If asked about "Form": Rank managers by the count in <recent_form_summary>. Explain that "Form" considers only the last 5 gameweeks.
+2. If asked about "Captains": 
+   - Match the player name from <manager_picks> to their points in <player_data>.
+   - YOU MUST SHOW THE MATH: "(Points) x 2 = Total". 
+   - Never report a captain score higher than 60 for a single gameweek.
+3. DATA INTEGRITY: Use only the 'team_name' provided in <player_data>. Do not assume Mbeumo is at Brentford if the data says "Man Utd".
+</instructions>
 
-PLAYER DATA (GW${leagueContext.gameweek}):
-${JSON.stringify(leagueContext.players_gw_data, null, 2)}
-
-OUR LEAGUE MANAGER PICKS (GW${leagueContext.gameweek}):
-${JSON.stringify(leagueContext.our_league_picks.slice(0, 20), null, 2)}
-
-ANALYSIS RULES:
-1. Find PLAYERS (not managers) where is_captain = true
-2. Look up each captained PLAYER in the player data
-3. Report PLAYER name + points scored + manager who captained them
-4. Identify which FPL PLAYERS were the best captain choices
-
-Example: "Virgil van Dijk captained by Michael Kojo Brown scored 17 points"
-NOT: "Michael Kojo Brown captained Michael Kojo Brown"
-
-GW WINS SUMMARY (Total wins by manager):
-${JSON.stringify(leagueContext.winners_summary, null, 2)}
-RECENT GW WINNERS (All ${leagueContext.gw_winners.length} gameweeks):
-${JSON.stringify(leagueContext.gw_winners, null, 2)}
-Answer the user's question using this data.`;
-
+Calculate results carefully using only the provided context and be concise.`;
 
   const payload = {
     anthropic_version: 'bedrock-2023-05-31',
@@ -134,6 +149,10 @@ Answer the user's question using this data.`;
   };
 }
 
+/**
+ * Enhanced GenBI Handler
+ * Resolves mid-season transfers and calculates recent form logic.
+ */
 export async function handleGenBI(body, corsHeaders) {
   const { question } = body;
   
@@ -148,48 +167,70 @@ export async function handleGenBI(body, corsHeaders) {
   try {
     const seasonId = await getSeasonId();
     const gw = await getLatestGameweek();
-    const gwWinners = await getGWWinners();
-// Transform gw_winners into cleaner format
-const winnersByManager = {};
-gwWinners.forEach(gw => {
-  if (gw.winners && Array.isArray(gw.winners)) {
-    gw.winners.forEach(winner => {
-      const managerName = winner.manager_name || winner.M?.manager_name?.S;
-      if (managerName) {
-        winnersByManager[managerName] = (winnersByManager[managerName] || 0) + 1;
-      }
-    });
-  }
-});
-    const playerData = await getPlayerDataForGW(gw, seasonId);
-    const ourPicks = await getOurLeaguePicks(gw);
 
+    // 1. Fetch all required data in parallel
+    const [gwWinners, playerData, ourPicks, teamMap] = await Promise.all([
+      getGWWinners(),
+      getPlayerDataForGW(gw, seasonId),
+      getOurLeaguePicks(gw),
+      getAllTeamsForSeason(seasonId)
+    ]);
+
+    // 2. Calculate Total Season Wins
+    const totalWinnersSummary = {};
+    gwWinners.forEach(gwData => {
+      (gwData.winners || []).forEach(winner => {
+        const managerName = winner.manager_name || winner.M?.manager_name?.S;
+        if (managerName) {
+          totalWinnersSummary[managerName] = (totalWinnersSummary[managerName] || 0) + 1;
+        }
+      });
+    });
+
+    // 3. Calculate Recent Form (Last 5 Gameweeks)
+    const recentFormSummary = {};
+    const sortedGWs = [...gwWinners].sort((a, b) => b.gameweek - a.gameweek);
+    const last5Weeks = sortedGWs.slice(0, 5);
+    
+    last5Weeks.forEach(gwData => {
+      (gwData.winners || []).forEach(winner => {
+        const managerName = winner.manager_name || winner.M?.manager_name?.S;
+        if (managerName) {
+          recentFormSummary[managerName] = (recentFormSummary[managerName] || 0) + 1;
+        }
+      });
+    });
+
+    // 4. Enrich Context with joined data and fixed types
     const leagueContext = {
       gameweek: gw,
-      gw_winners: gwWinners,
-  winners_summary: winnersByManager,  // ← Add this
-players_gw_data: playerData
-  .sort((a, b) => {
-    const bPoints = typeof b.points === 'object' ? parseInt(b.points.N) : parseInt(b.points);
-    const aPoints = typeof a.points === 'object' ? parseInt(a.points.N) : parseInt(a.points);
-    return bPoints - aPoints;
-  })
-  .slice(0, 50)
-  .map(p => ({
-    name: typeof p.name === 'object' ? p.name.S : p.name,
-    team_name: typeof p.team_name === 'object' ? p.team_name.S : p.team_name,
-    position: typeof p.position === 'object' ? p.position.S : p.position,
-    points: typeof p.points === 'object' ? parseInt(p.points.N) : p.points,
-    ownership: typeof p.selected_by_percent === 'object' ? p.selected_by_percent.S : p.selected_by_percent
-  })),
+      total_season_summary: totalWinnersSummary,
+      recent_form_summary: recentFormSummary, 
+      players_gw_data: playerData
+        .sort((a, b) => {
+          const bPts = typeof b.points === 'object' ? parseInt(b.points.N) : parseInt(b.points || 0);
+          const aPts = typeof a.points === 'object' ? parseInt(a.points.N) : parseInt(a.points || 0);
+          return bPts - aPts;
+        })
+        .slice(0, 50)
+        .map(p => {
+          const teamId = typeof p.team_id === 'object' ? p.team_id.N : p.team_id;
+          return {
+            name: typeof p.web_name === 'object' ? p.web_name.S : (p.web_name || p.name),
+            // Resolve actual name from Teams table (Fixes Mbeumo at Brentford issue)
+            team_name: teamMap[teamId] || "Unknown Team", 
+            points: typeof p.points === 'object' ? parseInt(p.points.N) : parseInt(p.points || 0),
+            ownership: typeof p.selected_by_percent === 'object' ? p.selected_by_percent.S : (p.selected_by_percent || "0.0%")
+          };
+        }),
       our_league_picks: ourPicks.map(pick => ({
         manager: pick.manager_name,
         player: pick.player_name,
-        position: pick.position_player,
         is_captain: pick.is_captain
       }))
     };
 
+    // 5. Invoke Claude with refined context
     const result = await callClaudeWithContext(question, leagueContext);
     
     return {
@@ -205,7 +246,7 @@ players_gw_data: playerData
     };
 
   } catch (err) {
-    console.error('GenBI error:', err);
+    console.error('GenBI execution error:', err);
     return {
       statusCode: 500,
       headers: corsHeaders,

@@ -9,7 +9,7 @@ export async function handleStandings(queryParams, corsHeaders) {
       ...item,
       net_points: (item.points_this_week || 0) - (item.transfer_cost || 0)
     }))
-    .sort((a, b) => b.net_points - a.net_points);
+    .sort((a, b) => b.total_points - a.total_points);
 
   return {
     statusCode: 200,

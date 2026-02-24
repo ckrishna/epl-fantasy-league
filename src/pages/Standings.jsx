@@ -6,28 +6,32 @@ import '../styles/Standings.css';
 export default function Standings() {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeGW, setActiveGW] = useState(26);
 
-  useEffect(() => {
-    setLoading(true);
-    getStandings(activeGW).then(data => {
-      if (data.active_gameweek) {
-        setActiveGW(data.active_gameweek);
-      }
-      
-      const sorted = (data.standings || [])
-        .sort((a, b) => b.points_total - a.points_total)
-        .map((manager, idx) => ({
-          ...manager,
-          rank: idx + 1
-        }));
-      setStandings(sorted);
-      setLoading(false);
-    }).catch(err => {
-      console.error('Error fetching standings:', err);
-      setLoading(false);
-    });
-  }, []);
+const [activeGW, setActiveGW] = useState(null);
+
+useEffect(() => {
+  setLoading(true);
+  
+  // Fetch standings with no GW param (will use active_gameweek from API)
+  getStandings().then(data => {
+    // Set activeGW from the API response
+    if (data.active_gameweek) {
+      setActiveGW(data.active_gameweek);
+    }
+    
+    const sorted = (data.standings || [])
+      .sort((a, b) => b.points_total - a.points_total)
+      .map((manager, idx) => ({
+        ...manager,
+        rank: idx + 1
+      }));
+    setStandings(sorted);
+    setLoading(false);
+  }).catch(err => {
+    console.error('Error fetching standings:', err);
+    setLoading(false);
+  });
+}, []);
 
   // Get medal for rank
   const getMedal = (rank) => {
