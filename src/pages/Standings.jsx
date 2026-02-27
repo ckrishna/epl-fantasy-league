@@ -6,8 +6,9 @@ import '../styles/Standings.css';
 export default function Standings() {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
-
 const [activeGW, setActiveGW] = useState(null);
+const [displayGW, setDisplayGW] = useState(null);  // ← ADD THIS
+
 
 useEffect(() => {
   setLoading(true);
@@ -17,6 +18,9 @@ useEffect(() => {
     // Set activeGW from the API response
     if (data.active_gameweek) {
       setActiveGW(data.active_gameweek);
+    }
+    if (data.gameweek) {
+      setDisplayGW(data.gameweek);  // ← ADD THIS
     }
     
     const sorted = (data.standings || [])
@@ -63,7 +67,7 @@ useEffect(() => {
             </div>
             <div className="card-stats">
               <div className="stat">
-                <span className="stat-label">GW {activeGW}</span>
+                <span className="stat-label">GW {displayGW || activeGW}</span>
                 <span className="stat-value">{manager.points_this_week}</span>
               </div>
               <div className="stat">
@@ -81,7 +85,7 @@ useEffect(() => {
           <tr>
             <th>RANK</th>
             <th>TEAM & MANAGER</th>
-            <th>GW {activeGW}</th>
+            <th>GW {displayGW || activeGW}</th>
             <th>TOTAL POINTS</th>
           </tr>
         </thead>
