@@ -16,7 +16,11 @@ const logger = {
 async function getLeagueManagers() {
   const startTime = Date.now();
   try {
-    const response = await fetch(`${FPL_API}/leagues-classic/${LEAGUE_ID}/standings/`);
+    const response = await fetch(`${FPL_API}/leagues-classic/${LEAGUE_ID}/standings/`, {
+     headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     
@@ -42,7 +46,11 @@ async function getLeagueManagers() {
 async function getBootstrapStatic() {
   const startTime = Date.now();
   try {
-    const response = await fetch(`${FPL_API}/bootstrap-static/`);
+const response = await fetch(`${FPL_API}/bootstrap-static/`, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+  }
+});
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     
@@ -60,7 +68,11 @@ async function getBootstrapStatic() {
 
 async function getManagerPicksForGW(entryId, gw) {
   try {
-    const response = await fetch(`${FPL_API}/entry/${entryId}/event/${gw}/picks/`);
+const response = await fetch(`${FPL_API}/entry/${entryId}/event/${gw}/picks/`, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+  }
+});
     if (!response.ok) return null;
     return await response.json();
   } catch (err) {
