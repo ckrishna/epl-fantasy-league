@@ -61,7 +61,7 @@ function installIngesterDynamoMock({ currentSeason }) {
     const name = command.constructor.name;
 
     if (table === 'seasons' && name === 'ScanCommand') {
-      return { Items: [{ season_id: currentSeason, current: true }] };
+      return { Items: [{ season_id: 1, season_string: currentSeason, current: true }] };
     }
     if (table === 'fpl_entry_gameweek' && name === 'ScanCommand') {
       return { Items: [] }; // both the winners-calc scan and per-manager standings scan
