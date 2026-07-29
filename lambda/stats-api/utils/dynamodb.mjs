@@ -12,6 +12,12 @@ const FPL_FETCH_HEADERS = {
 // `seasons` table pattern already used by fpl-bootstrap, fpl-global-stats-weekly, and
 // the GenBI handler. Centralizing it here means season rollover is a single write to
 // that table (flip `current` to the new season), not a hunt through hardcoded strings.
+//
+// NOTE: the `seasons` table has two different season fields -- `season_id` (a numeric
+// internal ID used to tag reference tables like `teams`/`players`/`events`) and
+// `season_string` (the human-readable "2025/26" used as the partition-key prefix for
+// manager-facing tables like fpl_entry_gameweek/fpl_league_standings/gw-winners-cache).
+// This function must return `season_string`, not `season_id`.
 export async function getCurrentSeason() {
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'seasons',
@@ -21,7 +27,7 @@ export async function getCurrentSeason() {
   }));
 
   if (result.Items && result.Items.length > 0) {
-    return result.Items[0].season_id;
+    return result.Items[0].season_string;
   }
   throw new Error('No current season found in seasons table');
 }

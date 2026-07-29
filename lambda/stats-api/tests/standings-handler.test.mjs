@@ -29,7 +29,7 @@ test('[current bug] default view (no gw param) shows the true final gameweek onc
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
       const key = command.input.ExpressionAttributeValues[':se'];
@@ -70,7 +70,7 @@ test('[regression] mid-season: still walks back gracefully over a genuine same-w
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
       const key = command.input.ExpressionAttributeValues[':se'];
@@ -102,7 +102,7 @@ test('[regression] explicit ?gw= param is still honored as-is', async () => {
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
       const key = command.input.ExpressionAttributeValues[':se'];

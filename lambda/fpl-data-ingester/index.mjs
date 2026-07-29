@@ -16,6 +16,10 @@ const logger = {
 // pattern already used by fpl-bootstrap, fpl-global-stats-weekly, and the GenBI
 // handler. Previously this was a hardcoded `const SEASON = '2025/26'`, which nothing
 // would remind anyone to update once the 2026/27 season starts.
+// NOTE: the `seasons` table has two different season fields -- `season_id` (a numeric
+// internal ID used to tag reference tables like `teams`/`players`/`events` in the
+// fpl-bootstrap lambda) and `season_string` (the human-readable "2025/26" used as the
+// partition-key prefix here). This must return `season_string`, not `season_id`.
 async function getCurrentSeason() {
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'seasons',
@@ -24,7 +28,7 @@ async function getCurrentSeason() {
     ExpressionAttributeValues: { ':curr': true }
   }));
   if (result.Items && result.Items.length > 0) {
-    return result.Items[0].season_id;
+    return result.Items[0].season_string;
   }
   throw new Error('No current season found in seasons table');
 }

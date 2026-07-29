@@ -36,7 +36,7 @@ test('[current bug] active_gameweek reflects real data, not a hardcoded value', 
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'gw-winners-cache' && command.constructor.name === 'ScanCommand') {
       return { Items: applyEqualityFilter(allItems, command, 'season') };
@@ -61,7 +61,7 @@ test('[current bug] winners are scoped to the current season only, not mixed acr
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2026/27', current: true }] };
+      return { Items: [{ season_id: 2, season_string: '2026/27', current: true }] };
     }
     if (table === 'gw-winners-cache' && command.constructor.name === 'ScanCommand') {
       return { Items: applyEqualityFilter(allItems, command, 'season') };
@@ -87,7 +87,7 @@ test('[regression] single-season case still returns every gameweek, sorted newes
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'gw-winners-cache' && command.constructor.name === 'ScanCommand') {
       return { Items: applyEqualityFilter(allItems, command, 'season') };

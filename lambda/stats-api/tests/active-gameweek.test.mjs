@@ -63,7 +63,7 @@ test('[current bug] total FPL API failure: falls back to our own latest stored d
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'fpl_entry_gameweek' && command.constructor.name === 'ScanCommand') {
       return { Items: [{ gameweek: 25 }, { gameweek: 38 }, { gameweek: 12 }] };

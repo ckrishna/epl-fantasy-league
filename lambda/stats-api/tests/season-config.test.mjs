@@ -22,7 +22,7 @@ test('[current bug] queries using the season marked current in the seasons table
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
       // Simulate the new season having already started and been marked current.
-      return { Items: [{ season_id: '2026/27', current: true }] };
+      return { Items: [{ season_id: 2, season_string: '2026/27', current: true }] };
     }
     if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
       capturedQuery = command;
@@ -42,11 +42,41 @@ test('[current bug] queries using the season marked current in the seasons table
   }
 });
 
+test('[regression] getCurrentSeason reads season_string, not the numeric season_id (caught a real incident)', async () => {
+  // The `seasons` table has two different season fields: `season_id` is a numeric
+  // internal ID used by fpl-bootstrap to tag reference tables (teams/players/events),
+  // while `season_string` ("2025/26") is what the manager-facing tables actually key
+  // on. An earlier version of this fix read `season_id` here, which silently resolved
+  // to the number `1` instead of "2025/26" and made every standings query come back
+  // empty. This test pins down the correct field.
+  let capturedQuery = null;
+  const dynamoMock = installDynamoMock((command) => {
+    const table = command.input.TableName;
+    if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
+    }
+    if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
+      capturedQuery = command;
+      return { Items: [] };
+    }
+    return undefined;
+  });
+
+  try {
+    await queryLeagueStandings(25);
+    const key = capturedQuery.input.ExpressionAttributeValues[':se'];
+    assert.strictEqual(key, '2025/26#25', `Expected the query key to use season_string ("2025/26#25"), ` +
+      `got "${key}". If this shows "1#25" instead, the code is reading the numeric season_id by mistake.`);
+  } finally {
+    dynamoMock.restore();
+  }
+});
+
 test('[regression] still queries the right partition for the season that was active all along', async () => {
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
-      return { Items: [{ season_id: '2025/26', current: true }] };
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
     }
     if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
       return { Items: [{ season_event: '2025/26#25', total_points: 1537 }] };
