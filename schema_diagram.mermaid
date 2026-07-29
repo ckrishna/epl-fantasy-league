@@ -1,0 +1,85 @@
+erDiagram
+    seasons {
+        number season_id PK
+        string season_string "e.g. 2026/27"
+        boolean current "exactly one true"
+        string status
+        number total_gameweeks
+    }
+
+    teams {
+        number season_id PK
+        number team_id "SK"
+        string name
+    }
+
+    players {
+        number season_id PK
+        number player_id "SK"
+        string web_name
+        number total_points
+    }
+
+    element_types {
+        number season_id PK
+        number element_type_id "SK"
+        string singular_name
+    }
+
+    events {
+        number season_id PK
+        number gameweek_id "SK"
+        boolean is_current
+        boolean finished
+    }
+
+    player_event_stats {
+        number season_id PK
+        string gameweek_player "SK: gw#player_id"
+        number total_points
+    }
+
+    fpl_fixture_data {
+        string season_fixture PK "season_id#fixture_id"
+        number event "SK: gameweek"
+        string status
+    }
+
+    fpl_entry_gameweek {
+        string season_entry PK "season_string#entry_id"
+        number gameweek "SK"
+        number entry_id
+        number points_total
+    }
+
+    fpl_entry_picks {
+        string season_entry_gw PK "season_string#entry_id#gw"
+        string position_player "SK: squad_pos#player_id"
+        boolean is_captain
+    }
+
+    fpl_league_standings {
+        string season_event PK "season_string#gameweek"
+        number manager_id "SK"
+        number total_points
+        boolean backfilled "true if reconstructed"
+    }
+
+    gw_winners_cache {
+        string season PK "gw-winners-cache table"
+        number gameweek "SK"
+        string winners
+    }
+
+    seasons ||--o{ teams : "season_id"
+    seasons ||--o{ players : "season_id"
+    seasons ||--o{ element_types : "season_id"
+    seasons ||--o{ events : "season_id"
+    seasons ||--o{ player_event_stats : "season_id"
+    seasons ||--o{ fpl_fixture_data : "season_id (embedded in key)"
+    seasons ||--o{ fpl_entry_gameweek : "season_string (embedded in key)"
+    seasons ||--o{ fpl_entry_picks : "season_string (embedded in key)"
+    seasons ||--o{ fpl_league_standings : "season_string (embedded in key)"
+    seasons ||--o{ gw_winners_cache : "season_string"
+    fpl_entry_gameweek ||--o{ fpl_entry_picks : "entry_id + gameweek"
+    fpl_entry_gameweek }o--|| fpl_league_standings : "entry_id = manager_id"
