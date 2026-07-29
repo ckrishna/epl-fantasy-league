@@ -1,15 +1,16 @@
-import { queryLeagueStandings, getActiveGameweek } from '../utils/dynamodb.mjs';
+import { queryLeagueStandings, getActiveGameweek, getCurrentSeason } from '../utils/dynamodb.mjs';
 
 export async function handleStandings(queryParams, corsHeaders) {
+  const currentSeason = await getCurrentSeason();
   const activeGW = await getActiveGameweek();
   let gw = queryParams.gw ? parseInt(queryParams.gw) : activeGW;
-  
+
   // If no data for this GW, try previous GWs
-  let standings = await queryLeagueStandings(gw);
-  
+  let standings = await queryLeagueStandings(gw, currentSeason);
+
   while ((!standings || standings.length === 0) && gw > 1) {
     gw = gw - 1;
-    standings = await queryLeagueStandings(gw);
+    standings = await queryLeagueStandings(gw, currentSeason);
   }
   
   // Map and sort

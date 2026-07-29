@@ -2,7 +2,6 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, BatchWriteCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
-const SEASON = '2025/26';
 const FPL_API = 'https://fantasy.premierleague.com/api';
 const LEAGUE_ID = 212889;
 
@@ -12,6 +11,23 @@ const logger = {
   error: (msg, err = {}) => console.error(JSON.stringify({ level: 'ERROR', timestamp: new Date().toISOString(), msg, error: err.message })),
   metric: (name, value, unit = '') => console.log(JSON.stringify({ level: 'METRIC', timestamp: new Date().toISOString(), metric: name, value, unit }))
 };
+
+// Resolves the currently active season from the shared `seasons` table -- the same
+// pattern already used by fpl-bootstrap, fpl-global-stats-weekly, and the GenBI
+// handler. Previously this was a hardcoded `const SEASON = '2025/26'`, which nothing
+// would remind anyone to update once the 2026/27 season starts.
+async function getCurrentSeason() {
+  const result = await dynamodb.send(new ScanCommand({
+    TableName: 'seasons',
+    FilterExpression: '#c = :curr',
+    ExpressionAttributeNames: { '#c': 'current' },
+    ExpressionAttributeValues: { ':curr': true }
+  }));
+  if (result.Items && result.Items.length > 0) {
+    return result.Items[0].season_id;
+  }
+  throw new Error('No current season found in seasons table');
+}
 
 async function getLeagueManagers() {
   const startTime = Date.now();
@@ -81,14 +97,14 @@ const response = await fetch(`${FPL_API}/entry/${entryId}/event/${gw}/picks/`, {
   }
 }
 
-async function storeGameweekSummary(manager, picksData, gw) {
+async function storeGameweekSummary(manager, picksData, gw, season) {
   const entryHistory = picksData.entry_history;
-  
+
   const item = {
-    season_entry: `${SEASON}#${manager.entry_id}`,
+    season_entry: `${season}#${manager.entry_id}`,
     gameweek: gw.id,
     entry_id: manager.entry_id,
-    season: SEASON,
+    season,
     manager_name: manager.manager_name,
     team_name: manager.team_name,
     points_this_week: entryHistory.points || 0,
@@ -116,17 +132,17 @@ async function storeGameweekSummary(manager, picksData, gw) {
   }
 }
 
-async function storePicks(manager, picksData, playerMap, gw) {
+async function storePicks(manager, picksData, playerMap, gw, season) {
   const picks = picksData.picks;
   const batch = [];
-  
+
   for (const pick of picks) {
     const player = playerMap[pick.element];
-    
+
     const item = {
-      season_entry_gw: `${SEASON}#${manager.entry_id}#${gw.id}`,
+      season_entry_gw: `${season}#${manager.entry_id}#${gw.id}`,
       position_player: `${pick.position}#${pick.element}`,
-      season: SEASON,
+      season,
       entry_id: manager.entry_id,
       gameweek: gw.id,
       player_id: pick.element,
@@ -171,24 +187,42 @@ export async function handler(event) {
   logger.info('Starting nightly FPL data ingestion', { run_id: event.requestContext?.requestId || 'manual' });
   
   try {
+    // Resolve the currently active season up front (single source of truth: the
+    // shared `seasons` table), so a season rollover is a data change, not a redeploy.
+    const season = await getCurrentSeason();
+    logger.info('Resolved current season', { season });
+
     // Fetch bootstrap
     const bootstrap = await getBootstrapStatic();
     apiCallCount += 1;
-    
+
     const playerMap = {};
     for (const player of bootstrap.elements) {
       playerMap[player.id] = player;
     }
     const gameweeks = bootstrap.events;
-    
-    const activeGW = bootstrap.events.find(e => e.is_current)?.id || 26;
+
+    // Determine the active gameweek. If FPL marks one as current, use it (normal
+    // in-season case). Otherwise -- which is exactly what happens for the entire
+    // off-season once a season concludes -- fall back to the most recent *finished*
+    // gameweek instead of a hardcoded number. A hardcoded fallback here is what
+    // previously caused the ingester to get stuck re-fetching only GW25/26 forever
+    // once the season ended, instead of ever reaching GW38.
+    const currentEvent = bootstrap.events.find(e => e.is_current);
+    let activeGW;
+    if (currentEvent) {
+      activeGW = currentEvent.id;
+    } else {
+      const finishedEvents = bootstrap.events.filter(e => e.finished);
+      activeGW = finishedEvents.length > 0 ? Math.max(...finishedEvents.map(e => e.id)) : 1;
+    }
     const gwsToFetch = gameweeks.filter(gw => gw.id >= activeGW - 1 && gw.id <= activeGW);
-    
-    logger.info('Determined gameweeks to fetch', { 
-      active_gw: activeGW, 
-      gws_to_fetch: gwsToFetch.map(g => g.id) 
+
+    logger.info('Determined gameweeks to fetch', {
+      active_gw: activeGW,
+      gws_to_fetch: gwsToFetch.map(g => g.id)
     });
-    
+
     // Fetch managers
     const managers = await getLeagueManagers();
     apiCallCount += 1;
@@ -208,20 +242,24 @@ export async function handler(event) {
           continue;
         }
         
-        await storeGameweekSummary(manager, picksData, gw);
+        await storeGameweekSummary(manager, picksData, gw, season);
         dbWriteCount += 1;
-        
-        await storePicks(manager, picksData, playerMap, gw);
+
+        await storePicks(manager, picksData, playerMap, gw, season);
         dbWriteCount += picksData.picks.length;
         
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     
-    // Calculate winners
+    // Calculate winners (scoped to the current season -- an unfiltered scan here would
+    // start mixing last season's and this season's gameweek winners together the
+    // moment a new season's data lands in the same table)
     logger.info('Calculating winners from stored data');
     const allGWResult = await dynamodb.send(new ScanCommand({
-      TableName: 'fpl_entry_gameweek'
+      TableName: 'fpl_entry_gameweek',
+      FilterExpression: 'season = :s',
+      ExpressionAttributeValues: { ':s': season }
     }));
     
     const gwsWithData = {};
@@ -240,7 +278,7 @@ export async function handler(event) {
       await dynamodb.send(new PutCommand({
         TableName: 'gw-winners-cache',
         Item: {
-          season: SEASON,
+          season,
           gameweek: parseInt(gw),
           winners: winners.map(w => ({
             entry_id: w.entry_id,
@@ -270,7 +308,7 @@ for (const manager of managers) {
     const result = await dynamodb.send(new ScanCommand({
       TableName: 'fpl_entry_gameweek',
       FilterExpression: 'season_entry = :se',
-      ExpressionAttributeValues: { ':se': `${SEASON}#${manager.entry_id}` }
+      ExpressionAttributeValues: { ':se': `${season}#${manager.entry_id}` }
     }));
 
      // Get LATEST gameweek only (don't sum all GWs!)
@@ -289,7 +327,7 @@ for (const manager of managers) {
     await dynamodb.send(new PutCommand({
       TableName: 'fpl_league_standings',
       Item: {
-        season_event: `${SEASON}#${activeGW}`,
+        season_event: `${season}#${activeGW}`,
         manager_id: manager.entry_id,
         manager_name: manager.manager_name,
         team_name: manager.team_name,
