@@ -3,7 +3,7 @@ import { DynamoDBDocumentClient, BatchWriteCommand, PutCommand, ScanCommand } fr
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
 const FPL_API = 'https://fantasy.premierleague.com/api';
-const LEAGUE_ID = 212889;
+const LEAGUE_ID = 438107; // 2026/27 mini-league ID (previous season was 212889)
 
 // Structured logging
 const logger = {

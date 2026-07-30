@@ -13,7 +13,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>⚽ EPL Fantasy League</h1>
-        <p>Carpe Diem - League 212889</p>
+        <p>Carpe Diem - League 438107</p>
       </header>
 
       <nav className="tabs">
