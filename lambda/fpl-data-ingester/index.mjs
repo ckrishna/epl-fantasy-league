@@ -43,19 +43,42 @@ async function getLeagueManagers() {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    
-    const results = data.standings?.results;
-    if (!results || !Array.isArray(results)) {
-      throw new Error('Invalid response: missing standings.results');
+
+    // FPL's classic-league API splits members into two buckets: `standings.results`
+    // (established members -- appears to require at least one scored gameweek before
+    // FPL merges someone in) and `new_entries.results` (just-joined managers not yet
+    // merged). For a brand-new league, standings.results is a genuinely empty array
+    // -- not missing, just empty -- so this used to silently report 0 managers despite
+    // real members existing (caught live on 2026-07-30 with the new 2026/27 league,
+    // id 438107: https://fantasy.premierleague.com/api/leagues-classic/438107/standings/).
+    // Prefer standings.results whenever it has anyone in it; only fall back to
+    // new_entries when standings is empty.
+    const standingsResults = data.standings?.results;
+    const newEntriesResults = data.new_entries?.results;
+
+    let results;
+    let source;
+    if (Array.isArray(standingsResults) && standingsResults.length > 0) {
+      results = standingsResults;
+      source = 'standings';
+    } else if (Array.isArray(newEntriesResults) && newEntriesResults.length > 0) {
+      results = newEntriesResults;
+      source = 'new_entries';
+    } else if (Array.isArray(standingsResults) || Array.isArray(newEntriesResults)) {
+      // Both present but genuinely empty -- nobody has joined yet, not an error.
+      results = [];
+      source = 'none';
+    } else {
+      throw new Error('Invalid response: missing both standings.results and new_entries.results');
     }
-    
+
     const managers = results.map(m => ({
       entry_id: m.entry,
       manager_name: m.entry_name,
-      team_name: m.player_name
+      team_name: source === 'new_entries' ? `${m.player_first_name} ${m.player_last_name}`.trim() : m.player_name
     }));
-    
-    logger.info('Fetched league managers', { count: managers.length, duration_ms: Date.now() - startTime });
+
+    logger.info('Fetched league managers', { count: managers.length, source, duration_ms: Date.now() - startTime });
     return managers;
   } catch (err) {
     logger.error('Failed to fetch league managers', err);
