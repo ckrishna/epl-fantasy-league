@@ -1,4 +1,4 @@
-import { getGWWinners, dynamodb } from '../utils/dynamodb.mjs';
+import { getGWWinners, getActiveGameweek, getCurrentSeasonInfo, dynamodb } from '../utils/dynamodb.mjs';
 import { callClaude } from '../utils/bedrock.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
@@ -23,17 +23,6 @@ async function getAllTeamsForSeason(seasonId) {
   } catch (err) {
     console.error('Error fetching team mapping:', err);
     return {};
-  }
-}
-
-async function getLatestGameweek() {
-  try {
-    const response = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/');
-    const data = await response.json();
-    const current = data.events.find(e => e.is_current);
-    return current?.id || 26;
-  } catch (err) {
-    return 26;
   }
 }
 
@@ -64,26 +53,6 @@ async function getOurLeaguePicks(gw) {
     return [];
   }
 }
-
-async function getSeasonId() {
-  try {
-    const result = await dynamodb.send(new ScanCommand({
-      TableName: 'seasons',
-      FilterExpression: '#c = :curr',
-      ExpressionAttributeNames: { '#c': 'current' },
-      ExpressionAttributeValues: { ':curr': true }
-    }));
-    
-    if (result.Items && result.Items.length > 0) {
-      return result.Items[0].season_id;
-    }
-    throw new Error('No current season found');
-  } catch (err) {
-    console.error('Failed to get season_id', err);
-    throw err;
-  }
-}
-
 
 async function callClaudeWithContext(question, leagueContext) {
 
@@ -165,12 +134,12 @@ export async function handleGenBI(body, corsHeaders) {
   }
 
   try {
-    const seasonId = await getSeasonId();
-    const gw = await getLatestGameweek();
+    const { season, seasonId } = await getCurrentSeasonInfo();
+    const gw = await getActiveGameweek();
 
     // 1. Fetch all required data in parallel
     const [gwWinners, playerData, ourPicks, teamMap] = await Promise.all([
-      getGWWinners(),
+      getGWWinners(season),
       getPlayerDataForGW(gw, seasonId),
       getOurLeaguePicks(gw),
       getAllTeamsForSeason(seasonId)

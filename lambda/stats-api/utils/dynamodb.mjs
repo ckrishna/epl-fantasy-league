@@ -19,6 +19,15 @@ const FPL_FETCH_HEADERS = {
 // manager-facing tables like fpl_entry_gameweek/fpl_league_standings/gw-winners-cache).
 // This function must return `season_string`, not `season_id`.
 export async function getCurrentSeason() {
+  const { season } = await getCurrentSeasonInfo();
+  return season;
+}
+
+// Same lookup as getCurrentSeason(), but also returns the numeric season_id -- for
+// callers (like the GenBI handler) that need both the manager-facing season_string
+// AND the numeric ID used by reference tables (teams/player_event_stats/etc), so they
+// don't have to scan the seasons table twice.
+export async function getCurrentSeasonInfo() {
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'seasons',
     FilterExpression: '#c = :curr',
@@ -27,7 +36,8 @@ export async function getCurrentSeason() {
   }));
 
   if (result.Items && result.Items.length > 0) {
-    return result.Items[0].season_string;
+    const item = result.Items[0];
+    return { season: item.season_string, seasonId: item.season_id };
   }
   throw new Error('No current season found in seasons table');
 }
