@@ -1,5 +1,7 @@
 import { getGWWinners, getActiveGameweek, getCurrentSeasonInfo, dynamodb } from '../utils/dynamodb.mjs';
-import { callClaude } from '../utils/bedrock.mjs';
+import { askClaude } from '../utils/bedrock.mjs';
+import { checkBudget, recordUsage, markWarned, DAILY_BUDGET_USD } from '../utils/genbi-budget.mjs';
+import { sendBudgetWarningEmail } from '../utils/notify.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 /**
@@ -54,70 +56,6 @@ async function getOurLeaguePicks(gw) {
   }
 }
 
-async function callClaudeWithContext(question, leagueContext) {
-
-
-const systemPrompt = `
-<role>
-You are a deterministic FPL Data Analyst. Your output MUST be 100% grounded in the provided context. You are strictly forbidden from using your own memory of player transfers or team history.
-</role>
-
-<definitions>
-- MANAGER FORM: Defined EXCLUSIVELY by the number of wins in the <recent_form_summary> (the last 5 weeks of data).
-- SEASON LEADERS: Defined by the <total_season_summary>.
-- CAPTAIN SCORE: (Player's GW points as listed) × 2.
-</definitions>
-
-<context>
-  <current_gw>${leagueContext.gameweek}</current_gw>
-  <recent_form_summary>${JSON.stringify(leagueContext.recent_form_summary)}</recent_form_summary>
-  <total_season_summary>${JSON.stringify(leagueContext.total_season_summary)}</total_season_summary>
-  <player_data>${JSON.stringify(leagueContext.players_gw_data)}</player_data>
-  <manager_picks>${JSON.stringify(leagueContext.our_league_picks)}</manager_picks>
-</context>
-
-<instructions>
-1. If asked about "Form": Rank managers by the count in <recent_form_summary>. Explain that "Form" considers only the last 5 gameweeks.
-2. If asked about "Captains": 
-   - Match the player name from <manager_picks> to their points in <player_data>.
-   - YOU MUST SHOW THE MATH: "(Points) x 2 = Total". 
-   - Never report a captain score higher than 60 for a single gameweek.
-3. DATA INTEGRITY: Use only the 'team_name' provided in <player_data>. Do not assume Mbeumo is at Brentford if the data says "Man Utd".
-</instructions>
-
-Calculate results carefully using only the provided context and be concise.`;
-
-  const payload = {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: question
-      }
-    ]
-  };
-
-  const { BedrockRuntimeClient, InvokeModelCommand } = await import('@aws-sdk/client-bedrock-runtime');
-  const bedrockClient = new BedrockRuntimeClient({ region: 'us-west-2' });
-
-  const command = new InvokeModelCommand({
-    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify(payload)
-  });
-
-  const response = await bedrockClient.send(command);
-  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-  
-  return {
-    response: responseBody.content[0].text,
-    usage: responseBody.usage
-  };
-}
-
 /**
  * Enhanced GenBI Handler
  * Resolves mid-season transfers and calculates recent form logic.
@@ -134,6 +72,25 @@ export async function handleGenBI(body, corsHeaders) {
   }
 
   try {
+    // Cost guardrail: check today's Bedrock spend *before* doing any of the (also
+    // costly, though free in dollar terms) data-fetching work below, and before ever
+    // calling Bedrock itself. A blocked request costs nothing.
+    const budget = await checkBudget();
+    if (budget.overBudget) {
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          question,
+          answer: `GenBI's daily budget ($${DAILY_BUDGET_USD.toFixed(2)}) has been reached for today. ` +
+            `It resets at midnight UTC -- try again then.`,
+          usage: null,
+          timestamp: new Date().toISOString(),
+          budget_exceeded: true
+        })
+      };
+    }
+
     const { season, seasonId } = await getCurrentSeasonInfo();
     const gw = await getActiveGameweek();
 
@@ -200,8 +157,24 @@ export async function handleGenBI(body, corsHeaders) {
     };
 
     // 5. Invoke Claude with refined context
-    const result = await callClaudeWithContext(question, leagueContext);
-    
+    const result = await askClaude(question, leagueContext);
+
+    // 6. Record the real cost of this call against today's budget, and warn (once per
+    // day) if it just crossed the threshold. A notification failure here shouldn't fail
+    // the whole request -- the manager still gets their answer.
+    const costUsd = await recordUsage({
+      inputTokens: result.usage?.input_tokens || 0,
+      outputTokens: result.usage?.output_tokens || 0
+    });
+    if (budget.shouldWarn) {
+      try {
+        await sendBudgetWarningEmail({ costSoFar: budget.costSoFar + costUsd, limit: DAILY_BUDGET_USD });
+        await markWarned();
+      } catch (notifyErr) {
+        console.error('Failed to send GenBI budget warning email', notifyErr);
+      }
+    }
+
     return {
       statusCode: 200,
       headers: corsHeaders,

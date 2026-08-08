@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.992.0",
     "@aws-sdk/client-dynamodb": "^3.988.0",
+    "@aws-sdk/client-ses": "^3.988.0",
     "@aws-sdk/lib-dynamodb": "^3.988.0"
   }
 }

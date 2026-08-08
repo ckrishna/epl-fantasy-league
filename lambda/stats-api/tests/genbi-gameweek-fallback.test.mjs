@@ -22,6 +22,12 @@ function baseDynamoRouter({ seasonId = 1, seasonString = '2025/26', storedGamewe
     const table = command.input.TableName;
     const type = command.constructor.name;
 
+    if (table === 'genbi-usage-daily' && type === 'GetCommand') {
+      return { Item: undefined };
+    }
+    if (table === 'genbi-usage-daily' && type === 'UpdateCommand') {
+      return {};
+    }
     if (table === 'seasons' && type === 'ScanCommand') {
       return { Items: [{ season_id: seasonId, season_string: seasonString, current: true }] };
     }
@@ -102,6 +108,12 @@ test('[regression] still resolves the numeric season_id (not season_string) for 
   const dynamoMock = installDynamoMock((command) => {
     const table = command.input.TableName;
     const type = command.constructor.name;
+    if (table === 'genbi-usage-daily' && type === 'GetCommand') {
+      return { Item: undefined };
+    }
+    if (table === 'genbi-usage-daily' && type === 'UpdateCommand') {
+      return {};
+    }
     if (table === 'seasons' && type === 'ScanCommand') {
       return { Items: [{ season_id: 2, season_string: '2026/27', current: true }] };
     }

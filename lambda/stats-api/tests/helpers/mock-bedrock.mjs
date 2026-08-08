@@ -5,16 +5,19 @@
 import { mock } from 'node:test';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 
-export function installBedrockMock(responseText = 'Mock GenBI answer') {
-  const handle = mock.method(BedrockRuntimeClient.prototype, 'send', async () => {
+export function installBedrockMock(responseText = 'Mock GenBI answer', { inputTokens = 10, outputTokens = 10 } = {}) {
+  const calls = [];
+  const handle = mock.method(BedrockRuntimeClient.prototype, 'send', async (command) => {
+    calls.push(command);
     const payload = JSON.stringify({
       content: [{ text: responseText }],
-      usage: { input_tokens: 10, output_tokens: 10 }
+      usage: { input_tokens: inputTokens, output_tokens: outputTokens }
     });
     return { body: new TextEncoder().encode(payload) };
   });
 
   return {
+    calls,
     restore() {
       handle.mock.restore();
     }
