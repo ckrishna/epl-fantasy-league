@@ -44,7 +44,7 @@ function installBasicDynamoMock() {
     const table = command.input.TableName;
     const name = command.constructor.name;
     if (table === 'seasons' && name === 'ScanCommand') {
-      return { Items: [{ season_id: 2, season_string: '2026/27', current: true }] };
+      return { Items: [{ season_id: 2, season_string: '2026/27', current: true, league_id: 438107 }] };
     }
     if (table === 'fpl_entry_gameweek' && name === 'ScanCommand') return { Items: [] };
     if (name === 'PutCommand') { puts.push({ table, item: command.input.Item }); return {}; }

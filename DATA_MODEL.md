@@ -23,6 +23,7 @@ erDiagram
         boolean current "exactly one true"
         string status
         number total_gameweeks
+        number league_id "FPL classic league ID"
     }
 
     teams {
@@ -119,11 +120,12 @@ The single source of truth for which season is active. Nothing in the four Lambd
 | `status` | S | e.g. `"active"` |
 | `start_date` / `end_date` | S (ISO) | |
 | `total_gameweeks` | N | `38` |
+| `league_id` | N | e.g. `438107` — the FPL classic mini-league ID for this season. Added 2026-07-30 so a league-ID change (already happened once, 212889 → 438107) is a data update instead of a code change + redeploy. **Required** on the current row — `fpl-data-ingester` throws if it's missing. |
 | `created_at` / `updated_at` | S (ISO) | |
 
-Read by: `fpl-bootstrap`, `fpl-global-stats-weekly`, `genbi.mjs` (all read `season_id`); `stats-api` and `fpl-data-ingester` (read `season_string`, since the fix).
+Read by: `fpl-bootstrap`, `fpl-global-stats-weekly`, `genbi.mjs` (all read `season_id`); `stats-api` and `fpl-data-ingester` (read `season_string`); `fpl-data-ingester` also reads `league_id`.
 
-Item count: 1 (only the 2025/26 row exists — nothing pre-seeded for next season yet).
+Item count: 2 — `season_id=1` (2025/26, retired, `current: false`) and `season_id=2` (2026/27, `current: true`). `season_id=2` needs a `league_id` attribute added before `fpl-data-ingester` will run successfully.
 
 ---
 
@@ -179,7 +181,7 @@ Read by: `genbi.mjs` (`getOurLeaguePicks`, via a `Scan` + `FilterExpression` on 
 ### `fpl_league_standings`
 Partition key `season_event` (S, `"{season_string}#{gameweek}"`), sort key `manager_id` (N). 396 items (was 385 as of the describe-table snapshot; +11 from the GW26 backfill below).
 **Has a GSI: `manager_id-season_event-index`** (HASH `manager_id`, RANGE `season_event`) — not currently used by any code, but would let you query one manager's full season history directly instead of scanning.
-Fields: `manager_name`, `team_name`, `total_points`, `points_this_week`, `transfer_cost`, `rank` (always `0` currently — see Open Questions), `last_synced`, and (only on backfilled rows) `backfilled` (BOOL) / `backfill_source` (S).
+Fields: `manager_name`, `team_name`, `total_points`, `points_this_week`, `transfer_cost`, `last_synced`, and (only on backfilled rows) `backfilled` (BOOL) / `backfill_source` (S). (No `rank` field — removed 2026-07-30; it was always hardcoded to `0` and the frontend already computes rank client-side from sort order, so it was dead weight.)
 Read by: `stats-api` (`queryLeagueStandings`) — this is what the live dashboard's Standings page reads.
 
 **GW26 backfill (2026-07-29):** `find_gaps.py` showed GW26 was the only gameweek missing from `fpl_league_standings` for *every* manager (a one-night cache-write outage), even though the underlying `fpl_entry_gameweek` raw data for GW26 existed. `scripts/backfill_gw26_standings.py` reconstructed the 11 missing rows from `fpl_entry_gameweek` and wrote them with `backfilled: true` / `backfill_source: 'fpl_entry_gameweek'` so they stay distinguishable from organically-ingested rows. Verified two ways: live `/standings?gw=26` now returns all 11 managers, and the backfilled totals chain correctly into GW27's real (non-backfilled) data for every manager checked (e.g. Da Movement: 1562 + 35 = 1597, matching GW27's recorded total exactly; same check passed for Suberox and Team).
@@ -200,7 +202,6 @@ Ran a full scan of both league tables against the expected 11 managers × 38 gam
 
 ## Open questions / follow-ups (not yet investigated)
 
-- `fpl_league_standings.rank` is always written as `0` ("Will be calculated later" in a code comment) — is rank ever actually computed and surfaced anywhere, or is this dead code?
 - Sunil Mathew's GW3-24 gap in `fpl_entry_gameweek` (see Gap analysis above) — cause unknown, parked.
 - The GSI on `fpl_league_standings` isn't used anywhere — worth considering if a "manager history" view is ever wanted.
 - No table currently tracks nightly/weekly ingestion run history (success/failure per run) — an `ingestion_runs` audit table was proposed but deferred.

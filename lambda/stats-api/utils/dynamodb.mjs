@@ -52,10 +52,19 @@ export async function getGWWinners(season) {
   return result.Items || [];
 }
 
+// Returns every row in the `seasons` table (not just the current one), newest first.
+// Powers the season dropdown -- a user needs to see 2025/26 even once 2026/27 is current.
+export async function getAllSeasons() {
+  const result = await dynamodb.send(new ScanCommand({ TableName: 'seasons' }));
+  return (result.Items || []).slice().sort((a, b) => (b.season_id ?? 0) - (a.season_id ?? 0));
+}
+
 // Finds the highest gameweek we actually have per-manager data for, scoped to the
-// current season. Used as a last-resort fallback when the live FPL API is unreachable
-// or hasn't told us anything useful (see getActiveGameweek below).
-async function getLatestStoredGameweek(season) {
+// given season (defaults to current). Used two ways: (1) as a last-resort fallback
+// when the live FPL API is unreachable or hasn't told us anything useful (see
+// getActiveGameweek below), and (2) as the *primary* way to resolve "last gameweek"
+// when browsing a past season, since live FPL data is never relevant to history.
+export async function getLatestStoredGameweek(season) {
   const currentSeason = season || await getCurrentSeason();
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'fpl_entry_gameweek',

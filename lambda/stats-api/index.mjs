@@ -1,6 +1,7 @@
 import { handleStandings } from './handlers/standings.mjs';
 import { handleWinners } from './handlers/winners.mjs';
 import { handleGenBI } from './handlers/genbi.mjs';
+import { handleSeasons } from './handlers/seasons.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,7 +31,11 @@ export async function handler(event) {
     }
     
     if (path.includes('/winners')) {
-      return await handleWinners(corsHeaders);
+      return await handleWinners(queryParams, corsHeaders);
+    }
+
+    if (path.includes('/seasons')) {
+      return await handleSeasons(corsHeaders);
     }
 
     return { statusCode: 404, headers: corsHeaders, body: JSON.stringify({ error: 'Endpoint not found' }) };

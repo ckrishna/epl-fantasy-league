@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
 import '../styles/GWWinners.css';
 
-export default function GWWinners() {
+export default function GWWinners({ season = null } = {}) {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    getWinners().then(data => {
+    getWinners(season).then(data => {
       const flatWinners = [];
       (data.finished_gameweeks || []).forEach(gwData => {
         gwData.winners.forEach(winner => {
@@ -33,7 +33,7 @@ export default function GWWinners() {
       console.error('Error fetching winners:', err);
       setLoading(false);
     });
-  }, []);
+  }, [season]);
 
   if (loading) return <div className="loading">Loading weekly winners...</div>;
 

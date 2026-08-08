@@ -45,7 +45,7 @@ test('[current bug] active_gameweek reflects real data, not a hardcoded value', 
   });
 
   try {
-    const response = await handleWinners(CORS);
+    const response = await handleWinners({}, CORS);
     const body = JSON.parse(response.body);
     assert.strictEqual(body.active_gameweek, 38, `Expected active_gameweek to be derived from real data ` +
       `(38, the highest gameweek present), got ${body.active_gameweek}. A hardcoded value would show 26 here ` +
@@ -70,7 +70,7 @@ test('[current bug] winners are scoped to the current season only, not mixed acr
   });
 
   try {
-    const response = await handleWinners(CORS);
+    const response = await handleWinners({}, CORS);
     const body = JSON.parse(response.body);
     const seasonsPresent = new Set(body.finished_gameweeks.map((w) => w.season));
     assert.deepStrictEqual([...seasonsPresent], ['2026/27'], `Expected only the current season's winners, ` +
@@ -96,7 +96,7 @@ test('[regression] single-season case still returns every gameweek, sorted newes
   });
 
   try {
-    const response = await handleWinners(CORS);
+    const response = await handleWinners({}, CORS);
     const body = JSON.parse(response.body);
     assert.strictEqual(body.finished_gameweeks.length, 38);
     assert.strictEqual(body.finished_gameweeks[0].gameweek, 38, 'Expected newest gameweek first');

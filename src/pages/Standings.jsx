@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
 import '../styles/Standings.css';
 
-export default function Standings() {
+export default function Standings({ season = null } = {}) {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
 const [activeGW, setActiveGW] = useState(null);
@@ -12,9 +12,10 @@ const [displayGW, setDisplayGW] = useState(null);  // ← ADD THIS
 
 useEffect(() => {
   setLoading(true);
-  
-  // Fetch standings with no GW param (will use active_gameweek from API)
-  getStandings().then(data => {
+
+  // Fetch standings with no GW param (will use active_gameweek from API), scoped to
+  // whichever season is selected (null = current season, handled server-side).
+  getStandings(null, season).then(data => {
     // Set activeGW from the API response
     if (data.active_gameweek) {
       setActiveGW(data.active_gameweek);
@@ -35,7 +36,7 @@ useEffect(() => {
     console.error('Error fetching standings:', err);
     setLoading(false);
   });
-}, []);
+}, [season]);
 
   // Get medal for rank
   const getMedal = (rank) => {

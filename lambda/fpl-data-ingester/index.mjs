@@ -3,7 +3,6 @@ import { DynamoDBDocumentClient, BatchWriteCommand, PutCommand, ScanCommand } fr
 
 const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
 const FPL_API = 'https://fantasy.premierleague.com/api';
-const LEAGUE_ID = 438107; // 2026/27 mini-league ID (previous season was 212889)
 
 // Structured logging
 const logger = {
@@ -12,31 +11,39 @@ const logger = {
   metric: (name, value, unit = '') => console.log(JSON.stringify({ level: 'METRIC', timestamp: new Date().toISOString(), metric: name, value, unit }))
 };
 
-// Resolves the currently active season from the shared `seasons` table -- the same
-// pattern already used by fpl-bootstrap, fpl-global-stats-weekly, and the GenBI
-// handler. Previously this was a hardcoded `const SEASON = '2025/26'`, which nothing
-// would remind anyone to update once the 2026/27 season starts.
+// Resolves the currently active season (and its league ID) from the shared `seasons`
+// table -- the same pattern already used by fpl-bootstrap, fpl-global-stats-weekly,
+// and the GenBI handler. Previously `season` was a hardcoded `const SEASON = '2025/26'`
+// and `league_id` was a hardcoded `const LEAGUE_ID = ...`, neither of which anything
+// would remind you to update. The real league ID already changed once (212889 ->
+// 438107 for 2026/27, confirmed live 2026-07-30) and required a code change +
+// redeploy to fix -- moving it here means the next change is just a data update.
 // NOTE: the `seasons` table has two different season fields -- `season_id` (a numeric
 // internal ID used to tag reference tables like `teams`/`players`/`events` in the
 // fpl-bootstrap lambda) and `season_string` (the human-readable "2025/26" used as the
 // partition-key prefix here). This must return `season_string`, not `season_id`.
-async function getCurrentSeason() {
+async function getCurrentSeasonInfo() {
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'seasons',
     FilterExpression: '#c = :curr',
     ExpressionAttributeNames: { '#c': 'current' },
     ExpressionAttributeValues: { ':curr': true }
   }));
-  if (result.Items && result.Items.length > 0) {
-    return result.Items[0].season_string;
+  if (!result.Items || result.Items.length === 0) {
+    throw new Error('No current season found in seasons table');
   }
-  throw new Error('No current season found in seasons table');
+  const item = result.Items[0];
+  if (item.league_id === undefined || item.league_id === null) {
+    throw new Error(`Current season row (${item.season_string}) has no league_id set -- add it to the ` +
+      `seasons table before running the ingester.`);
+  }
+  return { season: item.season_string, leagueId: item.league_id };
 }
 
-async function getLeagueManagers() {
+async function getLeagueManagers(leagueId) {
   const startTime = Date.now();
   try {
-    const response = await fetch(`${FPL_API}/leagues-classic/${LEAGUE_ID}/standings/`, {
+    const response = await fetch(`${FPL_API}/leagues-classic/${leagueId}/standings/`, {
      headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
@@ -214,10 +221,11 @@ export async function handler(event) {
   logger.info('Starting nightly FPL data ingestion', { run_id: event.requestContext?.requestId || 'manual' });
   
   try {
-    // Resolve the currently active season up front (single source of truth: the
-    // shared `seasons` table), so a season rollover is a data change, not a redeploy.
-    const season = await getCurrentSeason();
-    logger.info('Resolved current season', { season });
+    // Resolve the currently active season and league ID up front (single source of
+    // truth: the shared `seasons` table), so a season rollover or league-ID change is
+    // a data change, not a redeploy.
+    const { season, leagueId } = await getCurrentSeasonInfo();
+    logger.info('Resolved current season', { season, leagueId });
 
     // Fetch bootstrap
     const bootstrap = await getBootstrapStatic();
@@ -251,7 +259,7 @@ export async function handler(event) {
     });
 
     // Fetch managers
-    const managers = await getLeagueManagers();
+    const managers = await getLeagueManagers(leagueId);
     apiCallCount += 1;
     
     logger.info('Processing managers', { count: managers.length });
@@ -361,7 +369,6 @@ for (const manager of managers) {
         total_points: totalPoints,
         points_this_week: latestRecord ? parseInt(latestRecord.points_this_week || 0) : 0,  // ← ADD
         transfer_cost: latestRecord ? parseInt(latestRecord.transfer_cost || 0) : 0,       // ← ADD
-        rank: 0, // Will be calculated later
         last_synced: new Date().toISOString()
       }
     }));
