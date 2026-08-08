@@ -1,4 +1,12 @@
-import { getGWWinners, getActiveGameweek, getCurrentSeasonInfo, dynamodb } from '../utils/dynamodb.mjs';
+import {
+  getGWWinners,
+  getActiveGameweek,
+  getCurrentSeasonInfo,
+  getCurrentSeason,
+  getAllSeasons,
+  getLatestStoredGameweek,
+  dynamodb
+} from '../utils/dynamodb.mjs';
 import { askClaude } from '../utils/bedrock.mjs';
 import { checkBudget, recordUsage, markWarned, DAILY_BUDGET_USD } from '../utils/genbi-budget.mjs';
 import { sendBudgetWarningEmail } from '../utils/notify.mjs';
@@ -56,12 +64,41 @@ async function getOurLeaguePicks(gw) {
   }
 }
 
+// Mirrors the historical-season pattern already used by handleStandings/handleWinners:
+// a requested season that isn't the current one must never touch live FPL data (that
+// reflects today's real season, not the one being looked back at), and must resolve
+// against that season's own numeric season_id (reference tables like teams/
+// player_event_stats are keyed by season_id, not season_string).
+async function resolveSeasonContext(requestedSeason) {
+  const currentSeason = await getCurrentSeason();
+  const targetSeason = requestedSeason || currentSeason;
+  const isHistorical = targetSeason !== currentSeason;
+
+  let seasonId;
+  if (isHistorical) {
+    const allSeasons = await getAllSeasons();
+    const match = allSeasons.find((s) => s.season_string === targetSeason);
+    if (!match) {
+      throw new Error(`Unknown season: ${targetSeason}`);
+    }
+    seasonId = match.season_id;
+  } else {
+    ({ seasonId } = await getCurrentSeasonInfo());
+  }
+
+  const gw = isHistorical
+    ? await getLatestStoredGameweek(targetSeason)
+    : await getActiveGameweek();
+
+  return { season: targetSeason, seasonId, gw };
+}
+
 /**
  * Enhanced GenBI Handler
  * Resolves mid-season transfers and calculates recent form logic.
  */
 export async function handleGenBI(body, corsHeaders) {
-  const { question } = body;
+  const { question, season: requestedSeason } = body;
   
   if (!question) {
     return {
@@ -91,8 +128,7 @@ export async function handleGenBI(body, corsHeaders) {
       };
     }
 
-    const { season, seasonId } = await getCurrentSeasonInfo();
-    const gw = await getActiveGameweek();
+    const { season, seasonId, gw } = await resolveSeasonContext(requestedSeason);
 
     // 1. Fetch all required data in parallel
     const [gwWinners, playerData, ourPicks, teamMap] = await Promise.all([

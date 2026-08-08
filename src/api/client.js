@@ -57,12 +57,12 @@ export async function getTrendingPlayers(gw = null, limit = 10) {
   }
 }
 
-export async function queryStats(question) {
+export async function queryStats(question, season = null) {
   try {
     const res = await fetch(`${API_BASE}/stats/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question })
+      body: JSON.stringify(season ? { question, season } : { question })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();

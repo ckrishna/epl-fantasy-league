@@ -78,7 +78,7 @@ export default function App() {
       <main className="app-content">
         {activeTab === 'standings' && <Standings season={selectedSeason} />}
         {activeTab === 'winners' && <GWWinners season={selectedSeason} />}
-        {activeTab === 'stats' && <Stats />}
+        {activeTab === 'stats' && <Stats season={selectedSeason} />}
         {activeTab === 'help' && <Help />}
       </main>
 

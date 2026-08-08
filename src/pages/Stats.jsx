@@ -1,8 +1,7 @@
 // src/pages/Stats.jsx
 import { useState } from 'react';
+import { queryStats } from '../api/client';
 import '../styles/Stats.css';
-
-const API_BASE = import.meta.env.VITE_API_BASE;
 
 const SUGGESTED_QUERIES = [
   "Who has the most GW wins this season?",
@@ -10,7 +9,7 @@ const SUGGESTED_QUERIES = [
   "Best captain picks this season?"
 ];
 
-export default function Stats() {
+export default function Stats({ season = null }) {
   const [selectedQuery, setSelectedQuery] = useState(null);
   const [customQuestion, setCustomQuestion] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,18 +36,12 @@ export default function Stats() {
 
   async function fetchGenBI(question) {
     try {
-      const response = await fetch(`${API_BASE}/stats/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question })
-      });
+      const data = await queryStats(question, season);
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.statusCode}`);
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      const data = await response.json();
-      
       setResult({
         type: 'text',
         title: 'League Analysis',
@@ -56,7 +49,7 @@ export default function Stats() {
         usage: data.usage,
         timestamp: data.timestamp
       });
-      
+
     } catch (err) {
       console.error('GenBI error:', err);
       setError(err.message || 'Failed to fetch analysis');
@@ -72,7 +65,9 @@ export default function Stats() {
         {/* Left Panel */}
         <div className="stats-left">
           <h2>⚡ League Intelligence</h2>
-          <p className="subtitle">Ask Claude about league trends</p>
+          <p className="subtitle">
+            Ask Claude about league trends{season ? ` — ${season}` : ''}
+          </p>
 
           <form className="custom-question" onSubmit={handleCustomQuestion}>
             <input
