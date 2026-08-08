@@ -50,6 +50,84 @@ async function getPlayerDataForGW(gw, seasonId) {
   }
 }
 
+// Authoritative, FPL-sourced season totals, backfilled once via
+// scripts/backfill-season-totals.mjs (reads each current player's history_past entry
+// for a given past season -- accurate regardless of any gaps in our own weekly
+// ingestion). Preferred over the live aggregation below whenever it's available for the
+// requested season; only covers players still in FPL's current player pool (anyone who
+// left the league since won't have a current element ID to look this up against).
+async function getAuthoritativeSeasonTotals(seasonString) {
+  try {
+    const result = await dynamodb.send(new QueryCommand({
+      TableName: 'player_season_totals',
+      KeyConditionExpression: 'season_string = :s',
+      ExpressionAttributeValues: { ':s': seasonString }
+    }));
+    return result.Items || [];
+  } catch (err) {
+    console.error('Error fetching authoritative season totals:', err);
+    return [];
+  }
+}
+
+// Aggregates real season-long totals directly from player_event_stats (summing every
+// gameweek's total_points per player), rather than trusting the `players` table's own
+// total_points field -- that field is only ever as fresh as the last time fpl-bootstrap
+// happened to run, and was confirmed stale for 2025/26 (last synced mid-February, well
+// before the season's actual end). Queries the whole season_id partition (no gameweek
+// filter), so it pages through DynamoDB's 1MB-per-response limit via LastEvaluatedKey.
+//
+// Used only as a fallback when no authoritative data exists for the season (see
+// getAuthoritativeSeasonTotals above) -- this live aggregation can only ever be as
+// complete as our own weekly ingestion, which has known gaps for some historical
+// gameweeks.
+async function getSeasonTotalsForPlayers(seasonId) {
+  try {
+    const totals = new Map(); // player_id -> { name, team_id, points, ownership, lastGw }
+    let lastEvaluatedKey;
+
+    do {
+      const result = await dynamodb.send(new QueryCommand({
+        TableName: 'player_event_stats',
+        KeyConditionExpression: 'season_id = :sid',
+        ExpressionAttributeValues: { ':sid': seasonId },
+        ExclusiveStartKey: lastEvaluatedKey
+      }));
+
+      for (const row of result.Items || []) {
+        const playerId = typeof row.player_id === 'object' ? row.player_id.N : row.player_id;
+        const points = typeof row.total_points === 'object' ? parseInt(row.total_points.N) : parseInt(row.total_points || 0);
+        const gw = typeof row.gameweek === 'object' ? parseInt(row.gameweek.N) : parseInt(row.gameweek || 0);
+        const name = typeof row.name === 'object' ? row.name.S : row.name;
+        const teamId = typeof row.team_id === 'object' ? row.team_id.N : row.team_id;
+        const ownership = typeof row.selected_by_percent === 'object' ? row.selected_by_percent.S : row.selected_by_percent;
+
+        const existing = totals.get(playerId);
+        if (!existing) {
+          totals.set(playerId, { points, lastGw: gw, name, team_id: teamId, ownership });
+        } else {
+          existing.points += points;
+          // Keep the identity fields (name/team/ownership) from whichever gameweek row
+          // is most recent -- a player's team or ownership % can change mid-season.
+          if (gw >= existing.lastGw) {
+            existing.lastGw = gw;
+            existing.name = name;
+            existing.team_id = teamId;
+            existing.ownership = ownership;
+          }
+        }
+      }
+
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return Array.from(totals.values());
+  } catch (err) {
+    console.error('Error fetching season totals:', err);
+    return [];
+  }
+}
+
 async function getOurLeaguePicks(gw) {
   try {
     const result = await dynamodb.send(new ScanCommand({
@@ -130,12 +208,18 @@ export async function handleGenBI(body, corsHeaders) {
 
     const { season, seasonId, gw } = await resolveSeasonContext(requestedSeason);
 
+    // Check for authoritative (FPL-sourced) season totals first -- cheap lookup. Only
+    // fall back to the expensive full-season player_event_stats scan (below) if nothing
+    // has been backfilled for this season yet.
+    const authoritativeSeasonTotals = await getAuthoritativeSeasonTotals(season);
+
     // 1. Fetch all required data in parallel
-    const [gwWinners, playerData, ourPicks, teamMap] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals] = await Promise.all([
       getGWWinners(season),
       getPlayerDataForGW(gw, seasonId),
       getOurLeaguePicks(gw),
-      getAllTeamsForSeason(seasonId)
+      getAllTeamsForSeason(seasonId),
+      authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId)
     ]);
 
     // 2. Calculate Total Season Wins
@@ -170,18 +254,23 @@ export async function handleGenBI(body, corsHeaders) {
       recent_form_summary: recentFormSummary, 
       players_gw_data: playerData
         .sort((a, b) => {
-          const bPts = typeof b.points === 'object' ? parseInt(b.points.N) : parseInt(b.points || 0);
-          const aPts = typeof a.points === 'object' ? parseInt(a.points.N) : parseInt(a.points || 0);
+          // player_event_stats rows store the score in `total_points` -- there is no
+          // `points` field on this table at all (confirmed against a live row). Reading
+          // `points` silently evaluated to 0 for every player, which both faked every
+          // player's score as 0 in Claude's context AND made this "sort by points" step
+          // a no-op (0 vs 0), so the "top 50" slice below wasn't actually top anything.
+          const bPts = typeof b.total_points === 'object' ? parseInt(b.total_points.N) : parseInt(b.total_points || 0);
+          const aPts = typeof a.total_points === 'object' ? parseInt(a.total_points.N) : parseInt(a.total_points || 0);
           return bPts - aPts;
         })
         .slice(0, 50)
         .map(p => {
           const teamId = typeof p.team_id === 'object' ? p.team_id.N : p.team_id;
           return {
-            name: typeof p.web_name === 'object' ? p.web_name.S : (p.web_name || p.name),
+            name: typeof p.name === 'object' ? p.name.S : p.name,
             // Resolve actual name from Teams table (Fixes Mbeumo at Brentford issue)
-            team_name: teamMap[teamId] || "Unknown Team", 
-            points: typeof p.points === 'object' ? parseInt(p.points.N) : parseInt(p.points || 0),
+            team_name: teamMap[teamId] || "Unknown Team",
+            points: typeof p.total_points === 'object' ? parseInt(p.total_points.N) : parseInt(p.total_points || 0),
             ownership: typeof p.selected_by_percent === 'object' ? p.selected_by_percent.S : (p.selected_by_percent || "0.0%")
           };
         }),
@@ -189,11 +278,35 @@ export async function handleGenBI(body, corsHeaders) {
         manager: pick.manager_name,
         player: pick.player_name,
         is_captain: pick.is_captain
-      }))
+      })),
+      // Real season-long totals -- use this (not players_gw_data, which is a single
+      // gameweek) for any "entire season" / "this season" scoring question. Prefers
+      // FPL's own authoritative record when we have it backfilled for this season;
+      // falls back to our own live aggregation (which can only be as complete as our
+      // weekly ingestion) otherwise.
+      season_totals: (
+        authoritativeSeasonTotals.length > 0
+          ? authoritativeSeasonTotals.map((t) => ({
+              name: t.player_name,
+              team_name: t.team_name || 'Unknown Team',
+              points: t.total_points,
+              ownership: null
+            }))
+          : seasonTotals.map((p) => ({
+              name: p.name,
+              team_name: teamMap[p.team_id] || 'Unknown Team',
+              points: p.points,
+              ownership: p.ownership || '0.0%'
+            }))
+      )
+        .sort((a, b) => b.points - a.points)
+        .slice(0, 50)
     };
 
     // 5. Invoke Claude with refined context
+    const claudeStartTime = Date.now();
     const result = await askClaude(question, leagueContext);
+    const durationMs = Date.now() - claudeStartTime;
 
     // 6. Record the real cost of this call against today's budget, and warn (once per
     // day) if it just crossed the threshold. A notification failure here shouldn't fail
@@ -218,6 +331,7 @@ export async function handleGenBI(body, corsHeaders) {
         question,
         answer: result.response,
         usage: result.usage,
+        duration_ms: durationMs,
         timestamp: new Date().toISOString(),
         gameweek: gw
       })
