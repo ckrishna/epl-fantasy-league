@@ -45,8 +45,10 @@ export default function Stats({ season = null }) {
       setResult({
         type: 'text',
         title: 'League Analysis',
+        question,
         answer: data.answer,
         usage: data.usage,
+        durationMs: data.duration_ms,
         timestamp: data.timestamp
       });
 
@@ -132,11 +134,15 @@ export default function Stats({ season = null }) {
           {result && !loading && (
             <div className="result-canvas">
               <h3>{result.title}</h3>
+              <p className="asked-question">"{result.question}"</p>
               <div className="answer-box">
                 <p>{result.answer}</p>
               </div>
               <div className="result-metadata">
                 <span className="tokens">Tokens: {result.usage?.output_tokens}</span>
+                {typeof result.durationMs === 'number' && (
+                  <span className="duration">Time: {(result.durationMs / 1000).toFixed(1)}s</span>
+                )}
               </div>
             </div>
           )}

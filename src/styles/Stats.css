@@ -281,10 +281,17 @@
   margin-top: auto;
 }
 
-.tokens, .timestamp {
+.tokens, .timestamp, .duration {
   padding: 0.4rem 0.8rem;
   background: #f3f4f6;
   border-radius: 4px;
+}
+
+.asked-question {
+  margin: 0;
+  font-style: italic;
+  color: #6b7280;
+  font-size: 0.95rem;
 }
 
 /* Responsive */
