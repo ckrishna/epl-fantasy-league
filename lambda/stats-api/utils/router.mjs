@@ -36,7 +36,14 @@ const KEYWORD_GROUPS = {
   // or unambiguous player-scoped phrasing.
   playerGwData: ['this week', 'this gameweek', 'captain', 'scored', 'player'],
   seasonTotals: ['season', 'overall', 'total points', 'whole season'],
-  managerPicks: ['captain', 'captaincy', 'vice captain', 'armband', 'picks']
+  managerPicks: ['captain', 'captaincy', 'vice captain', 'armband', 'picks'],
+  // #39 Phase 1: manager-level season aggregates (streaks, high/low GW score, season
+  // average, transfer activity, chips, bench points wasted, season captaincy points).
+  managerStats: [
+    'streak', 'consecutive', 'transfer', 'transfers', 'hit', 'hits', 'chip', 'chips',
+    'wildcard', 'bench', 'highest score', 'lowest score', 'best gameweek', 'worst gameweek',
+    'average points', 'average score', 'most transfers', 'best transfers'
+  ]
 };
 
 // Matches an explicit single-gameweek reference like "GW5", "gw 12", "gameweek 5" --
@@ -51,7 +58,8 @@ const ALL_TRUE = {
   recentForm: true,
   playerGwData: true,
   seasonTotals: true,
-  managerPicks: true
+  managerPicks: true,
+  managerStats: true
 };
 
 // Returns which of the 6 context fields a question needs. Every key is always

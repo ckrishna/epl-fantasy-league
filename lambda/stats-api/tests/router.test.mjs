@@ -53,9 +53,24 @@ test('[current bug] a fully unrecognized question falls back to selecting everyt
   }
 });
 
+test('[current bug] a win-streak question selects managerStats', () => {
+  const fields = selectRelevantFields('Who has the longest win streak?');
+  assert.strictEqual(fields.managerStats, true);
+});
+
+test('[current bug] a transfer-activity question selects managerStats', () => {
+  const fields = selectRelevantFields('Who made the most transfers this season?');
+  assert.strictEqual(fields.managerStats, true);
+});
+
+test('[current bug] a chip-usage question selects managerStats', () => {
+  const fields = selectRelevantFields('Who played their wildcard chip?');
+  assert.strictEqual(fields.managerStats, true);
+});
+
 test('[regression] every field key is always present, never undefined', () => {
   const fields = selectRelevantFields('anything at all');
-  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks']) {
+  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats']) {
     assert.strictEqual(typeof fields[key], 'boolean', `Expected ${key} to always be a boolean`);
   }
 });

@@ -145,6 +145,150 @@ async function getOurLeaguePicks(gw) {
   }
 }
 
+// #39 Phase 1: manager-level season aggregates. Single scan of each table per request
+// (not per-manager queries) -- both fpl_entry_gameweek and fpl_entry_picks carry a
+// plain `season` attribute alongside their composite keys, so a season-scoped
+// FilterExpression works the same way getLatestStoredGameweek already relies on.
+//
+// fpl_entry_picks has no manager_name field of its own (only entry_id), so identity is
+// joined via a name map built from fpl_entry_gameweek's rows -- avoids a third query.
+//
+// Explicitly NOT covered here (and the prompt says so): WHICH players were transferred
+// in/out, and their subsequent performance. fpl_entry_gameweek only has aggregate
+// transfers_made/transfer_cost per gameweek, not player-level transfer history, so
+// "who made the most transfers" is answerable but "who made the BEST transfers" still
+// isn't -- that would need a real transfer-log table (out of scope, not what exists).
+async function getManagerSeasonAggregates(season) {
+  try {
+    const [gwResult, picksResult] = await Promise.all([
+      dynamodb.send(new ScanCommand({
+        TableName: 'fpl_entry_gameweek',
+        FilterExpression: 'season = :s',
+        ExpressionAttributeValues: { ':s': season }
+      })),
+      dynamodb.send(new ScanCommand({
+        TableName: 'fpl_entry_picks',
+        FilterExpression: 'season = :s',
+        ExpressionAttributeValues: { ':s': season }
+      }))
+    ]);
+
+    const gwRows = gwResult.Items || [];
+    const pickRows = picksResult.Items || [];
+
+    const managers = new Map();
+    function getManager(name) {
+      if (!managers.has(name)) {
+        managers.set(name, {
+          manager: name,
+          gameweeks_played: 0,
+          highest_gw_score: -Infinity,
+          lowest_gw_score: Infinity,
+          season_total_points: 0,
+          total_transfers_made: 0,
+          total_transfer_hits: 0,
+          chips_used: [],
+          bench_points_wasted: 0,
+          captain_points_season: 0
+        });
+      }
+      return managers.get(name);
+    }
+
+    const nameByEntryId = new Map();
+
+    for (const row of gwRows) {
+      const name = row.manager_name;
+      if (!name) continue;
+      if (row.entry_id != null) nameByEntryId.set(row.entry_id, name);
+
+      const m = getManager(name);
+      const ptsThisWeek = Number(row.points_this_week || 0);
+      m.gameweeks_played += 1;
+      m.highest_gw_score = Math.max(m.highest_gw_score, ptsThisWeek);
+      m.lowest_gw_score = Math.min(m.lowest_gw_score, ptsThisWeek);
+      m.total_transfers_made += Number(row.transfers_made || 0);
+      m.total_transfer_hits += Number(row.transfer_cost || 0);
+      if (row.active_chip) {
+        m.chips_used.push({ chip: row.active_chip, gameweek: row.gameweek });
+      }
+      // points_total is cumulative as-of that gameweek -- the highest value seen across
+      // all rows for a manager is their true season total, same idea as taking the last
+      // gameweek's running total rather than summing every row (which would double-count).
+      const total = Number(row.points_total || 0);
+      if (total > m.season_total_points) m.season_total_points = total;
+    }
+
+    for (const row of pickRows) {
+      const name = nameByEntryId.get(row.entry_id);
+      if (!name) continue;
+      const m = getManager(name);
+      const pts = Number(row.points || 0);
+      if (row.is_bench) m.bench_points_wasted += pts;
+      if (row.is_captain) m.captain_points_season += pts;
+    }
+
+    return Array.from(managers.values()).map((m) => ({
+      manager: m.manager,
+      gameweeks_played: m.gameweeks_played,
+      highest_gw_score: m.gameweeks_played > 0 ? m.highest_gw_score : 0,
+      lowest_gw_score: m.gameweeks_played > 0 ? m.lowest_gw_score : 0,
+      average_points_per_gw: m.gameweeks_played > 0
+        ? Math.round((m.season_total_points / m.gameweeks_played) * 10) / 10
+        : 0,
+      total_transfers_made: m.total_transfers_made,
+      total_transfer_hits: m.total_transfer_hits,
+      chips_used: m.chips_used,
+      bench_points_wasted: m.bench_points_wasted,
+      captain_points_season: m.captain_points_season
+    }));
+  } catch (err) {
+    console.error('Error computing manager season aggregates:', err);
+    return [];
+  }
+}
+
+// Current and longest GW-win streak per manager, derived from the same gw-winners-cache
+// data total_season_summary/recent_form_summary already walk -- no extra fetch needed,
+// just a different reduction over gwWinners. This is what issue #39 flagged as
+// impossible to answer ("who won the most consecutive gameweeks") since only win
+// *counts* existed, never streaks.
+function computeWinStreaks(gwWinners) {
+  const sorted = [...gwWinners].sort((a, b) => a.gameweek - b.gameweek);
+
+  const managerNames = new Set();
+  sorted.forEach((gwData) => (gwData.winners || []).forEach((w) => {
+    const name = w.manager_name || w.M?.manager_name?.S;
+    if (name) managerNames.add(name);
+  }));
+
+  const streaks = new Map();
+  for (const name of managerNames) streaks.set(name, { current: 0, longest: 0 });
+
+  for (const gwData of sorted) {
+    const winnerNames = new Set(
+      (gwData.winners || [])
+        .map((w) => w.manager_name || w.M?.manager_name?.S)
+        .filter(Boolean)
+    );
+    for (const name of managerNames) {
+      const s = streaks.get(name);
+      if (winnerNames.has(name)) {
+        s.current += 1;
+        s.longest = Math.max(s.longest, s.current);
+      } else {
+        s.current = 0;
+      }
+    }
+  }
+
+  const result = {};
+  for (const [name, s] of streaks) {
+    result[name] = { current_win_streak: s.current, longest_win_streak: s.longest };
+  }
+  return result;
+}
+
 // GenBI never actually had access to the real league table (total points + rank) --
 // only win *counts* (see total_season_summary below). fpl_league_standings is the same
 // table handleStandings reads for the dashboard's own Standings page, so this reuses
@@ -250,7 +394,9 @@ export async function handleGenBI(body, corsHeaders) {
     // doesn't clearly match anything -- see utils/router.mjs for the full rationale.
     const fields = selectRelevantFields(question);
     const needsTeamMap = fields.playerGwData || fields.seasonTotals;
-    const needsGwWinners = fields.seasonWins || fields.recentForm;
+    // managerStats needs gwWinners too -- win streaks are derived from the same
+    // per-gameweek winners list total_season_summary/recent_form_summary already walk.
+    const needsGwWinners = fields.seasonWins || fields.recentForm || fields.managerStats;
 
     // Check for authoritative (FPL-sourced) season totals first -- cheap lookup. Only
     // fall back to the expensive full-season player_event_stats scan (below) if nothing
@@ -259,7 +405,7 @@ export async function handleGenBI(body, corsHeaders) {
     const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
     // 1. Fetch only what the router decided is relevant, in parallel
-    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates] = await Promise.all([
       needsGwWinners ? getGWWinners(season) : Promise.resolve([]),
       fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
       fields.managerPicks ? getOurLeaguePicks(gw) : Promise.resolve([]),
@@ -267,7 +413,8 @@ export async function handleGenBI(body, corsHeaders) {
       fields.seasonTotals
         ? (authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId))
         : Promise.resolve([]),
-      fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([])
+      fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([]),
+      fields.managerStats ? getManagerSeasonAggregates(season) : Promise.resolve([])
     ]);
 
     // 2. Calculate Total Season Wins
@@ -294,6 +441,16 @@ export async function handleGenBI(body, corsHeaders) {
         }
       });
     });
+
+    // 3b. Merge win streaks (derived from gwWinners, no extra fetch) into the season
+    // aggregates fetched above -- only when managerStats was actually requested, since
+    // computeWinStreaks is wasted work otherwise and gwWinners may be empty.
+    const winStreaks = fields.managerStats ? computeWinStreaks(gwWinners) : {};
+    const managerSeasonStats = managerSeasonAggregates.map((m) => ({
+      ...m,
+      current_win_streak: winStreaks[m.manager]?.current_win_streak ?? 0,
+      longest_win_streak: winStreaks[m.manager]?.longest_win_streak ?? 0
+    }));
 
     // 4. Enrich Context with joined data and fixed types
     const leagueContext = {
@@ -358,7 +515,12 @@ export async function handleGenBI(body, corsHeaders) {
             }))
       )
         .sort((a, b) => b.points - a.points)
-        .slice(0, 50)
+        .slice(0, 50),
+      // #39 Phase 1: per-manager season aggregates -- streaks, high/low single-GW
+      // score, season average, transfer activity, chips, bench points wasted, season
+      // captaincy points. See getManagerSeasonAggregates for exactly what is and isn't
+      // covered (notably: transfer *counts*, not which players were transferred).
+      manager_season_stats: managerSeasonStats
     };
 
     // 5. Invoke Claude with refined context
