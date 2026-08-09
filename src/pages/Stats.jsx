@@ -1,6 +1,6 @@
 // src/pages/Stats.jsx
 import { useState } from 'react';
-import { queryStats } from '../api/client';
+import { queryStats, submitFeedback } from '../api/client';
 import '../styles/Stats.css';
 
 const SUGGESTED_QUERIES = [
@@ -15,6 +15,8 @@ export default function Stats({ season = null }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  // null = no vote yet, 'up'/'down' = recorded, 'pending' = submit in flight
+  const [feedback, setFeedback] = useState(null);
 
   async function handleQueryClick(query) {
     setLoading(true);
@@ -35,6 +37,7 @@ export default function Stats({ season = null }) {
   }
 
   async function fetchGenBI(question) {
+    setFeedback(null);
     try {
       const data = await queryStats(question, season);
 
@@ -49,7 +52,8 @@ export default function Stats({ season = null }) {
         answer: data.answer,
         usage: data.usage,
         durationMs: data.duration_ms,
-        timestamp: data.timestamp
+        timestamp: data.timestamp,
+        queryId: data.query_id
       });
 
     } catch (err) {
@@ -59,6 +63,15 @@ export default function Stats({ season = null }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Lets a manager change their mind (up -> down or vice versa) by just submitting
+  // again -- the backend does a plain overwrite, so there's no need to block re-voting.
+  async function handleFeedback(vote) {
+    if (!result?.queryId || feedback === 'pending') return;
+    setFeedback('pending');
+    const ok = await submitFeedback(result.queryId, vote);
+    setFeedback(ok ? vote : null);
   }
 
   return (
@@ -142,6 +155,33 @@ export default function Stats({ season = null }) {
                 <span className="tokens">Tokens: {result.usage?.output_tokens}</span>
                 {typeof result.durationMs === 'number' && (
                   <span className="duration">Time: {(result.durationMs / 1000).toFixed(1)}s</span>
+                )}
+                {result.queryId && (
+                  <div className="feedback-buttons">
+                    <button
+                      type="button"
+                      className={`feedback-btn ${feedback === 'up' ? 'active' : ''}`}
+                      onClick={() => handleFeedback('up')}
+                      disabled={feedback === 'pending'}
+                      aria-label="Good answer"
+                      title="Good answer"
+                    >
+                      👍
+                    </button>
+                    <button
+                      type="button"
+                      className={`feedback-btn ${feedback === 'down' ? 'active' : ''}`}
+                      onClick={() => handleFeedback('down')}
+                      disabled={feedback === 'pending'}
+                      aria-label="Bad answer"
+                      title="Bad answer"
+                    >
+                      👎
+                    </button>
+                    {(feedback === 'up' || feedback === 'down') && (
+                      <span className="feedback-thanks">Thanks!</span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

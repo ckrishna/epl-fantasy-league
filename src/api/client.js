@@ -71,3 +71,21 @@ export async function queryStats(question, season = null) {
     return { error: err.message };
   }
 }
+
+// Attaches thumbs-up/down feedback to a previously answered GenBI question, referenced
+// by the query_id that queryStats() returned alongside the answer. Returns false (never
+// throws) on failure so the UI can show "couldn't record that" without crashing --
+// declining to save feedback isn't worth losing the answer already on screen for.
+export async function submitFeedback(queryId, feedback) {
+  try {
+    const res = await fetch(`${API_BASE}/stats/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query_id: queryId, feedback })
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('submitFeedback error:', err);
+    return false;
+  }
+}

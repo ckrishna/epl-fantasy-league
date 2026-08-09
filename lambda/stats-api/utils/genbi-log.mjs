@@ -32,7 +32,7 @@
 // table and the budget-warning email: a logging failure must never fail the actual
 // question a manager is waiting on an answer to.
 import { randomUUID } from 'node:crypto';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { dynamodb } from './dynamodb.mjs';
 
 const TABLE = 'genbi-query-log';
@@ -78,4 +78,32 @@ export async function recordQueryLog({
   // gets a query_id to hold onto. If the write silently failed, a later feedback
   // submission against this ID will simply find nothing to update; it won't crash.
   return queryId;
+}
+
+// Attaches thumbs-up/down feedback to an already-logged question. `feedback` is
+// expected to already be validated as 'up' | 'down' by the caller (handleGenBIFeedback)
+// -- this function's only job is the DynamoDB write.
+//
+// Uses a conditional update (attribute_exists(query_id)) rather than a plain Put/Update,
+// so submitting feedback against a query_id that doesn't exist -- expired row, typo,
+// stale frontend state, or (worst case) someone probing the endpoint -- fails loudly
+// instead of silently creating a new, mostly-empty row that looks like a real logged
+// question but isn't.
+export async function submitFeedback({ queryId, feedback }) {
+  try {
+    await dynamodb.send(new UpdateCommand({
+      TableName: TABLE,
+      Key: { query_id: queryId },
+      UpdateExpression: 'SET feedback = :f, feedback_at = :t',
+      ConditionExpression: 'attribute_exists(query_id)',
+      ExpressionAttributeValues: { ':f': feedback, ':t': new Date().toISOString() }
+    }));
+    return { success: true };
+  } catch (err) {
+    if (err.name === 'ConditionalCheckFailedException') {
+      return { success: false, notFound: true };
+    }
+    console.error('Failed to record genbi-query-log feedback', err);
+    return { success: false, notFound: false };
+  }
 }

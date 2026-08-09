@@ -11,7 +11,7 @@ import {
 import { askClaude } from '../utils/bedrock.mjs';
 import { selectRelevantFields } from '../utils/router.mjs';
 import { checkBudget, recordUsage, markWarned, DAILY_BUDGET_USD } from '../utils/genbi-budget.mjs';
-import { recordQueryLog } from '../utils/genbi-log.mjs';
+import { recordQueryLog, submitFeedback } from '../utils/genbi-log.mjs';
 import { sendBudgetWarningEmail } from '../utils/notify.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
@@ -414,4 +414,52 @@ export async function handleGenBI(body, corsHeaders) {
       body: JSON.stringify({ error: err.message })
     };
   }
+}
+
+const VALID_FEEDBACK_VALUES = new Set(['up', 'down']);
+
+/**
+ * Attaches thumbs-up/down feedback to a previously answered question, referenced by
+ * the query_id handleGenBI returned in its response. Builds on the genbi-query-log
+ * table added for structured Q&A logging -- feedback only means anything once there's
+ * a logged question to attach it to.
+ */
+export async function handleGenBIFeedback(body, corsHeaders) {
+  const { query_id: queryId, feedback } = body;
+
+  if (!queryId || typeof queryId !== 'string') {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Missing query_id' })
+    };
+  }
+
+  if (!VALID_FEEDBACK_VALUES.has(feedback)) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: `feedback must be one of: ${[...VALID_FEEDBACK_VALUES].join(', ')}` })
+    };
+  }
+
+  const result = await submitFeedback({ queryId, feedback });
+
+  if (!result.success) {
+    return {
+      statusCode: result.notFound ? 404 : 500,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        error: result.notFound
+          ? `Unknown query_id: ${queryId}`
+          : 'Failed to record feedback'
+      })
+    };
+  }
+
+  return {
+    statusCode: 200,
+    headers: corsHeaders,
+    body: JSON.stringify({ success: true, query_id: queryId, feedback })
+  };
 }

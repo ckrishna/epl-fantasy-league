@@ -1,6 +1,6 @@
 import { handleStandings } from './handlers/standings.mjs';
 import { handleWinners } from './handlers/winners.mjs';
-import { handleGenBI } from './handlers/genbi.mjs';
+import { handleGenBI, handleGenBIFeedback } from './handlers/genbi.mjs';
 import { handleSeasons } from './handlers/seasons.mjs';
 
 const corsHeaders = {
@@ -25,7 +25,11 @@ export async function handler(event) {
     if (path.includes('/stats/query')) {
       return await handleGenBI(body, corsHeaders);
     }
-    
+
+    if (path.includes('/stats/feedback')) {
+      return await handleGenBIFeedback(body, corsHeaders);
+    }
+
     if (path.includes('/standings')) {
       return await handleStandings(queryParams, corsHeaders);
     }
