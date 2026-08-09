@@ -1,0 +1,1 @@
+Shipped -- the Stats page is now a two-pane layout: a "League Intelligence" pane on the left (question input + suggested questions) and a "League Analysis" pane on the right showing the answer, token usage, and query duration. Closing as done; please reopen if the intended design differs from what's live.
