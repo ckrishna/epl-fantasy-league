@@ -215,6 +215,24 @@ Written by all three ingestion Lambdas (`fpl-bootstrap`, `fpl-data-ingester`, `f
 
 ---
 
+## `genbi-query-log` (new, 2026-08-09)
+
+Partition key `query_id` (S, UUID — generated per request, no sort key).
+
+Fields: `timestamp` (S, ISO), `date` (S, `"YYYY-MM-DD"` UTC — denormalized off `timestamp` so a future scan/GSI over "today's questions" doesn't need to parse it client-side), `question` (S), `season` (S), `gameweek` (N), `fields_selected` (Map — the deterministic router's output for this question, see `utils/router.mjs`), `answer` (S), `input_tokens` (N), `output_tokens` (N), `cost_usd` (N), `duration_ms` (N), `feedback` (reserved, always `null` for now — the upcoming thumbs-up/down feature will write here).
+
+Written by `genbi.mjs` (`recordQueryLog`, in `utils/genbi-log.mjs`) after every successfully answered question, right after the budget/cost bookkeeping. The generated `query_id` is also returned to the frontend in the GenBI response body, so a later feedback submission has something to reference. Write is wrapped in try/catch — same resilience pattern as `ingestion_runs` and the budget-warning email; a logging failure never blocks the manager's answer.
+
+**Deliberately scoped to the successful path only.** Budget-blocked requests (`budget_exceeded: true`) and hard errors (statusCode 500) are not logged here — neither has an answer, token count, or router decision to record, and giving them a row would mean a second, differently-shaped schema. Revisit if visibility into declined/failed questions turns out to matter once this has real usage.
+
+**Why this exists:** the first piece of a planned feedback loop — question logging, thumbs-up/down feedback, then using that feedback to find genuinely good vs. bad answers and improve the router/prompt from real usage instead of guessing. See `fields_selected` in particular: this also lets the router's real-world accuracy be measured later against actual questions asked, not just its own unit tests.
+
+**Table needs to be created in DynamoDB before this goes live** — same as `ingestion_runs` above.
+
+**Coverage note:** covered by `tests/genbi-query-log.test.mjs` — both `recordQueryLog()` in isolation and its wiring into `handleGenBI()` (proving the response's `query_id` matches the logged row's `query_id`).
+
+---
+
 ## Gap analysis (2026-07-29, via `scripts/find_gaps.py`)
 
 Ran a full scan of both league tables against the expected 11 managers × 38 gameweeks. Two distinct issues found:

@@ -11,6 +11,7 @@ import {
 import { askClaude } from '../utils/bedrock.mjs';
 import { selectRelevantFields } from '../utils/router.mjs';
 import { checkBudget, recordUsage, markWarned, DAILY_BUDGET_USD } from '../utils/genbi-budget.mjs';
+import { recordQueryLog } from '../utils/genbi-log.mjs';
 import { sendBudgetWarningEmail } from '../utils/notify.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
@@ -375,6 +376,22 @@ export async function handleGenBI(body, corsHeaders) {
       }
     }
 
+    // 7. Structured Q&A log: every answered question, which fields the router selected
+    // for it, tokens/cost/duration, and a query_id the frontend can hold onto for the
+    // upcoming thumbs-up/down feature. See utils/genbi-log.mjs for the row shape and
+    // why this is scoped to the successful path only.
+    const queryId = await recordQueryLog({
+      question,
+      season,
+      gameweek: gw,
+      fieldsSelected: fields,
+      answer: result.response,
+      inputTokens: result.usage?.input_tokens || 0,
+      outputTokens: result.usage?.output_tokens || 0,
+      costUsd,
+      durationMs
+    });
+
     return {
       statusCode: 200,
       headers: corsHeaders,
@@ -384,7 +401,8 @@ export async function handleGenBI(body, corsHeaders) {
         usage: result.usage,
         duration_ms: durationMs,
         timestamp: new Date().toISOString(),
-        gameweek: gw
+        gameweek: gw,
+        query_id: queryId
       })
     };
 
