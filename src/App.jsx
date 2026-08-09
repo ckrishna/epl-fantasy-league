@@ -66,7 +66,7 @@ export default function App() {
           className={`tab ${activeTab === 'stats' ? 'active' : ''}`}
           onClick={() => setActiveTab('stats')}
         >
-          Stats
+          Stats<sup className="beta-tag">Beta</sup>
         </button>
         <button
           className={`tab ${activeTab === 'help' ? 'active' : ''}`}

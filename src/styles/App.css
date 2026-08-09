@@ -163,6 +163,14 @@ body {
   border-bottom-color: var(--secondary);
 }
 
+.beta-tag {
+  font-size: 0.55em;
+  font-weight: 700;
+  color: var(--gray-400);
+  margin-left: 2px;
+  vertical-align: super;
+}
+
 /* Content Area */
 .app-content {
   flex: 1;

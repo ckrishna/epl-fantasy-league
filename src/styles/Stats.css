@@ -369,18 +369,78 @@
 
 @media (max-width: 640px) {
   .stats-page {
-    padding: 1rem;
+    padding: 0.75rem;
   }
 
-  .stats-left, .stats-right {
-    padding: 1.5rem;
+  /* Option 1 from the mobile redesign review: shrink the ask panel down to just the
+     input + a single scrollable row of suggested questions (no heading subtitle
+     shrink needed, no divider label, no info box -- all cut to reclaim height), so the
+     answer panel below it gets the vast majority of the viewport instead of requiring
+     a scroll past a full-height question form to reach it. */
+  .stats-left {
+    padding: 1rem;
+    gap: 0.6rem;
+    min-height: auto;
+  }
+
+  .stats-right {
+    padding: 1.25rem;
+    min-height: 58vh;
   }
 
   .stats-left h2 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+  }
+
+  .divider, .info-box {
+    display: none;
+  }
+
+  .question-input {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .submit-btn {
+    padding: 0.6rem 1rem;
+  }
+
+  /* Suggested questions become a single horizontally-scrolling row of chips instead
+     of three stacked full-width buttons -- same content, a fraction of the height. */
+  .queries-list {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .queries-list::-webkit-scrollbar {
+    display: none;
   }
 
   .query-btn {
-    font-size: 0.85rem;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.8rem;
+    border-radius: 999px;
+  }
+
+  .query-icon, .query-arrow {
+    display: none;
+  }
+
+  .query-text {
+    flex: none;
+  }
+
+  .result-metadata {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
   }
 }
