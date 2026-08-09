@@ -9,6 +9,7 @@ import {
   dynamodb
 } from '../utils/dynamodb.mjs';
 import { askClaude } from '../utils/bedrock.mjs';
+import { selectRelevantFields } from '../utils/router.mjs';
 import { checkBudget, recordUsage, markWarned, DAILY_BUDGET_USD } from '../utils/genbi-budget.mjs';
 import { sendBudgetWarningEmail } from '../utils/notify.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
@@ -242,19 +243,30 @@ export async function handleGenBI(body, corsHeaders) {
 
     const { season, seasonId, gw } = await resolveSeasonContext(requestedSeason);
 
+    // Deterministic (non-model) router: decides which of the 6 context fields this
+    // question actually needs, so we don't fetch/send all of them on every question
+    // regardless of relevance. Falls back to fetching everything when the question
+    // doesn't clearly match anything -- see utils/router.mjs for the full rationale.
+    const fields = selectRelevantFields(question);
+    const needsTeamMap = fields.playerGwData || fields.seasonTotals;
+    const needsGwWinners = fields.seasonWins || fields.recentForm;
+
     // Check for authoritative (FPL-sourced) season totals first -- cheap lookup. Only
     // fall back to the expensive full-season player_event_stats scan (below) if nothing
-    // has been backfilled for this season yet.
-    const authoritativeSeasonTotals = await getAuthoritativeSeasonTotals(season);
+    // has been backfilled for this season yet. Skipped entirely if this question isn't
+    // about season-long player totals at all.
+    const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
-    // 1. Fetch all required data in parallel
+    // 1. Fetch only what the router decided is relevant, in parallel
     const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings] = await Promise.all([
-      getGWWinners(season),
-      getPlayerDataForGW(gw, seasonId),
-      getOurLeaguePicks(gw),
-      getAllTeamsForSeason(seasonId),
-      authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId),
-      getCurrentStandings(gw, season)
+      needsGwWinners ? getGWWinners(season) : Promise.resolve([]),
+      fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
+      fields.managerPicks ? getOurLeaguePicks(gw) : Promise.resolve([]),
+      needsTeamMap ? getAllTeamsForSeason(seasonId) : Promise.resolve({}),
+      fields.seasonTotals
+        ? (authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId))
+        : Promise.resolve([]),
+      fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([])
     ]);
 
     // 2. Calculate Total Season Wins

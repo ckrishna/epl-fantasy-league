@@ -85,7 +85,10 @@ test('[current bug] resolves the numeric season_id for the REQUESTED season, not
   const bedrockMock = installBedrockMock();
 
   try {
-    const result = await handleGenBI({ question: 'Who is winning?', season: '2025/26' }, {});
+    // Needs a question that actually triggers player-data fetching under the field
+    // router (utils/router.mjs) -- "Who is winning?" only needs current_standings/
+    // gw-winners now, which don't touch teams/player_event_stats at all.
+    const result = await handleGenBI({ question: 'Who scored the most points this gameweek?', season: '2025/26' }, {});
     assert.strictEqual(result.statusCode, 200);
     assert.ok(capturedQueries.teams, 'Expected a teams QueryCommand');
     assert.strictEqual(capturedQueries.teams.input.ExpressionAttributeValues[':sid'], 1,
@@ -125,7 +128,9 @@ test('[regression] no season provided still defaults to the current season and b
   const bedrockMock = installBedrockMock();
 
   try {
-    const result = await handleGenBI({ question: 'Who is winning?' }, {});
+    // Needs a question that actually triggers player-data fetching under the field
+    // router (utils/router.mjs) -- "Who is winning?" alone wouldn't touch teams.
+    const result = await handleGenBI({ question: 'Who scored the most points this gameweek?' }, {});
     assert.strictEqual(result.statusCode, 200);
     assert.strictEqual(capturedQueries.teams.input.ExpressionAttributeValues[':sid'], 2,
       'Expected the current season\'s season_id (2) when no season is provided');

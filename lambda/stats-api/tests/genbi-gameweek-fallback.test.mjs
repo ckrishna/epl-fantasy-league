@@ -136,7 +136,10 @@ test('[regression] still resolves the numeric season_id (not season_string) for 
   const bedrockMock = installBedrockMock();
 
   try {
-    const result = await handleGenBI({ question: 'Who is winning?' }, {});
+    // Needs a question that actually triggers player-data fetching under the field
+    // router (utils/router.mjs) -- "Who is winning?" only needs current_standings now,
+    // which doesn't touch teams/player_event_stats at all.
+    const result = await handleGenBI({ question: 'Who scored the most points this gameweek?' }, {});
     assert.strictEqual(result.statusCode, 200);
     assert.ok(capturedTeamsQuery, 'Expected a QueryCommand against teams');
     assert.strictEqual(capturedTeamsQuery.input.ExpressionAttributeValues[':sid'], 2,
