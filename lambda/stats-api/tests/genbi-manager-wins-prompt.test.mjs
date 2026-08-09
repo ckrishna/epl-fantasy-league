@@ -44,7 +44,13 @@ test('[current bug] system prompt tells the model to answer plain "most wins" qu
   }
 });
 
-test('[regression] Form instruction (#1) is untouched by the new rule', async () => {
+test('[regression] Form instruction (#1) still routes manager-form questions to recent_form_summary', async () => {
+  // Instruction #1's exact wording later changed (see genbi-player-form-field.test.mjs)
+  // to disambiguate MANAGER form from real-world PLAYER form -- two different fields
+  // that both happen to be called "form". This test only cares that the underlying
+  // manager-form rule this file was originally written to guard survived that
+  // rewording: a manager-form question still gets pointed at recent_form_summary,
+  // scoped to a count over the last 5 gameweeks.
   const bedrockMock = installBedrockMock('Yash is in the best form.');
   try {
     await askClaude('Who is in the best form?', {
@@ -55,7 +61,8 @@ test('[regression] Form instruction (#1) is untouched by the new rule', async ()
       our_league_picks: []
     });
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /Rank managers by the count in <recent_form_summary>/);
+    assert.match(payload.system, /rank managers by the count in <recent_form_summary>/i);
+    assert.match(payload.system, /last 5 gameweeks/i);
   } finally {
     bedrockMock.restore();
   }

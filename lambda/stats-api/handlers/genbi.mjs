@@ -323,6 +323,12 @@ export async function handleGenBI(body, corsHeaders) {
             // Resolve actual name from Teams table (Fixes Mbeumo at Brentford issue)
             team_name: teamMap[teamId] || "Unknown Team",
             points: typeof p.total_points === 'object' ? parseInt(p.total_points.N) : parseInt(p.total_points || 0),
+            // FPL's own per-PLAYER rolling form score (fpl-global-stats-weekly already
+            // writes this to player_event_stats -- it just never got read here). Not to
+            // be confused with recent_form_summary above, which is a per-MANAGER
+            // win-streak count -- two different things that happen to both be called
+            // "form". See bedrock.mjs's PLAYER FORM vs MANAGER FORM definitions.
+            form: typeof p.form === 'object' ? parseFloat(p.form.N) : parseFloat(p.form || 0),
             ownership: typeof p.selected_by_percent === 'object' ? p.selected_by_percent.S : (p.selected_by_percent || "0.0%")
           };
         }),
