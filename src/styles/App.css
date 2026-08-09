@@ -100,9 +100,13 @@ body {
   font-size: clamp(0.8rem, 2vw, 0.9rem);
   font-weight: 600;
   cursor: pointer;
-  flex: 1 1 auto;
+  /* flex-grow: 0 -- size to content, don't stretch to fill the header row (that's what
+     made this span nearly the full width on desktop). flex-shrink: 1 + min-width: 0 is
+     what actually matters for mobile: it still lets the box shrink below its intrinsic
+     width instead of overflowing, same as before -- shrinking never depended on grow. */
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 65vw;
+  max-width: min(65vw, 340px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
