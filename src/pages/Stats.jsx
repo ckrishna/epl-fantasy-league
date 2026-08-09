@@ -160,9 +160,15 @@ export default function Stats({ season = null }) {
                   <div className="feedback-buttons">
                     <button
                       type="button"
-                      className={`feedback-btn ${feedback === 'up' ? 'active' : ''}`}
+                      className={[
+                        'feedback-btn',
+                        'thumbs-up',
+                        feedback === 'up' && 'active',
+                        feedback && feedback !== 'up' && 'locked'
+                      ].filter(Boolean).join(' ')}
                       onClick={() => handleFeedback('up')}
-                      disabled={feedback === 'pending'}
+                      disabled={!!feedback}
+                      aria-pressed={feedback === 'up'}
                       aria-label="Good answer"
                       title="Good answer"
                     >
@@ -170,9 +176,15 @@ export default function Stats({ season = null }) {
                     </button>
                     <button
                       type="button"
-                      className={`feedback-btn ${feedback === 'down' ? 'active' : ''}`}
+                      className={[
+                        'feedback-btn',
+                        'thumbs-down',
+                        feedback === 'down' && 'active',
+                        feedback && feedback !== 'down' && 'locked'
+                      ].filter(Boolean).join(' ')}
                       onClick={() => handleFeedback('down')}
-                      disabled={feedback === 'pending'}
+                      disabled={!!feedback}
+                      aria-pressed={feedback === 'down'}
                       aria-label="Bad answer"
                       title="Bad answer"
                     >

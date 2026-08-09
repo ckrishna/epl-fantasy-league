@@ -315,13 +315,31 @@
 }
 
 .feedback-btn:disabled {
-  opacity: 0.6;
   cursor: default;
 }
 
+/* The vote that was actually cast -- full opacity, a color distinct per direction so
+   it's obvious at a glance which way you voted (not just "some button is highlighted"). */
 .feedback-btn.active {
-  background: #ede9fe;
-  border-color: #667eea;
+  opacity: 1;
+  transform: none;
+}
+
+.feedback-btn.thumbs-up.active {
+  background: #d1fae5;
+  border-color: #10b981;
+}
+
+.feedback-btn.thumbs-down.active {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+/* The button NOT chosen, once a vote has been cast -- locked out and visibly faded so
+   it reads as "no longer an option," not just "temporarily disabled". */
+.feedback-btn.locked {
+  opacity: 0.3;
+  filter: grayscale(60%);
 }
 
 .feedback-thanks {
