@@ -24,28 +24,29 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>⚽ EPL Fantasy League</h1>
-        <p>Carpe Diem - League 438107</p>
+        <div className="app-header-inner">
+          <h1 className="app-title">⚽ EPL Fantasy League</h1>
 
-        {seasons.length > 1 && (
-          <div className="season-picker">
+          {seasons.length > 0 && (
             <select
+              className={`league-picker ${viewingHistory ? 'viewing-history' : ''}`}
               value={selectedSeason ?? currentSeason ?? ''}
               onChange={(e) => {
                 const value = e.target.value;
                 setSelectedSeason(value === currentSeason ? null : value);
               }}
-              aria-label="Select season"
+              aria-label="Select league and season"
+              title={viewingHistory ? 'Viewing a past season' : undefined}
             >
               {seasons.map((s) => (
                 <option key={s.season} value={s.season}>
-                  {s.season}{s.current ? ' (current)' : ''}
+                  {s.league_id ? `League ${s.league_id} — ${s.season}` : s.season}
+                  {s.current ? ' (current)' : ''}
                 </option>
               ))}
             </select>
-            {viewingHistory && <span className="history-badge">Viewing past season</span>}
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
       <nav className="tabs">

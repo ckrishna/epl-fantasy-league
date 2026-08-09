@@ -55,78 +55,57 @@ body {
   min-height: 100vh;
 }
 
-/* Header */
+/* Header -- a slim bar, similar height to .tabs below it rather than a hero banner.
+   Title + the combined league/season picker share one row instead of three stacked
+   lines (title, subtitle, dropdown). */
 .app-header {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: white;
-  padding: clamp(1.5rem, 5vw, 2.5rem);
-  text-align: center;
   box-shadow: var(--shadow);
-  position: relative;
-  overflow: hidden;
 }
 
-.app-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 300px;
-  height: 300px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 50%;
-  transform: translate(100px, -100px);
-}
-
-.app-header h1 {
-  font-size: clamp(1.5rem, 6vw, 2.5rem);
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  position: relative;
-  z-index: 1;
-  letter-spacing: -0.5px;
-}
-
-.app-header p {
-  font-size: clamp(0.9rem, 2.5vw, 1rem);
-  opacity: 0.95;
-  position: relative;
-  z-index: 1;
-  font-weight: 500;
-}
-
-/* Season picker */
-.season-picker {
+.app-header-inner {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-top: 1rem;
-  position: relative;
-  z-index: 1;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0.7rem clamp(1rem, 3vw, 1.5rem);
 }
 
-.season-picker select {
+.app-title {
+  font-size: clamp(1rem, 2.2vw, 1.15rem);
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+/* League/season picker -- combines what used to be static "League 438107" header text
+   plus a separate season <select> into one control. Its own selected-option text reads
+   "League {id} — {season}", so there's nothing else to label. */
+.league-picker {
   background: rgba(255, 255, 255, 0.15);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
-  padding: 0.4rem 0.75rem;
-  font-size: clamp(0.85rem, 2vw, 0.95rem);
+  padding: 0.35rem 0.7rem;
+  font-size: clamp(0.8rem, 2vw, 0.9rem);
   font-weight: 600;
   cursor: pointer;
+  max-width: 65vw;
 }
 
-.season-picker select option {
+.league-picker option {
   color: var(--neutral);
 }
 
-.history-badge {
-  font-size: clamp(0.75rem, 2vw, 0.85rem);
+/* Flags "you're not looking at the current season" via color instead of a separate
+   "Viewing past season" text badge -- the dropdown itself becomes the indicator. */
+.league-picker.viewing-history {
   background: var(--secondary);
   color: var(--primary-dark);
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
+  border-color: var(--secondary);
   font-weight: 700;
 }
 

@@ -15,7 +15,12 @@ export async function handleSeasons(corsHeaders) {
         status: s.status ?? null,
         start_date: s.start_date ?? null,
         end_date: s.end_date ?? null,
-        total_gameweeks: s.total_gameweeks ?? null
+        total_gameweeks: s.total_gameweeks ?? null,
+        // Lives on the seasons table row already (added so a league-ID change is a data
+        // update, not a redeploy) but was never actually returned here -- the frontend
+        // header hardcoded "League 438107" as static text instead. Nullable: older
+        // historical rows may predate this field.
+        league_id: s.league_id ?? null
       }))
     })
   };
