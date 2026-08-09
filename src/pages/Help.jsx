@@ -11,8 +11,8 @@ export default function Help() {
           <h3>📊 Standings Tab</h3>
           <p>View the current league standings for any gameweek. Earnings are calculated as:</p>
           <ul>
-            <li>£5 per gameweek for the highest scorer (split if tied)</li>
-            <li>£70, £30, £10 bonus for 1st, 2nd, 3rd place at season end</li>
+            <li>$5 per gameweek for the highest scorer (split if tied)</li>
+            <li>$70, $30, $10 bonus for 1st, 2nd, 3rd place at season end</li>
           </ul>
         </section>
 
@@ -36,7 +36,7 @@ export default function Help() {
           <p>This app:</p>
           <ul>
             <li>Updates nightly with live Premier League data</li>
-            <li>Stores 25+ gameweeks of historical performance</li>
+            <li>Stores historical gameweeks performance</li>
             <li>Uses AI to answer natural language questions</li>
             <li>Hosted on Cloudflare Pages for fast global access</li>
           </ul>
@@ -44,7 +44,7 @@ export default function Help() {
 
         <section className="help-card">
           <h3>📱 Browser Support</h3>
-          <p>Works on all modern browsers. Load time: &lt;1s</p>
+          <p>Works on all modern browsers.</p>
         </section>
       </div>
     </div>
