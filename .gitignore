@@ -21,6 +21,9 @@ build/
 *.log
 npm-debug.log*
 
+# Local AWS CLI output (e.g. aws lambda invoke response.json)
+response.json
+
 *.swp
 .idea/dd
 __pycache__/
