@@ -1,0 +1,80 @@
+/* src/styles/Help.css */
+.help-page {
+  background: white;
+  border-radius: 12px;
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.help-page h2 {
+  color: #003d7a;
+  margin-bottom: 1.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.help-card {
+  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.help-card:hover {
+  border-color: #003d7a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.help-card h3 {
+  color: #003d7a;
+  font-size: 1.05rem;
+  margin: 0 0 0.6rem;
+}
+
+.help-card p {
+  color: #374151;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0 0 0.5rem;
+}
+
+.help-card p:last-child {
+  margin-bottom: 0;
+}
+
+.help-card ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.help-card li {
+  color: #4b5563;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.help-card li::marker {
+  color: #ffb81c;
+}
+
+/* Let the "How It Works" and "Browser Support" cards span the full row on wider
+   screens -- they read better as a single line than squeezed into a narrow column. */
+.help-grid .help-card:nth-child(4),
+.help-grid .help-card:nth-child(5) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .help-page {
+    padding: 1.5rem 1rem;
+  }
+}
