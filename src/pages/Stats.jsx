@@ -80,9 +80,6 @@ export default function Stats({ season = null }) {
         {/* Left Panel */}
         <div className="stats-left">
           <h2>⚡ League Intelligence</h2>
-          <p className="subtitle">
-            Ask Claude about league trends{season ? ` — ${season}` : ''}
-          </p>
 
           <form className="custom-question" onSubmit={handleCustomQuestion}>
             <input
