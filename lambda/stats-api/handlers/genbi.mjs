@@ -5,6 +5,7 @@ import {
   getCurrentSeason,
   getAllSeasons,
   getLatestStoredGameweek,
+  queryLeagueStandings,
   dynamodb
 } from '../utils/dynamodb.mjs';
 import { askClaude } from '../utils/bedrock.mjs';
@@ -142,6 +143,39 @@ async function getOurLeaguePicks(gw) {
   }
 }
 
+// GenBI never actually had access to the real league table (total points + rank) --
+// only win *counts* (see total_season_summary below). fpl_league_standings is the same
+// table handleStandings reads for the dashboard's own Standings page, so this reuses
+// queryLeagueStandings() rather than re-deriving anything. Mirrors handleStandings'
+// walk-back-a-gameweek behavior: fpl_league_standings has had gaps independent of
+// player_event_stats/fpl_entry_gameweek (e.g. the GW26 outage in DATA_MODEL.md), so the
+// gameweek genbi.mjs already resolved for player data isn't guaranteed to have a
+// standings row.
+async function getCurrentStandings(gw, season) {
+  try {
+    let targetGw = gw;
+    let standings = await queryLeagueStandings(targetGw, season);
+    while ((!standings || standings.length === 0) && targetGw > 1) {
+      targetGw -= 1;
+      standings = await queryLeagueStandings(targetGw, season);
+    }
+    return (standings || [])
+      .slice()
+      .sort((a, b) => (b.total_points || 0) - (a.total_points || 0))
+      .map((row, i) => ({
+        rank: i + 1,
+        manager: row.manager_name,
+        team_name: row.team_name,
+        total_points: row.total_points,
+        points_this_week: row.points_this_week,
+        gameweek: targetGw
+      }));
+  } catch (err) {
+    console.error('Error fetching current standings:', err);
+    return [];
+  }
+}
+
 // Mirrors the historical-season pattern already used by handleStandings/handleWinners:
 // a requested season that isn't the current one must never touch live FPL data (that
 // reflects today's real season, not the one being looked back at), and must resolve
@@ -214,12 +248,13 @@ export async function handleGenBI(body, corsHeaders) {
     const authoritativeSeasonTotals = await getAuthoritativeSeasonTotals(season);
 
     // 1. Fetch all required data in parallel
-    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings] = await Promise.all([
       getGWWinners(season),
       getPlayerDataForGW(gw, seasonId),
       getOurLeaguePicks(gw),
       getAllTeamsForSeason(seasonId),
-      authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId)
+      authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId),
+      getCurrentStandings(gw, season)
     ]);
 
     // 2. Calculate Total Season Wins
@@ -250,8 +285,12 @@ export async function handleGenBI(body, corsHeaders) {
     // 4. Enrich Context with joined data and fixed types
     const leagueContext = {
       gameweek: gw,
+      // The actual points table + rank -- distinct from total_season_summary below,
+      // which is only win *counts*. This was never wired in before; GenBI had no way
+      // to answer "what are the standings" / "who's leading" / "what's my rank" at all.
+      current_standings: currentStandings,
       total_season_summary: totalWinnersSummary,
-      recent_form_summary: recentFormSummary, 
+      recent_form_summary: recentFormSummary,
       players_gw_data: playerData
         .sort((a, b) => {
           // player_event_stats rows store the score in `total_points` -- there is no
