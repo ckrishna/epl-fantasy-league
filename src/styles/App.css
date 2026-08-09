@@ -79,21 +79,33 @@ body {
   font-weight: 700;
   letter-spacing: -0.3px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* League/season picker -- combines what used to be static "League 438107" header text
    plus a separate season <select> into one control. Its own selected-option text reads
-   "League {id} — {season}", so there's nothing else to label. */
+   "League {id} — {season}", so there's nothing else to label.
+   flex: 1 1 auto + min-width: 0 lets it actually shrink within the header row instead
+   of a native <select>'s intrinsic content width forcing an overflow (the classic
+   flexbox gotcha) -- confirmed live on mobile Safari, where the text was running right
+   up against the edge of the screen rather than just the box. Extra right padding
+   clears mobile Safari's own built-in dropdown arrow; text-overflow handles the rare
+   case a very long label still doesn't fit. */
 .league-picker {
   background: rgba(255, 255, 255, 0.15);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
-  padding: 0.35rem 0.7rem;
+  padding: 0.4rem 1.5rem 0.4rem 0.85rem;
   font-size: clamp(0.8rem, 2vw, 0.9rem);
   font-weight: 600;
   cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 65vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .league-picker option {
