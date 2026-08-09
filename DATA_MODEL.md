@@ -199,6 +199,22 @@ Read by: `stats-api` (`getGWWinners`) and `genbi.mjs`.
 
 ---
 
+## `ingestion_runs` (new, 2026-08-08)
+
+Partition key `function_name` (S, e.g. `"fpl-data-ingester"`), sort key `started_at` (S, ISO timestamp — sorts newest-last within a function's partition; query with `ScanIndexForward: false` for most-recent-first).
+
+Fields: `finished_at` (S, ISO), `duration_ms` (N), `status` (`"success"` \| `"failure"`), `trigger` (`"scheduled"` \| `"manual"` — derived from the Lambda event shape: EventBridge's own scheduled invocations always carry `source: "aws.events"`), `season` (S, nullable — whichever season the run resolved, null if it failed before resolving one), `summary` (Map, shape varies per function — item counts, error counts, whatever that function already tracked), `error_message` (S, nullable, only set on failure).
+
+Written by all three ingestion Lambdas (`fpl-bootstrap`, `fpl-data-ingester`, `fpl-global-stats-weekly`) at the end of every invocation, success or failure. The write itself is wrapped in try/catch so a logging failure can never fail the actual ingestion job — same resilience pattern already used for `genbi.mjs`'s budget-warning email.
+
+**Why this exists:** this project had zero history of whether nightly/weekly syncs actually ran or succeeded — flagged as an open gap below for a while before finally being built. Confirmed via `aws events list-rules` that only two of the three ingestion Lambdas are actually on a schedule: `fpl-data-ingester` runs nightly (`fpl-nightly-pull` rule, `cron(0 4 * * ? *)` — 04:00 UTC daily) and `fpl-global-stats-weekly` runs weekly (`cron(0 3 ? * TUE *)` — Tuesdays 03:00 UTC). `fpl-bootstrap` has no EventBridge rule at all — it only ever runs when invoked manually, which wasn't previously known for certain.
+
+**Coverage note:** `fpl-data-ingester` has automated tests for its `ingestion_runs` writes (`tests/ingestion-runs.test.mjs`). `fpl-bootstrap` and `fpl-global-stats-weekly` have no test infrastructure at all (no `tests/` directory, no mock helpers) — their writes were verified by code review only, not automated tests. Building out eval harnesses for those two is unstarted work, not just untested-by-oversight.
+
+**Table needs to be created in DynamoDB before this goes live** — same as any new table introduced by code (e.g. `player_season_totals`), nothing in this repo provisions infrastructure.
+
+---
+
 ## Gap analysis (2026-07-29, via `scripts/find_gaps.py`)
 
 Ran a full scan of both league tables against the expected 11 managers × 38 gameweeks. Two distinct issues found:
@@ -217,5 +233,4 @@ FPL's live API no longer exposes gameweek-by-gameweek detail for a completed pas
 - Sunil Mathew's GW3-24 gap in `fpl_entry_gameweek` (see Gap analysis above) — cause unknown, parked.
 - Root cause of the `player_event_stats` GW31/GW34 partial gap (see Gap analysis above) — worked around via `player_season_totals`, not investigated further.
 - The GSI on `fpl_league_standings` isn't used anywhere — worth considering if a "manager history" view is ever wanted.
-- No table currently tracks nightly/weekly ingestion run history (success/failure per run) — an `ingestion_runs` audit table was proposed but deferred.
 - `player_season_totals` only covers players still in FPL's current player pool — anyone who left the Premier League since a given past season has no current element ID to backfill against, so they'll still fall back to the (gappy) live aggregation.

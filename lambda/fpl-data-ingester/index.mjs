@@ -11,6 +11,31 @@ const logger = {
   metric: (name, value, unit = '') => console.log(JSON.stringify({ level: 'METRIC', timestamp: new Date().toISOString(), metric: name, value, unit }))
 };
 
+// Writes one row per invocation to ingestion_runs -- see fpl-bootstrap/index.mjs for
+// the full rationale. `trigger` is derived from the Lambda event shape: EventBridge's
+// scheduled invocations always carry `source: "aws.events"` (this is the
+// `fpl-nightly-pull` rule specifically for this function).
+async function recordIngestionRun({ event, startedAt, status, season, summary, errorMessage }) {
+  try {
+    await dynamodb.send(new PutCommand({
+      TableName: 'ingestion_runs',
+      Item: {
+        function_name: 'fpl-data-ingester',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        duration_ms: Date.now() - new Date(startedAt).getTime(),
+        status,
+        trigger: event?.source === 'aws.events' ? 'scheduled' : 'manual',
+        season: season ?? null,
+        summary: summary ?? {},
+        error_message: errorMessage ?? null
+      }
+    }));
+  } catch (err) {
+    logger.error('Failed to record ingestion_runs entry', err);
+  }
+}
+
 // Resolves the currently active season (and its league ID) from the shared `seasons`
 // table -- the same pattern already used by fpl-bootstrap, fpl-global-stats-weekly,
 // and the GenBI handler. Previously `season` was a hardcoded `const SEASON = '2025/26'`
@@ -215,16 +240,21 @@ async function storePicks(manager, picksData, playerMap, gw, season) {
 
 export async function handler(event) {
   const runStartTime = Date.now();
+  const startedAt = new Date(runStartTime).toISOString();
   let apiCallCount = 0;
   let dbWriteCount = 0;
-  
+  // Declared outside the try block so the catch handler can still report which
+  // season a failed run was for, if it got far enough to resolve one.
+  let season;
+
   logger.info('Starting nightly FPL data ingestion', { run_id: event.requestContext?.requestId || 'manual' });
-  
+
   try {
     // Resolve the currently active season and league ID up front (single source of
     // truth: the shared `seasons` table), so a season rollover or league-ID change is
     // a data change, not a redeploy.
-    const { season, leagueId } = await getCurrentSeasonInfo();
+    let leagueId;
+    ({ season, leagueId } = await getCurrentSeasonInfo());
     logger.info('Resolved current season', { season, leagueId });
 
     // Fetch bootstrap
@@ -397,7 +427,21 @@ logger.info('Standings calculated and stored', { count: standingsCount });
     logger.metric('ingestion_duration', totalDuration, 'ms');
     logger.metric('api_calls_total', apiCallCount, 'requests');
     logger.metric('db_writes_total', dbWriteCount, 'items');
-    
+
+    await recordIngestionRun({
+      event,
+      startedAt,
+      status: 'success',
+      season,
+      summary: {
+        api_calls: apiCallCount,
+        db_writes: dbWriteCount,
+        managers: managers.length,
+        gameweeks: gwsToFetch.length,
+        standings: standingsCount
+      }
+    });
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -411,9 +455,10 @@ logger.info('Standings calculated and stored', { count: standingsCount });
         }
       })
     };
-    
+
   } catch (err) {
     logger.error('Fatal error in data ingestion', err);
+    await recordIngestionRun({ event, startedAt, status: 'failure', season, errorMessage: err.message });
     return {
       statusCode: 500,
       body: JSON.stringify({

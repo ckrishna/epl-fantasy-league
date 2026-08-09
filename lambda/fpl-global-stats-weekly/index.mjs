@@ -10,6 +10,29 @@ const logger = {
   metric: (name, value, unit = '') => console.log(JSON.stringify({ level: 'METRIC', timestamp: new Date().toISOString(), metric: name, value, unit }))
 };
 
+// Writes one row per invocation to ingestion_runs -- see fpl-bootstrap/index.mjs for
+// the full rationale. `trigger` is derived from the Lambda event shape: EventBridge's
+// scheduled invocations always carry `source: "aws.events"`.
+async function recordIngestionRun({ event, startedAt, status, summary, errorMessage }) {
+  try {
+    await dynamodb.send(new PutCommand({
+      TableName: 'ingestion_runs',
+      Item: {
+        function_name: 'fpl-global-stats-weekly',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        duration_ms: Date.now() - new Date(startedAt).getTime(),
+        status,
+        trigger: event?.source === 'aws.events' ? 'scheduled' : 'manual',
+        summary: summary ?? {},
+        error_message: errorMessage ?? null
+      }
+    }));
+  } catch (err) {
+    logger.error('Failed to record ingestion_runs entry', err);
+  }
+}
+
 async function getBootstrap() {
   try {
     const response = await fetch(`${FPL_API}/bootstrap-static/`);
@@ -149,6 +172,7 @@ async function storePlayerGameweekData(players, bootstrap, seasonId) {
   
   logger.info('Player gameweek data complete', { total_processed: processedCount, items_stored: itemsStored, errors: errorCount });
   logger.metric('player_event_stats_stored', itemsStored);
+  return { processedCount, itemsStored, errorCount };
 }
 
 async function storeFixtures(bootstrap, seasonId) {
@@ -204,36 +228,49 @@ async function storeFixtures(bootstrap, seasonId) {
     
     logger.info('Fixtures stored', { count: stored, errors: errorCount });
     logger.metric('fixtures_stored', stored);
-    
+    return { stored, errorCount };
+
   } catch (err) {
     logger.error('Failed to fetch fixtures', err);
+    return { stored: 0, errorCount: 1 };
   }
 }
 
 export async function handler(event) {
   const startTime = Date.now();
-  
+  const startedAt = new Date(startTime).toISOString();
+
   logger.info('Starting weekly global stats ingestion');
-  
+
   try {
     // Get current season_id
     const seasonId = await getSeasonId();
     logger.info('Got season_id', { season_id: seasonId });
-    
+
     // Fetch bootstrap
     const bootstrap = await getBootstrap();
     logger.metric('bootstrap_fetched', 1);
-    
+
     const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
     logger.info('Fetched completed gameweeks', { count: completedGWs.length });
-    
+
     // Populate tables with new schema
-    await storePlayerGameweekData(bootstrap.elements, bootstrap, seasonId);
-    await storeFixtures(bootstrap, seasonId);
-    
+    const playerStatsResult = await storePlayerGameweekData(bootstrap.elements, bootstrap, seasonId);
+    const fixturesResult = await storeFixtures(bootstrap, seasonId);
+
     const duration = Date.now() - startTime;
     logger.metric('ingestion_duration_ms', duration);
-    
+
+    const summary = {
+      season_id: seasonId,
+      player_event_stats_stored: playerStatsResult.itemsStored,
+      player_event_stats_errors: playerStatsResult.errorCount,
+      fixtures_stored: fixturesResult.stored,
+      fixtures_errors: fixturesResult.errorCount
+    };
+
+    await recordIngestionRun({ event, startedAt, status: 'success', summary });
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -243,9 +280,10 @@ export async function handler(event) {
         timestamp: new Date().toISOString()
       })
     };
-    
+
   } catch (err) {
     logger.error('Weekly ingestion failed', err);
+    await recordIngestionRun({ event, startedAt, status: 'failure', errorMessage: err.message });
     return {
       statusCode: 500,
       body: JSON.stringify({

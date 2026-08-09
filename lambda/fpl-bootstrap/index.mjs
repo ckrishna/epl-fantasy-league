@@ -10,6 +10,34 @@ const logger = {
   metric: (name, value) => console.log(JSON.stringify({ level: 'METRIC', timestamp: new Date().toISOString(), metric: name, value }))
 };
 
+// Writes one row per invocation to ingestion_runs -- the audit table this project
+// never had (see DATA_MODEL.md's "no table tracks nightly/weekly ingestion run
+// history" gap). `trigger` is derived from the Lambda event shape: EventBridge's own
+// scheduled invocations always carry `source: "aws.events"`, which is how this Lambda
+// was discovered to have NO EventBridge rule at all -- it only ever runs manually.
+// Never let a failure here fail the actual ingestion job, same resilience pattern
+// already used everywhere else in this codebase (e.g. genbi.mjs's budget-warning
+// email).
+async function recordIngestionRun({ event, startedAt, status, summary, errorMessage }) {
+  try {
+    await dynamodb.send(new PutCommand({
+      TableName: 'ingestion_runs',
+      Item: {
+        function_name: 'fpl-bootstrap',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        duration_ms: Date.now() - new Date(startedAt).getTime(),
+        status,
+        trigger: event?.source === 'aws.events' ? 'scheduled' : 'manual',
+        summary: summary ?? {},
+        error_message: errorMessage ?? null
+      }
+    }));
+  } catch (err) {
+    logger.error('Failed to record ingestion_runs entry', err);
+  }
+}
+
 async function getBootstrap() {
   try {
     const response = await fetch(`${FPL_API}/bootstrap-static/`);
@@ -264,9 +292,10 @@ async function storeEvents(events, seasonId) {
 
 export async function handler(event) {
   const startTime = Date.now();
-  
+  const startedAt = new Date(startTime).toISOString();
+
   logger.info('Starting bootstrap data ingestion');
-  
+
   try {
     // Get current season
     const seasonId = await getSeasonId();
@@ -294,7 +323,9 @@ export async function handler(event) {
     
     logger.info('Bootstrap ingestion complete', summary);
     logger.metric('bootstrap_duration_ms', duration);
-    
+
+    await recordIngestionRun({ event, startedAt, status: 'success', summary });
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -304,9 +335,10 @@ export async function handler(event) {
         timestamp: new Date().toISOString()
       })
     };
-    
+
   } catch (err) {
     logger.error('Bootstrap ingestion failed', err);
+    await recordIngestionRun({ event, startedAt, status: 'failure', errorMessage: err.message });
     return {
       statusCode: 500,
       body: JSON.stringify({
