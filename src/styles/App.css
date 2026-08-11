@@ -38,8 +38,14 @@
   --accent: #667eea;
   --accent-hover: #5568d3;
   --accent-soft: rgba(102, 126, 234, 0.1);
-  --stats-bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --stats-card-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  /* Was a loud purple/violet gradient (#667eea -> #764ba2) wrapping the whole page --
+     a completely different visual language from the navy header/tabs everywhere else,
+     and the single biggest source of "jazz" on the page. Toned down to a near-neutral
+     gradient in the app's own gray scale so Stats reads as part of the same app instead
+     of a separate, louder one; --accent still carries the page's identity via buttons,
+     focus rings, and the answer-box border. */
+  --stats-bg-gradient: linear-gradient(135deg, var(--gray-50) 0%, var(--gray-100) 100%);
+  --stats-card-shadow: var(--shadow-lg);
 
   --info-bg: #eff6ff;
   --info-text: #1e40af;
@@ -89,8 +95,8 @@
   --accent: #8b9bf5;
   --accent-hover: #a5b3f8;
   --accent-soft: rgba(139, 155, 245, 0.16);
-  --stats-bg-gradient: linear-gradient(135deg, #1c1c28 0%, #0a0a0f 100%);
-  --stats-card-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  --stats-bg-gradient: linear-gradient(135deg, var(--gray-50) 0%, var(--bg-page) 100%);
+  --stats-card-shadow: var(--shadow-lg);
 
   --info-bg: rgba(91, 155, 240, 0.12);
   --info-text: #93c5fd;
@@ -114,9 +120,27 @@
    whose content (header + tabs + card + footer) exceeds one screen shows the browser's
    own default background below the fold instead of body's. Invisible in light mode
    (the page background is already white-ish, blends with the default), but exposed as
-   a jarring white band in dark mode once body's background is actually dark. */
+   a jarring white band in dark mode once body's background is actually dark.
+
+   background is set on BOTH html and body (not just body): Mobile Safari paints the
+   safe-area strip behind the notch/status-bar, and the rubber-band overscroll region
+   at the top/bottom, using <html>'s own background -- if only <body> has one, that
+   strip stays the browser's default white regardless of theme. index.html's
+   theme-color meta tag covers the actual status-bar icons; this covers the page canvas
+   itself extending under it (viewport-fit=cover in index.html is what allows that).
+
+   overflow-x: hidden is a defensive floor against any single element (a wide table, an
+   unwrapped header row, a horizontal-scroll chip list) pushing the whole document wider
+   than the viewport -- symptom was a page that renders shifted right with a blank strip
+   on the left, worst on narrower phones. */
 html, body {
   min-height: 100%;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+html {
+  background: var(--bg-page);
 }
 
 body {
@@ -157,10 +181,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0.7rem clamp(1rem, 3vw, 1.5rem);
+  padding: 0.6rem clamp(0.75rem, 3vw, 1.5rem);
 }
 
 .app-header-controls {
@@ -306,9 +331,20 @@ body {
 .app-content {
   flex: 1;
   max-width: 1400px;
-  margin: clamp(1rem, 3vw, 2rem) auto;
+  margin: clamp(0.5rem, 3vw, 2rem) auto;
   width: 100%;
-  padding: 0 clamp(1rem, 2vw, 1.5rem);
+  padding: 0 clamp(0.5rem, 2vw, 1.5rem);
+}
+
+/* Below ~480px, every side inset compounds (this padding + each page's own card
+   padding), which is exactly what was eating real estate on a phone screen -- drop
+   this layer's contribution to near-zero and let each page's own card padding do the
+   remaining, single layer of spacing. */
+@media (max-width: 480px) {
+  .app-content {
+    padding: 0 0.4rem;
+    margin-top: 0.5rem;
+  }
 }
 
 /* Footer */

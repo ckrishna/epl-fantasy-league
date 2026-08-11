@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets our own background extend under the notch/status-bar
+         safe area instead of Safari filling that strip with its own default white,
+         which is what was showing as a "white border" in dark mode. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Matches the browser chrome (status bar / task switcher) to the app's own
+         background per color scheme, instead of defaulting to white. -->
+    <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0f" media="(prefers-color-scheme: dark)" />
     <title>EPL Fantasy League</title>
   </head>
   <body>

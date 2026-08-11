@@ -236,3 +236,12 @@
     padding: 1.5rem 1rem;
   }
 }
+
+/* Combined with .app-content's own reduced side padding below 480px, this keeps a
+   single reasonable inset instead of two padding layers stacking up and eating a
+   fifth of a phone screen's width. */
+@media (max-width: 480px) {
+  .standings-page {
+    padding: 1.1rem 0.75rem;
+  }
+}

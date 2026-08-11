@@ -35,6 +35,17 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
+
+    // index.html's <meta name="theme-color"> tags only track the OS's own light/dark
+    // preference (media queries), so they never move if someone's OS is light but they
+    // tap our in-app toggle to dark (or vice versa) -- that mismatch is exactly what
+    // left a white status-bar/task-switcher strip showing in dark mode. Overriding the
+    // meta tag's content directly here keeps the browser chrome in sync with whatever
+    // is actually selected, not just the OS default.
+    const bg = theme === 'dark' ? '#0a0a0f' : '#f3f4f6';
+    document.querySelectorAll('meta[name="theme-color"]').forEach((tag) => {
+      tag.setAttribute('content', bg);
+    });
   }, [theme]);
 
   const currentSeason = seasons.find((s) => s.current)?.season || null;

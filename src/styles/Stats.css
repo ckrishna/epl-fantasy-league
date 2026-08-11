@@ -25,6 +25,14 @@
   flex-direction: column;
   gap: 1.5rem;
   overflow-y: auto;
+  /* Grid items default to min-width: auto, which resolves to their content's
+     min-content size -- normally harmless, but .queries-list's mobile horizontal-
+     scroll row (nowrap chip buttons) has a large min-content width, and without this
+     override that was forcing .stats-container's grid track (and the whole page)
+     wider than the viewport instead of just scrolling within itself. This is almost
+     certainly what was showing as the League Intelligence page rendering shifted
+     right with a blank strip on the left on narrow phones. */
+  min-width: 0;
 }
 
 .stats-left h2 {
@@ -166,6 +174,9 @@
   flex-direction: column;
   gap: 1.5rem;
   overflow-y: auto;
+  /* Same reasoning as .stats-left -- the answer-box table's horizontal-scroll
+     fallback has the same min-content-forces-the-grid-wider risk. */
+  min-width: 0;
 }
 
 /* Empty State */
@@ -582,5 +593,23 @@
   .result-metadata {
     flex-wrap: wrap;
     row-gap: 0.5rem;
+  }
+}
+
+/* Same rationale as App.css's .app-content and the other pages' card padding --
+   stacking this page's own padding on top of .app-content's ate a big chunk of a
+   phone screen. One reduced inset here, layered on .app-content's own reduced inset
+   below 480px, instead of two full-size ones. */
+@media (max-width: 480px) {
+  .stats-page {
+    padding: 0.5rem;
+  }
+
+  .stats-left {
+    padding: 0.85rem;
+  }
+
+  .stats-right {
+    padding: 1rem;
   }
 }

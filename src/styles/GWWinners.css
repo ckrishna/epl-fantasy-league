@@ -192,3 +192,12 @@
     padding: 0.75rem 0.5rem;
   }
 }
+
+/* Same rationale as Standings.css's 480px override -- one reasonable inset instead of
+   this card's padding stacking with .app-content's, which is what was pushing the card
+   in noticeably from both edges on a phone screen. */
+@media (max-width: 480px) {
+  .gw-winners-page {
+    padding: 1.1rem 0.75rem;
+  }
+}
