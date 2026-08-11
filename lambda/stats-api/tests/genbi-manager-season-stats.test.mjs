@@ -20,8 +20,8 @@ import { installDynamoMock } from './helpers/mock-dynamo.mjs';
 import { installBedrockMock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
-function entryGwRow({ entryId, name, gw, ptsThisWeek, ptsTotal, transfersMade, transferHit, chip }) {
-  return {
+function entryGwRow({ entryId, name, gw, ptsThisWeek, ptsTotal, transfersMade, transferHit, chip, chipTotalsManual }) {
+  const row = {
     entry_id: entryId,
     season: '2025/26',
     manager_name: name,
@@ -32,6 +32,8 @@ function entryGwRow({ entryId, name, gw, ptsThisWeek, ptsTotal, transfersMade, t
     transfer_cost: transferHit,
     active_chip: chip || null
   };
+  if (chipTotalsManual) row.chip_totals_manual = chipTotalsManual;
+  return row;
 }
 
 function pickRow({ entryId, gw, isCaptain, isBench, points, multiplier }) {
@@ -115,6 +117,60 @@ test('[current bug] manager_season_stats includes transfer activity, chips, benc
     assert.deepStrictEqual(m.chips_used, [{ chip: 'wildcard', gameweek: 2 }]);
     assert.strictEqual(m.bench_points_wasted, 8, 'Expected 5 (GW1 bench) + 3 (GW2 bench) -- raw points, no multiplier applied');
     assert.strictEqual(m.captain_points_season, 100, 'Expected (20 x 2) + (30 x 2) -- captain multiplier applied to each raw score, not summed raw');
+  } finally {
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
+test('[current bug] chips_used_totals surfaces the manually-imported season fallback when per-gameweek active_chip is unavailable', async () => {
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    entryGw: () => ({
+      Items: [
+        // No `chip` -- active_chip is null on every row, matching 2025/26's real state.
+        // chip_totals_manual only lives on the latest row, same as import-chip-totals.mjs writes it.
+        entryGwRow({ entryId: 101, name: 'Da Movement', gw: 1, ptsThisWeek: 60, ptsTotal: 60, transfersMade: 0, transferHit: 0 }),
+        entryGwRow({
+          entryId: 101, name: 'Da Movement', gw: 2, ptsThisWeek: 80, ptsTotal: 140, transfersMade: 0, transferHit: 0,
+          chipTotalsManual: { wildcard: 2, freehit: 2, bboost: 2, '3xc': 2 }
+        })
+      ]
+    })
+  }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'How many chips has each manager used this season?', season: '2025/26' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
+
+    const m = stats.find((s) => s.manager === 'Da Movement');
+    assert.deepStrictEqual(m.chips_used, [], 'No per-gameweek attribution exists for this manager/season');
+    assert.deepStrictEqual(m.chips_used_totals, { wildcard: 2, freehit: 2, bboost: 2, '3xc': 2 });
+  } finally {
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
+test('[regression] chips_used_totals stays null when no manual import exists for that manager', async () => {
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    entryGw: () => ({
+      Items: [
+        entryGwRow({ entryId: 101, name: 'Da Movement', gw: 1, ptsThisWeek: 60, ptsTotal: 60, transfersMade: 0, transferHit: 0 })
+      ]
+    })
+  }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'How many chips has each manager used this season?', season: '2025/26' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
+
+    assert.strictEqual(stats[0].chips_used_totals, null);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

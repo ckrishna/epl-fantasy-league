@@ -8,6 +8,25 @@
 // values -- not plausible across 11 managers and up to 38 gameweeks each. index.mjs is
 // now fixed to read the correct top-level field going forward.
 //
+// CORRECTION (2026-08-11): the assumption below -- that /entry/{id}/event/{gw}/picks/
+// stays accessible indefinitely for past seasons -- was WRONG and never actually
+// verified before this script was written. Running it against live 2025/26 data
+// returned HTTP 404 for every request, including for entry_id=6409595 ("Da Movement"),
+// a manager confirmed via direct DynamoDB queries to currently exist with valid data.
+// A dead/deleted account can't explain that. The real behavior: this endpoint is
+// season-bound the same way /event/{gw}/live/ is -- it stops serving a season's data
+// once a new season exists on FPL's backend, regardless of whether the account is
+// still active. There is no known way to recover 2025/26's active_chip via this
+// endpoint. See DATA_MODEL.md's "Correction (2026-08-11)" note under fpl_entry_gameweek.
+//
+// This script is left in place because it's harmless and WILL work correctly if run
+// against gameweeks within a season that's still in progress (e.g. reconciling a data
+// gap mid-2026/27) -- just not for a season that has already rolled over. Do not run
+// this for 2025/26 expecting it to do anything but 404.
+//
+// (Original, incorrect reasoning kept below for context on what was believed and why
+// it seemed plausible at the time.)
+//
 // Unlike the fpl_entry_picks.points bug, this data is NOT lost -- it's not FPL's
 // season-bound /event/{gw}/live/ endpoint (which stops serving old seasons once a new
 // one starts), it's each manager's own historical picks record
@@ -22,7 +41,8 @@
 //
 // Run this locally (needs your AWS credentials + network access to
 // fantasy.premierleague.com). ~396 rows at a rate-limited ~200ms/request -> a couple of
-// minutes.
+// minutes. Will do nothing but log 404s for an already-concluded season -- see the
+// correction note above.
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';

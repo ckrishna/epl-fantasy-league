@@ -1,0 +1,126 @@
+{
+  "league_id": 212889,
+  "league_name": "Carpe Diem",
+  "max_gameweek": 38,
+  "updated_at": "2026-05-26T04:51:44Z",
+  "players": [
+    {
+      "name": "Michael Kojo Brown",
+      "team_name": "Da Movement",
+      "total_points": 2378,
+      "earnings": 115.0,
+      "chips": { "wildcard": 2, "freehit": 2, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Himanish Raghunath",
+      "team_name": "Nish's Team",
+      "total_points": 2299,
+      "earnings": 60.0,
+      "chips": { "wildcard": 2, "freehit": 2, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Sushil Suvarna",
+      "team_name": "Suberox",
+      "total_points": 2237,
+      "earnings": 25.0,
+      "chips": { "wildcard": 2, "freehit": 2, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Vineet Dhiman",
+      "team_name": "Spursy Spurs",
+      "total_points": 2220,
+      "earnings": 15.0,
+      "chips": { "wildcard": 1, "freehit": 1, "bboost": 1, "3xc": 1 }
+    },
+    {
+      "name": "aditya shringarpure",
+      "team_name": "Biosfear",
+      "total_points": 2212,
+      "earnings": 20.0,
+      "chips": { "wildcard": 2, "freehit": 2, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Sricharan Murugesan",
+      "team_name": "Gobi FC",
+      "total_points": 2156,
+      "earnings": 32.5,
+      "chips": { "wildcard": 2, "freehit": 1, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Vinay Swaminathan",
+      "team_name": "Boltzman",
+      "total_points": 2101,
+      "earnings": 5.0,
+      "chips": { "wildcard": 1, "freehit": 2, "bboost": 1, "3xc": 2 }
+    },
+    {
+      "name": "Chetan Bk",
+      "team_name": "Benficaaaaaaa",
+      "total_points": 2009,
+      "earnings": 15.0,
+      "chips": { "wildcard": 1, "freehit": 1, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Devin Jackson",
+      "team_name": "2 Gorls 1 Klorp",
+      "total_points": 1968,
+      "earnings": 5.0,
+      "chips": { "wildcard": 1, "freehit": 0, "bboost": 2, "3xc": 1 }
+    },
+    {
+      "name": "nihar namjoshi",
+      "team_name": "4-5-2",
+      "total_points": 1821,
+      "earnings": 2.5,
+      "chips": { "wildcard": 2, "freehit": 2, "bboost": 2, "3xc": 2 }
+    },
+    {
+      "name": "Sunil Mathew",
+      "team_name": "Team",
+      "total_points": 1660,
+      "earnings": 5.0,
+      "chips": { "wildcard": 0, "freehit": 0, "bboost": 0, "3xc": 0 }
+    }
+  ],
+  "weekly_results": [
+    { "gw": 1, "name": "Michael Kojo Brown", "points": 74, "prize": 5.0 },
+    { "gw": 2, "name": "Himanish Raghunath", "points": 64, "prize": 5.0 },
+    { "gw": 3, "name": "Vineet Dhiman", "points": 58, "prize": 5.0 },
+    { "gw": 4, "name": "Sushil Suvarna", "points": 87, "prize": 5.0 },
+    { "gw": 5, "name": "Michael Kojo Brown", "points": 65, "prize": 5.0 },
+    { "gw": 6, "name": "aditya shringarpure", "points": 79, "prize": 5.0 },
+    { "gw": 7, "name": "Sricharan Murugesan", "points": 83, "prize": 5.0 },
+    { "gw": 8, "name": "Sricharan Murugesan", "points": 77, "prize": 5.0 },
+    { "gw": 9, "name": "Michael Kojo Brown", "points": 70, "prize": 5.0 },
+    { "gw": 10, "name": "Himanish Raghunath", "points": 87, "prize": 5.0 },
+    { "gw": 11, "name": "Michael Kojo Brown", "points": 42, "prize": 5.0 },
+    { "gw": 12, "name": "Sricharan Murugesan", "points": 60, "prize": 5.0 },
+    { "gw": 13, "name": "Michael Kojo Brown", "points": 74, "prize": 5.0 },
+    { "gw": 14, "name": "aditya shringarpure", "points": 88, "prize": 5.0 },
+    { "gw": 15, "name": "Chetan Bk", "points": 87, "prize": 5.0 },
+    { "gw": 16, "name": "Chetan Bk", "points": 87, "prize": 5.0 },
+    { "gw": 17, "name": "Sricharan Murugesan", "points": 100, "prize": 2.5 },
+    { "gw": 17, "name": "nihar namjoshi", "points": 100, "prize": 2.5 },
+    { "gw": 18, "name": "Himanish Raghunath", "points": 58, "prize": 5.0 },
+    { "gw": 19, "name": "Sricharan Murugesan", "points": 54, "prize": 5.0 },
+    { "gw": 20, "name": "aditya shringarpure", "points": 66, "prize": 5.0 },
+    { "gw": 21, "name": "Chetan Bk", "points": 68, "prize": 5.0 },
+    { "gw": 22, "name": "Himanish Raghunath", "points": 52, "prize": 5.0 },
+    { "gw": 23, "name": "Sunil Mathew", "points": 65, "prize": 5.0 },
+    { "gw": 24, "name": "Sushil Suvarna", "points": 76, "prize": 5.0 },
+    { "gw": 25, "name": "Devin Jackson", "points": 77, "prize": 5.0 },
+    { "gw": 26, "name": "Sricharan Murugesan", "points": 73, "prize": 5.0 },
+    { "gw": 27, "name": "Sushil Suvarna", "points": 46, "prize": 5.0 },
+    { "gw": 28, "name": "Michael Kojo Brown", "points": 81, "prize": 5.0 },
+    { "gw": 29, "name": "Himanish Raghunath", "points": 87, "prize": 5.0 },
+    { "gw": 30, "name": "Michael Kojo Brown", "points": 56, "prize": 5.0 },
+    { "gw": 31, "name": "Michael Kojo Brown", "points": 62, "prize": 5.0 },
+    { "gw": 32, "name": "Vineet Dhiman", "points": 80, "prize": 5.0 },
+    { "gw": 33, "name": "Michael Kojo Brown", "points": 134, "prize": 5.0 },
+    { "gw": 34, "name": "Himanish Raghunath", "points": 75, "prize": 5.0 },
+    { "gw": 35, "name": "Vineet Dhiman", "points": 68, "prize": 5.0 },
+    { "gw": 36, "name": "Sricharan Murugesan", "points": 97, "prize": 5.0 },
+    { "gw": 37, "name": "Vinay Swaminathan", "points": 90, "prize": 5.0 },
+    { "gw": 38, "name": "aditya shringarpure", "points": 83, "prize": 5.0 }
+  ]
+}

@@ -219,6 +219,7 @@ async function getManagerSeasonAggregates(season) {
           total_transfers_made: 0,
           total_transfer_hits: 0,
           chips_used: [],
+          chips_used_totals: null,
           bench_points_wasted: 0,
           captain_points_season: 0
         });
@@ -242,6 +243,13 @@ async function getManagerSeasonAggregates(season) {
       m.total_transfer_hits += Number(row.transfer_cost || 0);
       if (row.active_chip) {
         m.chips_used.push({ chip: row.active_chip, gameweek: row.gameweek });
+      }
+      // Manual fallback for seasons where per-gameweek active_chip is unrecoverable
+      // (2025/26 -- see DATA_MODEL.md's "Correction (2026-08-11)" note). Written by
+      // import-chip-totals.mjs onto exactly one row per manager, so a straight
+      // assignment (not accumulation) is correct here.
+      if (row.chip_totals_manual) {
+        m.chips_used_totals = row.chip_totals_manual;
       }
       // points_total is cumulative as-of that gameweek -- the highest value seen across
       // all rows for a manager is their true season total, same idea as taking the last
@@ -276,6 +284,7 @@ async function getManagerSeasonAggregates(season) {
       total_transfers_made: m.total_transfers_made,
       total_transfer_hits: m.total_transfer_hits,
       chips_used: m.chips_used,
+      chips_used_totals: m.chips_used_totals,
       bench_points_wasted: m.bench_points_wasted,
       captain_points_season: m.captain_points_season
     }));
