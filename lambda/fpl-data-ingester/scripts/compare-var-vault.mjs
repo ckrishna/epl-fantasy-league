@@ -86,11 +86,16 @@ async function main() {
       continue;
     }
     if (!vault) {
-      mismatchDetails.push(`GW${gw}: we have a winner (${ours.map(w => w.manager_name).join(', ')}) but VAR Vault has none -- source only covers GW1-${source.max_gameweek}.`);
+      mismatchDetails.push(`GW${gw}: we have a winner (${ours.map(w => w.team_name).join(', ')}) but VAR Vault has none -- source only covers GW1-${source.max_gameweek}.`);
       continue;
     }
 
-    const ourNames = new Set(ours.map(w => w.manager_name));
+    // IMPORTANT: our schema names these fields backwards from what they sound like.
+    // fpl_entry_gameweek.manager_name is actually the FPL TEAM name (e.g. "Da
+    // Movement"); .team_name is actually the real PERSON name (e.g. "Michael Kojo
+    // Brown") -- see getLeagueManagers() in index.mjs. VAR Vault's "name" field is the
+    // real person name, so it matches our .team_name, not .manager_name.
+    const ourNames = new Set(ours.map(w => w.team_name));
     const vaultNames = new Set(vault.map(v => v.name));
     const namesMatch = ourNames.size === vaultNames.size && [...ourNames].every(n => vaultNames.has(n));
 
@@ -123,7 +128,9 @@ async function main() {
 
   const ourTotalByName = new Map();
   for (const row of gwRows) {
-    const name = row.manager_name;
+    // Same backwards-field-name note as above: .team_name holds the real person name,
+    // which is what VAR Vault's players[].name matches against.
+    const name = row.team_name;
     if (!name) continue;
     const total = Number(row.points_total || 0);
     if (!ourTotalByName.has(name) || total > ourTotalByName.get(name)) {
