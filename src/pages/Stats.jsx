@@ -1,10 +1,12 @@
 // src/pages/Stats.jsx
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { queryStats, submitFeedback } from '../api/client';
 import '../styles/Stats.css';
 
 const SUGGESTED_QUERIES = [
-  "Who has the most GW wins this season?",
+  "Which player is a differential this week?",
   "Which managers are in form?",
   "Best captain picks this season?"
 ];
@@ -145,8 +147,8 @@ export default function Stats({ season = null }) {
             <div className="result-canvas">
               <h3>{result.title}</h3>
               <p className="asked-question">"{result.question}"</p>
-              <div className="answer-box">
-                <p>{result.answer}</p>
+              <div className="answer-box markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.answer}</ReactMarkdown>
               </div>
               <div className="result-metadata">
                 <span className="tokens">Tokens: {result.usage?.output_tokens}</span>

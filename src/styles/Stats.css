@@ -261,9 +261,110 @@
   font-size: 0.95rem;
 }
 
+/* Claude's answers come back as markdown (headers, tables, bold, lists) --
+   rendered via react-markdown + remark-gfm in Stats.jsx. These rules style
+   the actual elements it produces, scoped to .answer-box so they don't leak
+   into the rest of the page. */
+.answer-box > *:first-child {
+  margin-top: 0;
+}
+.answer-box > *:last-child {
+  margin-bottom: 0;
+}
+
 .answer-box p {
-  margin: 0;
-  white-space: pre-wrap;
+  margin: 0 0 0.85rem 0;
+}
+
+.answer-box h1,
+.answer-box h2,
+.answer-box h3,
+.answer-box h4 {
+  margin: 1.1rem 0 0.6rem 0;
+  color: #1f2937;
+  line-height: 1.3;
+}
+.answer-box h1 { font-size: 1.25rem; }
+.answer-box h2 { font-size: 1.15rem; }
+.answer-box h3 { font-size: 1.05rem; }
+.answer-box h4 { font-size: 0.98rem; }
+
+.answer-box strong {
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.answer-box ul,
+.answer-box ol {
+  margin: 0 0 0.85rem 0;
+  padding-left: 1.4rem;
+}
+.answer-box li {
+  margin-bottom: 0.3rem;
+}
+
+.answer-box code {
+  background: #eef0f4;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+  color: #4338ca;
+}
+
+.answer-box blockquote {
+  margin: 0 0 0.85rem 0;
+  padding-left: 0.9rem;
+  border-left: 3px solid #d1d5db;
+  color: #6b7280;
+}
+
+.answer-box table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+  background: #ffffff;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px #e5e7eb;
+}
+
+.answer-box th,
+.answer-box td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.answer-box thead th {
+  background: #f3f4f6;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.answer-box tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.answer-box tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+/* Horizontal scroll on narrow screens instead of squashing/overflowing the table */
+.answer-box table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.answer-box thead,
+.answer-box tbody,
+.answer-box tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
 }
 
 /* Metadata */
