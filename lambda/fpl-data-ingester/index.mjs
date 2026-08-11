@@ -156,6 +156,38 @@ const response = await fetch(`${FPL_API}/entry/${entryId}/event/${gw}/picks/`, {
   }
 }
 
+// FPL's `/entry/{id}/event/{gw}/picks/` endpoint -- the one storePicks() reads from --
+// never includes a per-pick `points` field. It only ever has `element`, `position`,
+// `multiplier`, `is_captain`, `is_vice_captain`. Per-player gameweek points live on a
+// completely different endpoint, keyed by player element ID, not by manager. Reading
+// `pick.points` (as storePicks used to) is *always* undefined, so `pick.points || 0`
+// silently wrote 0 for every single pick, every gameweek, since this table's inception
+// -- confirmed against live data for both GW20 and GW38 of 2025/26 (every one of 3,144
+// scanned rows had points: 0). This is a single per-gameweek fetch (not per-manager),
+// so it's called once per gameweek in gwsToFetch, not once per manager per gameweek.
+async function getLiveGameweekStats(gw) {
+  try {
+    const response = await fetch(`${FPL_API}/event/${gw}/live/`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    const pointsByElement = new Map();
+    for (const el of data.elements || []) {
+      pointsByElement.set(el.id, el.stats?.total_points || 0);
+    }
+    return pointsByElement;
+  } catch (err) {
+    logger.error(`Failed to fetch live stats for GW ${gw}`, err);
+    // Empty map -- storePicks falls back to 0 per pick, same as the pre-fix behavior,
+    // rather than failing the whole ingestion run over one gameweek's live-stats call.
+    return new Map();
+  }
+}
+
 async function storeGameweekSummary(manager, picksData, gw, season) {
   const entryHistory = picksData.entry_history;
 
@@ -191,7 +223,7 @@ async function storeGameweekSummary(manager, picksData, gw, season) {
   }
 }
 
-async function storePicks(manager, picksData, playerMap, gw, season) {
+async function storePicks(manager, picksData, playerMap, gw, season, livePoints = new Map()) {
   const picks = picksData.picks;
   const batch = [];
 
@@ -212,7 +244,13 @@ async function storePicks(manager, picksData, playerMap, gw, season) {
       is_captain: pick.is_captain || false,
       is_vice_captain: pick.is_vice_captain || false,
       multiplier: pick.multiplier || 1,
-      points: pick.points || 0,
+      // Raw points that PLAYER scored this gameweek, independent of squad role --
+      // deliberately NOT multiplied by `multiplier` here, so a benched player's real
+      // (wasted) score stays visible and downstream captain math can apply the
+      // multiplier explicitly wherever it needs to. Sourced from the live per-gameweek
+      // stats endpoint (joined by element id), not pick.points -- see
+      // getLiveGameweekStats for why pick.points itself never worked.
+      points: livePoints.get(pick.element) ?? 0,
       is_starter: pick.position <= 11,
       is_bench: pick.position > 11,
       last_synced: new Date().toISOString()
@@ -288,31 +326,42 @@ export async function handler(event) {
       gws_to_fetch: gwsToFetch.map(g => g.id)
     });
 
+    // Fetch each gameweek's live per-player points ONCE here (not once per manager --
+    // this is the same handful of gameweeks regardless of how many managers there are,
+    // and the per-manager loop below would otherwise redundantly re-fetch it for every
+    // single manager). See getLiveGameweekStats for why this call exists at all: the
+    // picks endpoint itself never carries a points field.
+    const livePointsByGW = new Map();
+    for (const gw of gwsToFetch) {
+      livePointsByGW.set(gw.id, await getLiveGameweekStats(gw.id));
+      apiCallCount += 1;
+    }
+
     // Fetch managers
     const managers = await getLeagueManagers(leagueId);
     apiCallCount += 1;
-    
+
     logger.info('Processing managers', { count: managers.length });
-    
+
     // Process each manager
     for (const manager of managers) {
       logger.info(`Starting manager: ${manager.manager_name}`);
-      
+
       for (const gw of gwsToFetch) {
         const picksData = await getManagerPicksForGW(manager.entry_id, gw.id);
         apiCallCount += 1;
-        
+
         if (!picksData || !picksData.entry_history) {
           logger.info(`No data for GW ${gw.id}`, { manager: manager.manager_name });
           continue;
         }
-        
+
         await storeGameweekSummary(manager, picksData, gw, season);
         dbWriteCount += 1;
 
-        await storePicks(manager, picksData, playerMap, gw, season);
+        await storePicks(manager, picksData, playerMap, gw, season, livePointsByGW.get(gw.id));
         dbWriteCount += picksData.picks.length;
-        
+
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }

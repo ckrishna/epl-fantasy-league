@@ -34,13 +34,18 @@ function entryGwRow({ entryId, name, gw, ptsThisWeek, ptsTotal, transfersMade, t
   };
 }
 
-function pickRow({ entryId, gw, isCaptain, isBench, points }) {
+function pickRow({ entryId, gw, isCaptain, isBench, points, multiplier }) {
   return {
     season: '2025/26',
     entry_id: entryId,
     gameweek: gw,
     is_captain: !!isCaptain,
     is_bench: !!isBench,
+    // Matches storePicks' own default: captains get multiplier 2 unless a triple-
+    // captain chip bumps it to 3; everyone else defaults to 1. `points` here is always
+    // the raw per-player score -- the multiplier is applied separately by whichever
+    // aggregate needs it (captain_points_season does; bench_points_wasted doesn't).
+    multiplier: multiplier ?? (isCaptain ? 2 : 1),
     points
   };
 }
@@ -108,8 +113,36 @@ test('[current bug] manager_season_stats includes transfer activity, chips, benc
     assert.strictEqual(m.total_transfers_made, 3);
     assert.strictEqual(m.total_transfer_hits, 4);
     assert.deepStrictEqual(m.chips_used, [{ chip: 'wildcard', gameweek: 2 }]);
-    assert.strictEqual(m.bench_points_wasted, 8, 'Expected 5 (GW1 bench) + 3 (GW2 bench)');
-    assert.strictEqual(m.captain_points_season, 50, 'Expected 20 (GW1 captain) + 30 (GW2 captain)');
+    assert.strictEqual(m.bench_points_wasted, 8, 'Expected 5 (GW1 bench) + 3 (GW2 bench) -- raw points, no multiplier applied');
+    assert.strictEqual(m.captain_points_season, 100, 'Expected (20 x 2) + (30 x 2) -- captain multiplier applied to each raw score, not summed raw');
+  } finally {
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
+test('[current bug] captain_points_season applies the real multiplier, including triple-captain (x3), not a flat x2', async () => {
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    entryGw: () => ({
+      Items: [
+        entryGwRow({ entryId: 101, name: 'Da Movement', gw: 1, ptsThisWeek: 60, ptsTotal: 60, transfersMade: 0, transferHit: 0, chip: 'triple_captain' })
+      ]
+    }),
+    picks: () => ({
+      Items: [
+        pickRow({ entryId: 101, gw: 1, isCaptain: true, points: 15, multiplier: 3 })
+      ]
+    })
+  }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'How many transfers has each manager made?', season: '2025/26' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
+
+    assert.strictEqual(stats[0].captain_points_season, 45, 'Expected 15 x 3 (the stored multiplier for a triple-captain pick), not 15 x 2');
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

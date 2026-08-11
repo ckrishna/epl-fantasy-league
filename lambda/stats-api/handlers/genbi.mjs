@@ -254,9 +254,15 @@ async function getManagerSeasonAggregates(season) {
       const name = nameByEntryId.get(row.entry_id);
       if (!name) continue;
       const m = getManager(name);
+      // `points` on fpl_entry_picks is each PLAYER's raw gameweek score, not multiplied
+      // by squad role (see fpl-data-ingester's storePicks comment) -- correct as-is for
+      // bench_points_wasted (a benched player's raw score IS what got wasted, since
+      // their multiplier was 0 regardless). Captaincy needs the multiplier applied
+      // explicitly here instead: a captain's actual contribution is raw points x 2 (or
+      // x3 for a triple-captain chip), not the raw score alone.
       const pts = Number(row.points || 0);
       if (row.is_bench) m.bench_points_wasted += pts;
-      if (row.is_captain) m.captain_points_season += pts;
+      if (row.is_captain) m.captain_points_season += pts * (Number(row.multiplier) || 2);
     }
 
     return Array.from(managers.values()).map((m) => ({
