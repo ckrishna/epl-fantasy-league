@@ -109,8 +109,14 @@
   box-sizing: border-box;
 }
 
+/* min-height, not height -- `height: 100%` caps the background box at exactly one
+   viewport tall and does NOT stretch to cover content taller than that, so any page
+   whose content (header + tabs + card + footer) exceeds one screen shows the browser's
+   own default background below the fold instead of body's. Invisible in light mode
+   (the page background is already white-ish, blends with the default), but exposed as
+   a jarring white band in dark mode once body's background is actually dark. */
 html, body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
