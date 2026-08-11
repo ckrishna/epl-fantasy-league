@@ -201,6 +201,8 @@ What DOES still have it: `player_event_stats`, populated weekly by a completely 
 
 `lambda/fpl-data-ingester/scripts/backfill-picks-points.mjs` (added 2026-08-11) backfills `fpl_entry_picks.points` for a completed season by joining each row to `player_event_stats` on `season_id` + `gameweek` + `player_id` — entirely against our own DynamoDB tables, no FPL API calls at all. Backfilled rows get `points_backfilled: true` / `points_backfill_source: 'player_event_stats'` (same marker convention as the GW26 standings backfill below), so they stay distinguishable from rows written by the fixed live ingester going forward.
 
+**Run 2026-08-11 for "2025/26":** 6,209 of 6,337 rows (98%) successfully backfilled with real points. The remaining 128 rows (all from GW31 and GW34) stayed at `points: 0` — not a new gap, this is the same known `player_event_stats` hole already documented above (~150-250 players missing for those two specific gameweeks), so there was genuinely nothing to backfill them from.
+
 ### `fpl_league_standings`
 Partition key `season_event` (S, `"{season_string}#{gameweek}"`), sort key `manager_id` (N). 396 items (was 385 as of the describe-table snapshot; +11 from the GW26 backfill below).
 **Has a GSI: `manager_id-season_event-index`** (HASH `manager_id`, RANGE `season_event`) — not currently used by any code, but would let you query one manager's full season history directly instead of scanning.
