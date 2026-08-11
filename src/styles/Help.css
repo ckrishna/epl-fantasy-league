@@ -1,13 +1,13 @@
 /* src/styles/Help.css */
 .help-page {
-  background: white;
+  background: var(--bg-surface);
   border-radius: 12px;
   padding: clamp(1.5rem, 5vw, 2.5rem);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
 }
 
 .help-page h2 {
-  color: #003d7a;
+  color: var(--primary);
   margin-bottom: 1.5rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
@@ -19,26 +19,26 @@
 }
 
 .help-card {
-  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
-  border: 1px solid #e5e7eb;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
   transition: all 0.2s ease;
 }
 
 .help-card:hover {
-  border-color: #003d7a;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .help-card h3 {
-  color: #003d7a;
+  color: var(--primary);
   font-size: 1.05rem;
   margin: 0 0 0.6rem;
 }
 
 .help-card p {
-  color: #374151;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   line-height: 1.6;
   margin: 0 0 0.5rem;
@@ -57,13 +57,13 @@
 }
 
 .help-card li {
-  color: #4b5563;
+  color: var(--gray-600);
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
 .help-card li::marker {
-  color: #ffb81c;
+  color: var(--secondary);
 }
 
 /* Let the "How It Works" and "Browser Support" cards span the full row on wider

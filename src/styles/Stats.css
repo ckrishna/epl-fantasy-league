@@ -2,7 +2,7 @@
 
 .stats-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--stats-bg-gradient);
   padding: 2rem;
 }
 
@@ -17,10 +17,10 @@
 
 /* Left Panel */
 .stats-left {
-  background: white;
+  background: var(--bg-surface);
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--stats-card-shadow);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -30,7 +30,7 @@
 .stats-left h2 {
   margin: 0;
   font-size: 1.8rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 /* Custom Question Input */
@@ -43,21 +43,23 @@
 .question-input {
   flex: 1;
   padding: 0.75rem;
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--border);
   border-radius: 8px;
   font-size: 0.95rem;
+  background: var(--bg-surface);
+  color: var(--text-primary);
   transition: border-color 0.2s;
 }
 
 .question-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .submit-btn {
   padding: 0.75rem 1.25rem;
-  background: #667eea;
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: 8px;
@@ -67,7 +69,7 @@
 }
 
 .submit-btn:hover:not(:disabled) {
-  background: #5568d3;
+  background: var(--accent-hover);
 }
 
 .submit-btn:disabled {
@@ -77,7 +79,7 @@
 
 .divider {
   text-align: center;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 0.9rem;
   margin: 0.5rem 0;
 }
@@ -94,25 +96,25 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
-  background: #f9fafb;
-  border: 2px solid #e5e7eb;
+  background: var(--bg-surface-alt);
+  border: 2px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
   font-size: 0.9rem;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .query-btn:hover:not(:disabled) {
-  border-color: #667eea;
-  background: #f3f4f6;
+  border-color: var(--accent);
+  background: var(--bg-surface-alt-2);
 }
 
 .query-btn.active {
-  background: #667eea;
+  background: var(--accent);
   color: white;
-  border-color: #667eea;
+  border-color: var(--accent);
 }
 
 .query-btn:disabled {
@@ -130,7 +132,7 @@
 }
 
 .query-arrow {
-  color: #d1d5db;
+  color: var(--gray-300);
   font-weight: bold;
 }
 
@@ -140,8 +142,8 @@
 
 /* Info Box */
 .info-box {
-  background: #eff6ff;
-  border-left: 4px solid #667eea;
+  background: var(--info-bg);
+  border-left: 4px solid var(--accent);
   padding: 1rem;
   border-radius: 6px;
   margin-top: auto;
@@ -150,16 +152,16 @@
 .info-box p {
   margin: 0;
   font-size: 0.85rem;
-  color: #1e40af;
+  color: var(--info-text);
   line-height: 1.5;
 }
 
 /* Right Panel */
 .stats-right {
-  background: white;
+  background: var(--bg-surface);
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--stats-card-shadow);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -174,7 +176,7 @@
   justify-content: center;
   height: 100%;
   gap: 1rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .empty-icon {
@@ -186,7 +188,9 @@
   font-size: 1.1rem;
 }
 
-/* Loading State */
+/* Loading State -- a "Churning" card (pixel-grid icon + label + live elapsed timer)
+   instead of a bare spinner, so a slow GenBI call reads as visible progress rather
+   than an indeterminate wait. */
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -196,22 +200,46 @@
   gap: 1.5rem;
 }
 
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #e5e7eb;
-  border-top: 4px solid #667eea;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.churn-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 1.4rem;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.pixel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 3px;
+  width: 20px;
+  height: 20px;
 }
 
-.loading-state p {
-  color: #6b7280;
-  font-weight: 500;
+.pixel {
+  background: var(--accent);
+  border-radius: 1.5px;
+  animation: pixel-pulse 1.35s ease-in-out infinite;
+}
+
+@keyframes pixel-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.churn-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.churn-time {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 /* Error State */
@@ -220,21 +248,21 @@
   flex-direction: column;
   gap: 1rem;
   padding: 1.5rem;
-  background: #fef2f2;
-  border: 2px solid #fecaca;
+  background: var(--danger-bg);
+  border: 2px solid var(--danger-border);
   border-radius: 8px;
 }
 
 .error-title {
   margin: 0;
   font-weight: 600;
-  color: #991b1b;
+  color: var(--danger-text-strong);
   font-size: 1.1rem;
 }
 
 .error-message {
   margin: 0;
-  color: #7f1d1d;
+  color: var(--danger-text);
   font-size: 0.95rem;
 }
 
@@ -248,16 +276,16 @@
 .result-canvas h3 {
   margin: 0;
   font-size: 1.5rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .answer-box {
-  background: #f9fafb;
-  border-left: 4px solid #667eea;
+  background: var(--bg-surface-alt);
+  border-left: 4px solid var(--accent);
   padding: 1.5rem;
   border-radius: 8px;
   line-height: 1.6;
-  color: #374151;
+  color: var(--text-secondary);
   font-size: 0.95rem;
 }
 
@@ -281,7 +309,7 @@
 .answer-box h3,
 .answer-box h4 {
   margin: 1.1rem 0 0.6rem 0;
-  color: #1f2937;
+  color: var(--text-primary);
   line-height: 1.3;
 }
 .answer-box h1 { font-size: 1.25rem; }
@@ -290,7 +318,7 @@
 .answer-box h4 { font-size: 0.98rem; }
 
 .answer-box strong {
-  color: #1f2937;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -304,18 +332,18 @@
 }
 
 .answer-box code {
-  background: #eef0f4;
+  background: var(--code-bg);
   border-radius: 4px;
   padding: 0.1rem 0.35rem;
   font-size: 0.85em;
-  color: #4338ca;
+  color: var(--code-text);
 }
 
 .answer-box blockquote {
   margin: 0 0 0.85rem 0;
   padding-left: 0.9rem;
-  border-left: 3px solid #d1d5db;
-  color: #6b7280;
+  border-left: 3px solid var(--gray-300);
+  color: var(--text-tertiary);
 }
 
 .answer-box table {
@@ -323,22 +351,22 @@
   border-collapse: collapse;
   margin: 0 0 1rem 0;
   font-size: 0.9rem;
-  background: #ffffff;
+  background: var(--bg-surface);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 0 0 1px #e5e7eb;
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 .answer-box th,
 .answer-box td {
   padding: 0.55rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 .answer-box thead th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--bg-surface-alt-2);
+  color: var(--text-secondary);
   font-weight: 600;
   font-size: 0.82rem;
   text-transform: uppercase;
@@ -350,7 +378,7 @@
 }
 
 .answer-box tbody tr:nth-child(even) {
-  background: #fafbfc;
+  background: var(--bg-surface-alt);
 }
 
 /* Horizontal scroll on narrow screens instead of squashing/overflowing the table */
@@ -367,19 +395,40 @@
   table-layout: fixed;
 }
 
-/* Metadata */
+/* Metadata -- small "insight chip" style (muted uppercase label above, bold
+   monospace value below) rather than a single line of plain text, so the numbers
+   that matter (tokens, response time) are scannable at a glance. */
 .result-metadata {
   display: flex;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: #9ca3af;
+  align-items: center;
+  gap: 0.75rem;
   margin-top: auto;
 }
 
-.tokens, .timestamp, .duration {
-  padding: 0.4rem 0.8rem;
-  background: #f3f4f6;
-  border-radius: 4px;
+.stat-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0.9rem;
+  background: var(--bg-surface-alt-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 64px;
+}
+
+.stat-chip-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.stat-chip-value {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .feedback-buttons {
@@ -390,8 +439,8 @@
 }
 
 .feedback-btn {
-  border: 1px solid #e5e7eb;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
   border-radius: 6px;
   padding: 0.3rem 0.6rem;
   font-size: 0.95rem;
@@ -401,8 +450,8 @@
 }
 
 .feedback-btn:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #d1d5db;
+  background: var(--bg-surface-alt-2);
+  border-color: var(--gray-300);
 }
 
 .feedback-btn:active:not(:disabled) {
@@ -421,13 +470,13 @@
 }
 
 .feedback-btn.thumbs-up.active {
-  background: #d1fae5;
-  border-color: #10b981;
+  background: var(--success-bg);
+  border-color: var(--success);
 }
 
 .feedback-btn.thumbs-down.active {
-  background: #fee2e2;
-  border-color: #ef4444;
+  background: var(--danger-bg);
+  border-color: var(--danger);
 }
 
 /* The button NOT chosen, once a vote has been cast -- locked out and visibly faded so
@@ -439,13 +488,13 @@
 
 .feedback-thanks {
   font-size: 0.85rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .asked-question {
   margin: 0;
   font-style: italic;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 0.95rem;
 }
 

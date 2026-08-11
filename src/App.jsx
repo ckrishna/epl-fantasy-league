@@ -7,16 +7,35 @@ import Stats from './pages/Stats';
 import Help from './pages/Help';
 import { getSeasons } from './api/client';
 
+// Reads any previously-saved choice; falls back to the OS/browser's own light/dark
+// preference for a first-time visitor rather than always defaulting to light.
+function getInitialTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light' || saved === 'dark') return saved;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light';
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('standings');
   const [seasons, setSeasons] = useState([]);
   // null = "current season" (server picks it); only set to a specific string when the
   // user explicitly selects a past season from the dropdown.
   const [selectedSeason, setSelectedSeason] = useState(null);
+  const [theme, setTheme] = useState(getInitialTheme);
 
   useEffect(() => {
     getSeasons().then(setSeasons);
   }, []);
+
+  // The actual re-theming happens via CSS custom properties keyed off this attribute
+  // (see App.css's `[data-theme='dark']` block) -- this effect's only job is to keep
+  // the DOM attribute and localStorage in sync with React state.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   const currentSeason = seasons.find((s) => s.current)?.season || null;
   const viewingHistory = selectedSeason !== null && selectedSeason !== currentSeason;
@@ -27,25 +46,38 @@ export default function App() {
         <div className="app-header-inner">
           <h1 className="app-title">⚽ EPL Fantasy League</h1>
 
-          {seasons.length > 0 && (
-            <select
-              className={`league-picker ${viewingHistory ? 'viewing-history' : ''}`}
-              value={selectedSeason ?? currentSeason ?? ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                setSelectedSeason(value === currentSeason ? null : value);
-              }}
-              aria-label="Select league and season"
-              title={viewingHistory ? 'Viewing a past season' : undefined}
+          <div className="app-header-controls">
+            {seasons.length > 0 && (
+              <select
+                className={`league-picker ${viewingHistory ? 'viewing-history' : ''}`}
+                value={selectedSeason ?? currentSeason ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSelectedSeason(value === currentSeason ? null : value);
+                }}
+                aria-label="Select league and season"
+                title={viewingHistory ? 'Viewing a past season' : undefined}
+              >
+                {seasons.map((s) => (
+                  <option key={s.season} value={s.season}>
+                    {s.league_id ? `League ${s.league_id} — ${s.season}` : s.season}
+                    {s.current ? ' (current)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
-              {seasons.map((s) => (
-                <option key={s.season} value={s.season}>
-                  {s.league_id ? `League ${s.league_id} — ${s.season}` : s.season}
-                  {s.current ? ' (current)' : ''}
-                </option>
-              ))}
-            </select>
-          )}
+              <span className={`theme-toggle-option ${theme === 'light' ? 'active' : ''}`}>☀️</span>
+              <span className={`theme-toggle-option ${theme === 'dark' ? 'active' : ''}`}>🌙</span>
+            </button>
+          </div>
         </div>
       </header>
 

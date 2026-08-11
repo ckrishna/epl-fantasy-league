@@ -1,9 +1,18 @@
 // src/pages/Stats.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { queryStats, submitFeedback } from '../api/client';
 import '../styles/Stats.css';
+
+// "5m 42.7s" style formatting, minutes only shown once there are any -- matches the
+// reference loader's elapsed-time treatment.
+function formatElapsed(ms) {
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = (totalSeconds % 60).toFixed(1);
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
 
 const SUGGESTED_QUERIES = [
   "Which player is a differential this week?",
@@ -19,6 +28,21 @@ export default function Stats({ season = null }) {
   const [error, setError] = useState(null);
   // null = no vote yet, 'up'/'down' = recorded, 'pending' = submit in flight
   const [feedback, setFeedback] = useState(null);
+  // Live-ticking "how long has this been running" counter for the loading state --
+  // GenBI calls can take several seconds, and a bare spinner gives no sense of
+  // progress. Counts up in 100ms steps while `loading` is true; reset per-request in
+  // fetchGenBI rather than here, so it starts fresh even if the previous request's
+  // interval hasn't been cleaned up yet.
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!loading) return;
+    const startedAt = Date.now();
+    const intervalId = setInterval(() => {
+      setElapsedMs(Date.now() - startedAt);
+    }, 100);
+    return () => clearInterval(intervalId);
+  }, [loading]);
 
   async function handleQueryClick(query) {
     setLoading(true);
@@ -40,6 +64,7 @@ export default function Stats({ season = null }) {
 
   async function fetchGenBI(question) {
     setFeedback(null);
+    setElapsedMs(0);
     try {
       const data = await queryStats(question, season);
 
@@ -131,8 +156,15 @@ export default function Stats({ season = null }) {
 
           {loading && (
             <div className="loading-state">
-              <div className="spinner"></div>
-              <p>Analyzing with Claude...</p>
+              <div className="churn-card">
+                <span className="pixel-grid" aria-hidden="true">
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <span key={i} className="pixel" style={{ animationDelay: `${i * 90}ms` }} />
+                  ))}
+                </span>
+                <span className="churn-label">Churning</span>
+                <span className="churn-time">{formatElapsed(elapsedMs)}</span>
+              </div>
             </div>
           )}
 
@@ -151,9 +183,15 @@ export default function Stats({ season = null }) {
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.answer}</ReactMarkdown>
               </div>
               <div className="result-metadata">
-                <span className="tokens">Tokens: {result.usage?.output_tokens}</span>
+                <div className="stat-chip">
+                  <span className="stat-chip-label">Tokens</span>
+                  <span className="stat-chip-value">{result.usage?.output_tokens ?? '—'}</span>
+                </div>
                 {typeof result.durationMs === 'number' && (
-                  <span className="duration">Time: {(result.durationMs / 1000).toFixed(1)}s</span>
+                  <div className="stat-chip">
+                    <span className="stat-chip-label">Time</span>
+                    <span className="stat-chip-value">{(result.durationMs / 1000).toFixed(1)}s</span>
+                  </div>
                 )}
                 {result.queryId && (
                   <div className="feedback-buttons">

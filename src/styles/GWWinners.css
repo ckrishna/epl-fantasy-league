@@ -1,19 +1,19 @@
 /* src/styles/GWWinners.css - Compact Summary */
 .gw-winners-page {
-  background: white;
+  background: var(--bg-surface);
   border-radius: 12px;
   padding: clamp(1.5rem, 5vw, 2.5rem);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
 }
 
 .gw-winners-page h2 {
-  color: #003d7a;
+  color: var(--primary);
   margin-bottom: 0.5rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
 .gw-winners-page > p {
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin-bottom: 2rem;
   font-size: 1rem;
   font-weight: 500;
@@ -25,7 +25,7 @@
 }
 
 .winners-dashboard h3 {
-  color: #003d7a;
+  color: var(--primary);
   margin-bottom: 1rem;
   font-size: 1.1rem;
 }
@@ -37,8 +37,8 @@
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
-  border: 1px solid #e5e7eb;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1rem;
   text-align: center;
@@ -46,26 +46,26 @@
 }
 
 .stat-card:hover {
-  border-color: #003d7a;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-rank {
-  color: #ffb81c;
+  color: var(--secondary);
   font-size: 1.2rem;
   font-weight: 800;
   margin-bottom: 0.5rem;
 }
 
 .stat-team {
-  color: #003d7a;
+  color: var(--primary);
   font-weight: 700;
   font-size: 0.9rem;
   margin-bottom: 0.25rem;
 }
 
 .stat-manager {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 0.75rem;
   font-weight: 500;
   margin-bottom: 0.5rem;
@@ -74,12 +74,12 @@
 .stat-wins {
   font-size: 1rem;
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
 }
 
 .stat-wins span {
   font-size: 0.7rem;
-  color: #9ca3af;
+  color: var(--text-muted);
   display: block;
   font-weight: 600;
   margin-top: 0.25rem;
@@ -91,7 +91,7 @@
 }
 
 .winners-table-section h3 {
-  color: #003d7a;
+  color: var(--primary);
   margin-bottom: 1rem;
   font-size: 1.1rem;
 }
@@ -103,15 +103,15 @@
 }
 
 .winners-table thead {
-  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
-  border-bottom: 2px solid #e5e7eb;
+  background: var(--bg-surface-alt);
+  border-bottom: 2px solid var(--border);
 }
 
 .winners-table th {
   padding: 1rem;
   text-align: left;
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -119,7 +119,7 @@
 
 .winners-table td {
   padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 .winners-table tbody tr {
@@ -127,33 +127,33 @@
 }
 
 .winners-table tbody tr:hover {
-  background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
+  background: var(--bg-surface-alt);
 }
 
 .gw-cell {
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
   width: 50px;
 }
 
 .manager-cell {
-  color: #003d7a;
+  color: var(--primary);
   font-weight: 600;
 }
 
 .team-cell {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 0.9rem;
 }
 
 .gross-points, .net-points {
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
   text-align: center;
 }
 
 .transfer-cost {
-  color: #ef4444;
+  color: var(--danger);
   font-weight: 600;
   text-align: center;
 }
@@ -161,14 +161,14 @@
 .no-data {
   text-align: center;
   padding: 2rem;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .loading {
   text-align: center;
   padding: 3rem;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .desktop-only {

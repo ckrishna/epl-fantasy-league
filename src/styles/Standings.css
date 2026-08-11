@@ -1,19 +1,19 @@
 /* src/styles/Standings.css - Enhanced with medals */
 .standings-page {
-  background: white;
+  background: var(--bg-surface);
   border-radius: 12px;
   padding: clamp(1.5rem, 5vw, 2.5rem);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
 }
 
 .standings-page h2 {
-  color: #003d7a;
+  color: var(--primary);
   margin-bottom: 0.5rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
 .standings-page > .subtitle {
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin-bottom: 2rem;
   font-size: 0.95rem;
 }
@@ -29,8 +29,8 @@
   display: flex;
   gap: 1rem;
   padding: 1rem;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
   border-radius: 8px;
   align-items: center;
   transition: all 0.2s ease;
@@ -70,7 +70,7 @@
 }
 
 .standings-card:not(.top-1):not(.top-2):not(.top-3) .rank-badge {
-  background: #003d7a;
+  background: var(--primary);
   color: white;
   font-size: 1.2rem;
 }
@@ -81,14 +81,14 @@
 
 .card-team {
   margin: 0;
-  color: #003d7a;
+  color: var(--primary);
   font-weight: 700;
   font-size: 1rem;
 }
 
 .card-manager {
   margin: 0.25rem 0 0 0;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -107,7 +107,7 @@
 
 .stat-label {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -115,7 +115,7 @@
 .stat-value {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
 }
 
 /* Desktop Table View */
@@ -127,15 +127,15 @@
 }
 
 .standings-table thead {
-  background: linear-gradient(135deg, #f0f4f8 0%, #f9fafb 100%);
-  border-bottom: 2px solid #e5e7eb;
+  background: var(--bg-surface-alt);
+  border-bottom: 2px solid var(--border);
 }
 
 .standings-table th {
   padding: 1rem;
   text-align: left;
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -143,16 +143,16 @@
 
 .standings-table td {
   padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 .standings-table tbody tr {
   transition: all 0.2s ease;
-  background: white;
+  background: var(--bg-surface);
 }
 
 .standings-table tbody tr:hover {
-  background: linear-gradient(90deg, rgba(0, 61, 122, 0.03) 0%, transparent 100%);
+  background: var(--bg-surface-alt);
 }
 
 .standings-table tbody tr.top-1 {
@@ -169,7 +169,7 @@
 
 .rank {
   font-weight: 800;
-  color: #003d7a;
+  color: var(--primary);
   width: 60px;
   text-align: center;
   font-size: 1.3rem;
@@ -185,39 +185,39 @@
 
 .team-name {
   font-weight: 700;
-  color: #003d7a;
+  color: var(--primary);
   font-size: 1rem;
 }
 
 .manager-name {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 0.85rem;
   font-weight: 500;
 }
 
 .week-points {
   font-weight: 700;
-  color: #f59e0b;
+  color: var(--warning);
   text-align: center;
 }
 
 .points {
   font-weight: 800;
-  color: #003d7a;
+  color: var(--primary);
   text-align: center;
 }
 
 .no-data {
   text-align: center;
   padding: 2rem;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .loading {
   text-align: center;
   padding: 3rem;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 /* Desktop view */
