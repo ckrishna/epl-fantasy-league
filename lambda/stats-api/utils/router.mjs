@@ -43,6 +43,15 @@ const KEYWORD_GROUPS = {
     'streak', 'consecutive', 'transfer', 'transfers', 'hit', 'hits', 'chip', 'chips',
     'wildcard', 'bench', 'highest score', 'lowest score', 'best gameweek', 'worst gameweek',
     'average points', 'average score', 'most transfers', 'best transfers'
+  ],
+  // #39 Phase 2: ownership aggregates (most-owned player, differentials) within our
+  // own league's squads for the resolved gameweek.
+  // Deliberately NOT the bare substring "own" -- it false-positives on "shown", "known",
+  // "grown", "brown", etc. via .includes(). "owns"/"owned"/"ownership" are specific
+  // enough to keep as substrings.
+  ownership: [
+    'differential', 'differentials', 'owns', 'owned', 'ownership', 'unique',
+    'exclusively', 'most owned', 'nobody else has', 'no one else has'
   ]
 };
 
@@ -59,11 +68,12 @@ const ALL_TRUE = {
   playerGwData: true,
   seasonTotals: true,
   managerPicks: true,
-  managerStats: true
+  managerStats: true,
+  ownership: true
 };
 
-// Returns which of the 6 context fields a question needs. Every key is always
-// present (true/false) so callers never have to guard against undefined.
+// Returns which context fields a question needs. Every key is always present
+// (true/false) so callers never have to guard against undefined.
 export function selectRelevantFields(question) {
   const q = (question || '').toLowerCase();
 

@@ -68,9 +68,24 @@ test('[current bug] a chip-usage question selects managerStats', () => {
   assert.strictEqual(fields.managerStats, true);
 });
 
+test('[current bug] a differential question selects ownership', () => {
+  const fields = selectRelevantFields('Which player is a differential this gameweek?');
+  assert.strictEqual(fields.ownership, true);
+});
+
+test('[current bug] a most-owned question selects ownership', () => {
+  const fields = selectRelevantFields('Who is the most owned player?');
+  assert.strictEqual(fields.ownership, true);
+});
+
+test('[current bug] "own"/"shown"/"known" false positives are avoided -- only specific ownership keywords match', () => {
+  const fields = selectRelevantFields('Who has shown the most consistent form lately?');
+  assert.strictEqual(fields.ownership, false, 'Expected "shown" not to false-positive-match an "own" substring');
+});
+
 test('[regression] every field key is always present, never undefined', () => {
   const fields = selectRelevantFields('anything at all');
-  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats']) {
+  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership']) {
     assert.strictEqual(typeof fields[key], 'boolean', `Expected ${key} to always be a boolean`);
   }
 });

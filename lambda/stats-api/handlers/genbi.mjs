@@ -145,6 +145,37 @@ async function getOurLeaguePicks(gw) {
   }
 }
 
+// fpl_entry_picks rows carry only entry_id, never manager_name (confirmed against
+// fpl-data-ingester's actual storePicks() write -- the item shape has no manager_name
+// field at all). The pre-existing our_league_picks mapping read `pick.manager_name`
+// directly, which was always undefined -- every captain-picks question this whole
+// project has ever answered sent Claude a <manager_picks> array where every single
+// "manager" field was undefined. No test caught it because every existing test either
+// hand-built leagueContext directly (bypassing this mapping) or only checked that the
+// fetch happened, never that the resulting values were correct. Found while building
+// #39 Phase 2 (ownership aggregates), which needs the exact same entry_id -> name join.
+//
+// Scoped to a single gameweek (not the whole season, unlike getManagerSeasonAggregates)
+// since this is only ever used for gameweek-scoped picks data -- cheaper than a
+// season-wide scan for what's normally an ~11-row lookup.
+async function getManagerNamesForGW(gw, season) {
+  try {
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'fpl_entry_gameweek',
+      FilterExpression: 'season = :s AND gameweek = :gw',
+      ExpressionAttributeValues: { ':s': season, ':gw': gw }
+    }));
+    const nameByEntryId = new Map();
+    for (const row of result.Items || []) {
+      if (row.entry_id != null && row.manager_name) nameByEntryId.set(row.entry_id, row.manager_name);
+    }
+    return nameByEntryId;
+  } catch (err) {
+    console.error('Error fetching manager names for gameweek:', err);
+    return new Map();
+  }
+}
+
 // #39 Phase 1: manager-level season aggregates. Single scan of each table per request
 // (not per-manager queries) -- both fpl_entry_gameweek and fpl_entry_picks carry a
 // plain `season` attribute alongside their composite keys, so a season-scoped
@@ -289,6 +320,51 @@ function computeWinStreaks(gwWinners) {
   return result;
 }
 
+// #39 Phase 2: ownership aggregates -- most-owned player and differentials (owned by
+// exactly one manager), for the resolved gameweek. Pure function over already-fetched
+// picks + the entry_id -> manager_name map (same data getOurLeaguePicks/
+// getManagerNamesForGW already fetch for <manager_picks>, no extra query).
+//
+// "Differential" here means "owned by exactly one manager in OUR league", not FPL's
+// global ownership -- this only ever sees our own league's squads, never the wider FPL
+// player base, and the prompt says so explicitly (see bedrock.mjs instruction 8).
+function computeOwnershipAggregates(picks, nameByEntryId) {
+  const byPlayer = new Map();
+
+  for (const pick of picks) {
+    const managerName = nameByEntryId.get(pick.entry_id);
+    const playerName = pick.player_name;
+    if (!managerName || !playerName) continue;
+
+    if (!byPlayer.has(playerName)) {
+      byPlayer.set(playerName, {
+        player: playerName,
+        owners: new Set(),
+        points_this_gw: Number(pick.points || 0)
+      });
+    }
+    byPlayer.get(playerName).owners.add(managerName);
+  }
+
+  const players = Array.from(byPlayer.values()).map((p) => ({
+    player: p.player,
+    ownership_count: p.owners.size,
+    owned_by: Array.from(p.owners),
+    points_this_gw: p.points_this_gw
+  }));
+
+  const mostOwned = players.length > 0
+    ? players.slice().sort((a, b) => b.ownership_count - a.ownership_count)[0]
+    : null;
+
+  const differentials = players
+    .filter((p) => p.ownership_count === 1)
+    .sort((a, b) => b.points_this_gw - a.points_this_gw)
+    .slice(0, 20);
+
+  return { most_owned_player: mostOwned, differentials };
+}
+
 // GenBI never actually had access to the real league table (total points + rank) --
 // only win *counts* (see total_season_summary below). fpl_league_standings is the same
 // table handleStandings reads for the dashboard's own Standings page, so this reuses
@@ -397,6 +473,10 @@ export async function handleGenBI(body, corsHeaders) {
     // managerStats needs gwWinners too -- win streaks are derived from the same
     // per-gameweek winners list total_season_summary/recent_form_summary already walk.
     const needsGwWinners = fields.seasonWins || fields.recentForm || fields.managerStats;
+    // Both manager_picks (captain math) and ownership_aggregates (#39 Phase 2) need the
+    // entry_id -> manager_name join, since fpl_entry_picks rows never carry a name of
+    // their own -- see getManagerNamesForGW's comment for how this was discovered.
+    const needsManagerNames = fields.managerPicks || fields.ownership;
 
     // Check for authoritative (FPL-sourced) season totals first -- cheap lookup. Only
     // fall back to the expensive full-season player_event_stats scan (below) if nothing
@@ -405,16 +485,17 @@ export async function handleGenBI(body, corsHeaders) {
     const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
     // 1. Fetch only what the router decided is relevant, in parallel
-    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW] = await Promise.all([
       needsGwWinners ? getGWWinners(season) : Promise.resolve([]),
       fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
-      fields.managerPicks ? getOurLeaguePicks(gw) : Promise.resolve([]),
+      (fields.managerPicks || fields.ownership) ? getOurLeaguePicks(gw) : Promise.resolve([]),
       needsTeamMap ? getAllTeamsForSeason(seasonId) : Promise.resolve({}),
       fields.seasonTotals
         ? (authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId))
         : Promise.resolve([]),
       fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([]),
-      fields.managerStats ? getManagerSeasonAggregates(season) : Promise.resolve([])
+      fields.managerStats ? getManagerSeasonAggregates(season) : Promise.resolve([]),
+      needsManagerNames ? getManagerNamesForGW(gw, season) : Promise.resolve(new Map())
     ]);
 
     // 2. Calculate Total Season Wins
@@ -489,10 +570,17 @@ export async function handleGenBI(body, corsHeaders) {
             ownership: typeof p.selected_by_percent === 'object' ? p.selected_by_percent.S : (p.selected_by_percent || "0.0%")
           };
         }),
+      // Joined via managerNamesForGW (entry_id -> manager_name), NOT pick.manager_name --
+      // that field never existed on fpl_entry_picks rows (see getManagerNamesForGW's
+      // comment). Every captain-picks answer before this fix silently sent Claude
+      // `manager: undefined` for every single pick.
       our_league_picks: ourPicks.map(pick => ({
-        manager: pick.manager_name,
+        manager: managerNamesForGW.get(pick.entry_id) || 'Unknown',
         player: pick.player_name,
-        is_captain: pick.is_captain
+        is_captain: pick.is_captain,
+        // fpl_entry_picks.points is a plain number (same table/field getManagerSeasonAggregates
+        // already reads with Number(row.points || 0), no DynamoDB-JSON wrapping to unwrap here).
+        points: Number(pick.points || 0)
       })),
       // Real season-long totals -- use this (not players_gw_data, which is a single
       // gameweek) for any "entire season" / "this season" scoring question. Prefers
@@ -520,7 +608,14 @@ export async function handleGenBI(body, corsHeaders) {
       // score, season average, transfer activity, chips, bench points wasted, season
       // captaincy points. See getManagerSeasonAggregates for exactly what is and isn't
       // covered (notably: transfer *counts*, not which players were transferred).
-      manager_season_stats: managerSeasonStats
+      manager_season_stats: managerSeasonStats,
+      // #39 Phase 2: most-owned player and differentials (owned by exactly one manager)
+      // for the resolved gameweek, scoped to OUR league's squads only -- never FPL's
+      // global ownership. Only computed when actually asked for (fields.ownership) or
+      // as a side benefit when manager_picks was already fetched anyway.
+      ownership_aggregates: (fields.managerPicks || fields.ownership)
+        ? computeOwnershipAggregates(ourPicks, managerNamesForGW)
+        : { most_owned_player: null, differentials: [] }
     };
 
     // 5. Invoke Claude with refined context
