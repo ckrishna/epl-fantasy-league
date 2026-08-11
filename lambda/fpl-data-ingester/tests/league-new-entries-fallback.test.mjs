@@ -30,7 +30,10 @@ function installFetchMockWithLeagueResponse(leagueResponse) {
     if (url.includes('leagues-classic')) return jsonResponse(leagueResponse);
     if (url.includes('/picks/')) {
       return jsonResponse({
-        entry_history: { points: 0, event_transfers_cost: 0, total_points: 0, event_transfers: 0, transfers_left: 1, active_chip: null, bank: 1000, value: 1000 },
+        // active_chip lives at the top level of the real FPL response, not inside
+        // entry_history -- see index.mjs's storeGameweekSummary comment.
+        active_chip: null,
+        entry_history: { points: 0, event_transfers_cost: 0, total_points: 0, event_transfers: 0, transfers_left: 1, bank: 1000, value: 1000 },
         picks: []
       });
     }

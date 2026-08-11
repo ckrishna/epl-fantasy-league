@@ -26,13 +26,16 @@ const SAMPLE_MANAGER = { entry: 162357, entry_name: 'Da Movement', player_name: 
 
 function picksResponse(picks) {
   return jsonResponse({
+    // active_chip lives at the top level of the real FPL response, not inside
+    // entry_history -- see index.mjs's storeGameweekSummary comment for how this was
+    // confirmed (0/396 real rows ever had a non-null chip before the fix).
+    active_chip: null,
     entry_history: {
       points: 50,
       event_transfers_cost: 0,
       total_points: 1000,
       event_transfers: 1,
       transfers_left: 1,
-      active_chip: null,
       bank: 5,
       value: 1000
     },

@@ -204,7 +204,16 @@ async function storeGameweekSummary(manager, picksData, gw, season) {
     points_total: entryHistory.total_points || 0,
     transfers_made: entryHistory.event_transfers || 0,
     transfers_remaining: entryHistory.transfers_left || 0,
-    active_chip: entryHistory.active_chip || null,
+    // active_chip lives on the TOP-LEVEL picks response (picksData.active_chip), not
+    // nested inside entry_history -- confirmed via FPL's real API shape, and by the
+    // live data itself: every one of 396 existing fpl_entry_gameweek rows had
+    // active_chip: null, which isn't plausible across 11 managers and up to 38
+    // gameweeks each (wildcard/bench-boost/triple-captain/free-hit are near-universally
+    // used at least once per season). entryHistory.active_chip was always undefined,
+    // silently masked by `|| null`. Same bug family as the fpl_entry_picks.points
+    // fix -- a field read from the wrong place on an external API response, defaulting
+    // to a plausible-looking value instead of erroring.
+    active_chip: picksData.active_chip || null,
     bank: (entryHistory.bank || 0) / 10,
     value: (entryHistory.value || 0) / 10,
     gw_winner: false,
