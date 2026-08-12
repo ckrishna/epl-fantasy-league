@@ -417,7 +417,10 @@ body {
   font-size: 0.55em;
   font-weight: 600;
   color: var(--text-muted);
-  vertical-align: middle;
+  /* baseline (the default), not middle -- middle centers the small text against the
+     big heading's x-height, which reads as floating too low/centered rather than
+     sitting on the same line as the rest of the heading. */
+  vertical-align: baseline;
 }
 
 /* Loading States */

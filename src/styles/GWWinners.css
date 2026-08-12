@@ -185,6 +185,25 @@
     display: none;
   }
 
+  /* With the "Top Winners" dashboard above hidden on mobile, the table is the only
+     section on the page -- "All Gameweek Winners" only made sense as a second label
+     distinguishing it from that dashboard's own "Top Winners" heading. Hiding it here
+     (rather than on desktop too) avoids a redundant heading with nothing to
+     distinguish it from, and removes one of the two stacked block margins that were
+     compounding into the large gap reported above the table on mobile -- the other
+     being .winners-table-section's own margin-top, tightened below.
+
+     margin-bottom is dropped too: it exists to separate the table from a "no winner
+     data" message when the season is winless-so-far, and 2rem read as an oversized gap
+     for that on a phone screen -- .no-data already has its own top padding. */
+  .winners-table-section {
+    margin: 0.75rem 0 0;
+  }
+
+  .winners-table-section h3 {
+    display: none;
+  }
+
   .winners-table {
     font-size: 0.85rem;
   }
