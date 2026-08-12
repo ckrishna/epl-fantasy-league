@@ -284,6 +284,36 @@ Written by `handlers/feedback.mjs` (`recordFeedback`, in `utils/feedback-log.mjs
 
 ---
 
+## Historical seasons backfill: 2019/20-2024/25 (new, 2026-08-12)
+
+Chetan maintained this league's standings/payouts by hand for years before this app existed, in a spreadsheet exported as `lambda/fpl-data-ingester/scripts/data/epl-historical-league-export.csv` (2501 rows). That export has complete per-manager, per-gameweek data (overall rank, chip played, cumulative points, gameweek points, bench points, transfers, hit cost, team value) for **six full seasons: 2019/20 through 2024/25**. Everything before that (2010/11-2018/19) is only scattered single "final total" rows for whoever happened to be tracked that year — not full weekly standings, not reconstructible into real GW-by-GW winners or rankings — so those years are deliberately excluded from this import entirely (not even a footnote elsewhere in the app; there wasn't enough there to show without guessing).
+
+**Import script:** `lambda/fpl-data-ingester/scripts/import-historical-seasons.mjs`. Run locally with AWS credentials (`node scripts/import-historical-seasons.mjs`) — reads the CSV above by default, writes to DynamoDB, never touches the FPL API. Not yet run against production; see the coverage note below for what verification it did get instead.
+
+**Design decision: reuses the exact same tables and derivation logic as live seasons**, rather than inventing separate "historical" tables or a separate UI:
+- Writes `fpl_entry_gameweek` rows in the identical shape `storeGameweekSummary()` (in `index.mjs`) writes for live seasons.
+- Derives `gw-winners-cache` from those rows using the identical rule the live ingester uses: highest net points (gross − transfer_cost) wins that gameweek, ties share the win.
+- Derives one `fpl_league_standings` row per manager at the season's final gameweek — matching what `handleStandings()` resolves to when a past season is picked from the dropdown (it walks back to the latest stored gameweek, which is the season finale here).
+- Writes a `seasons` row per historical season so the existing season dropdown lists it.
+
+The payoff: **no new frontend code was needed.** Standings.jsx and GWWinners.jsx already accept a `season` param and already render whatever's in these tables — picking "2022/23" from the header's existing season dropdown just works once this backfill has run, the same way picking any other past season does.
+
+**What's deliberately NOT captured:**
+- Seasons before 2019/20 (see above).
+- A team nickname per manager. The source file only ever recorded each manager's real name — no separate team nickname existed in Chetan's spreadsheet. `manager_name` (the field every other page treats as the team nickname — see the `getLeagueManagers()` naming-inversion note earlier in this doc) is written as `null` for every historical row; `team_name` (treated as the real name everywhere) gets the source file's name. Standings.jsx/GWWinners.jsx skip rendering the second, muted name line when `manager_name` is `null`, so historical cards show one name instead of a name plus a blank line. The one exception is the GW Winners full table's always-visible "Manager" column (the "Team" column next to it is desktop-only, so on mobile it's the *only* name shown) — that one falls back to `team_name` instead of hiding, so a name is never missing entirely on a phone.
+
+**`entry_id` for historical rows:** the source file has no real FPL entry ID, only names — and these managers' real FPL accounts from 2019/20 may not even exist anymore to look one up from. A deterministic negative integer is derived from each manager's name (SHA-256 hash, folded into a fixed negative range) instead: stable across re-runs of the script (same name always hashes to the same id, so re-running overwrites cleanly instead of duplicating), and guaranteed to never collide with a real, positive FPL `entry_id` from any live season.
+
+**A real data-quality catch worth recording:** several names in the source file appear twice with different whitespace — e.g. `"Chetan Bk"` vs. `"Chetan\xa0Bk"` (a non-breaking space instead of a regular one), same for Sricharan Murugesan, Sunil Mathew, aditya shringarpure, and nihar namjoshi. Left unhandled, this would have silently split each of those five real people into two different "managers" for the affected seasons — same failure family as this project's other silent-default bugs, just at the data-import layer instead of in application code. Every name this script reads goes through a `normName()` pass (collapse all whitespace variants to a single regular space, trim) before being used as a grouping/join key.
+
+**`seasons` table key, confirmed:** no script in this repo had ever *written* to the `seasons` table before now — every table here has always been created/populated by hand (see `ingestion_runs`, `genbi-query-log`, `app-feedback` above). The import originally assumed the partition key was `season_string`, inferred from every *read* path using it as the natural join key. Chetan checked the actual table schema in the AWS console and confirmed the real partition key is **`season_id` (Number)**, consistent with the reference-table convention documented above (§ "Season key convention"). The script now writes `season_id` as the key and keeps `season_string` as a plain attribute for the read paths that join on it.
+
+**`season_id` assignment:** the live `/seasons` endpoint currently only has 2025/26 and 2026/27. Historical seasons get negative `season_id` values (2024/25 closest to zero, 2019/20 most negative) specifically so they can never collide with the real, presumably-positive `season_id` values already in use, while still sorting in correct chronological order in the dropdown (`getAllSeasons()` sorts descending by `season_id`).
+
+**Coverage note:** validated via a throwaway dry-run of the parsing/normalization/derivation logic against the real CSV (confirmed row counts, manager counts, and GW counts per season match a manual audit; confirmed all five chip values in the file — including "Assistant Manager", a newer FPL chip not previously handled anywhere in this codebase — normalize correctly; confirmed the whitespace-variant names above collapse to the expected 11 (or 10, for 2024/25) unique managers per season) — but the script's actual DynamoDB writes have **not** been run or verified against production, since this sandbox has no AWS access. Chetan should run it, then spot-check a season or two against his own memory of that year's standings/winners before trusting it fully.
+
+---
+
 ## Gap analysis (2026-07-29, via `scripts/find_gaps.py`)
 
 Ran a full scan of both league tables against the expected 11 managers × 38 gameweeks. Two distinct issues found:

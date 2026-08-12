@@ -253,6 +253,25 @@ body {
   color: var(--text-primary);
 }
 
+/* The title doubles as a "home" link (current season, Standings tab) now that there
+   are enough seasons that users can land deep in history -- styled to read as plain
+   heading text, not a button, with just a hover/focus cue that it's clickable. */
+.app-title-link {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.app-title-link:hover,
+.app-title-link:focus-visible {
+  color: var(--accent);
+}
+
 /* League/season picker -- combines what used to be static "League 438107" header text
    plus a separate season <select> into one control. Its own selected-option text reads
    "League {id} — {season}", so there's nothing else to label.

@@ -60,7 +60,20 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="app-header-inner">
-          <h1 className="app-title">⚽ EPL Fantasy League</h1>
+          <h1 className="app-title">
+            <button
+              type="button"
+              className="app-title-link"
+              onClick={() => {
+                setSelectedSeason(null);
+                setActiveTab('standings');
+              }}
+              aria-label="Go to current season standings"
+              title="Go to current season standings"
+            >
+              ⚽ EPL Fantasy League
+            </button>
+          </h1>
 
           <div className="app-header-controls">
             {seasons.length > 0 && (

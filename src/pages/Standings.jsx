@@ -55,7 +55,10 @@ useEffect(() => {
             </div>
             <div className="card-info">
               <h3 className="card-team">{manager.team_name}</h3>
-              <p className="card-manager">{manager.manager_name}</p>
+              {/* Historical (pre-2025/26) seasons only have a manager's real name on
+                  record, no separate team nickname -- manager_name is null for those
+                  rows rather than a blank/duplicate line. */}
+              {manager.manager_name && <p className="card-manager">{manager.manager_name}</p>}
             </div>
             <div className="card-stats">
               <div className="stat">
@@ -87,7 +90,7 @@ useEffect(() => {
               <td className="rank">{manager.rank}</td>
               <td className="team-manager">
                 <div className="team-name">{manager.team_name}</div>
-                <div className="manager-name">{manager.manager_name}</div>
+                {manager.manager_name && <div className="manager-name">{manager.manager_name}</div>}
               </td>
               <td className="week-points">{manager.points_this_week}</td>
               <td className="points">{manager.total_points}</td>

@@ -42,6 +42,7 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
   winners.forEach(w => {
     if (!managerStats[w.entry_id]) {
       managerStats[w.entry_id] = {
+        entry_id: w.entry_id,
         manager_name: w.manager_name,
         team_name: w.team_name,
         wins: 0,
@@ -65,10 +66,12 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
         <h3>Top Winners</h3>
         <div className="stats-grid">
           {sortedStats.slice(0, 5).map((stat, idx) => (
-            <div key={stat.manager_name} className={`stat-card ${idx === 0 ? 'top-1' : ''}`}>
+            <div key={stat.entry_id} className={`stat-card ${idx === 0 ? 'top-1' : ''}`}>
               <div className="stat-rank">#{idx + 1}</div>
               <div className="stat-team">{stat.team_name}</div>
-              <div className="stat-manager">{stat.manager_name}</div>
+              {/* Historical seasons only have a real name on record, no team
+                  nickname -- manager_name is null for those rows. */}
+              {stat.manager_name && <div className="stat-manager">{stat.manager_name}</div>}
               <div className="stat-wins">{stat.wins} <span>wins</span></div>
             </div>
           ))}
@@ -94,7 +97,7 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
               <tr key={`${w.gameweek}-${w.entry_id}`}>
                 <td className="gw-cell">{w.gameweek}</td>
                 <td className="team-cell desktop-only">{w.team_name}</td>
-                <td className="manager-cell">{w.manager_name}</td>
+                <td className="manager-cell">{w.manager_name || w.team_name}</td>
                 <td className="gross-points desktop-only">{w.gross_points}</td>
                 <td className="transfer-cost desktop-only">
                   {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
