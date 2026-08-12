@@ -272,6 +272,38 @@ body {
   color: var(--accent);
 }
 
+/* Help moved out of the main tab row (2026-08-12) -- at 5 tabs on a narrow phone,
+   labels ran together with nothing to mark where one ended and the next began; moving
+   Help up next to the title drops the row to 4, and Help itself doesn't really belong
+   as a peer of the season-scoped data tabs anyway. Small circular "?" icon, not text,
+   so it doesn't compete with the title for attention -- title still reads as the
+   primary heading. */
+.app-help-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--gray-300);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.app-help-link:hover,
+.app-help-link:focus-visible,
+.app-help-link.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* League/season picker -- combines what used to be static "League 438107" header text
    plus a separate season <select> into one control. Its own selected-option text reads
    "League {id} — {season}", so there's nothing else to label.
@@ -332,6 +364,7 @@ body {
 }
 
 .tab {
+  position: relative;
   flex: 1;
   min-width: 80px;
   padding: clamp(0.75rem, 2vw, 1rem);
@@ -345,6 +378,26 @@ body {
   transition: color 0.2s ease;
   white-space: nowrap;
   text-align: center;
+}
+
+/* Subtle divider between tabs -- at 5 tabs (Standings/GW Winners/GenBI/Trends/Help)
+   on a narrow phone, the labels sit close enough that adjacent tabs (e.g. "GW Winners"
+   and "GenBI") visually run together with nothing to mark where one ends and the next
+   begins. A short, low-contrast vertical line (not full-height, so it doesn't compete
+   with the active tab's bottom-border indicator) is enough to separate them without
+   adding real visual weight.
+   Uses --gray-300, not --border -- --border is nearly the same color as this bar's own
+   --bg-page background in dark mode (#201333 vs #0c0718), so a divider built from it
+   was practically invisible there (confirmed via screenshot). --gray-300 is the same
+   token Stats.css already uses for a visible-but-muted divider in dark mode. */
+.tab:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 28%;
+  bottom: 28%;
+  width: 1px;
+  background: var(--gray-300);
 }
 
 .tab:hover {

@@ -33,17 +33,20 @@
 }
 
 /* Desktop-first, matching the rest of this app's convention: base styles here are the
-   desktop layout (all three sections shown at once, side by side -- plenty of width,
-   no need for tabs). The @media (max-width: 768px) block at the bottom overrides this
-   for mobile, where showing all three stacked would mean a long scroll -- instead only
-   the active section is shown, switched via the sub-tab row. */
+   desktop layout (both sections shown at once, side by side -- plenty of width, no
+   need for tabs). The @media (max-width: 768px) block at the bottom overrides this for
+   mobile, where showing both stacked would mean a longer scroll -- instead only the
+   active section is shown, switched via the sub-tab row.
+   Was a 3-column grid with an 1100px 3->2 step-down (back when "Season by season" was
+   a third section) -- removed 2026-08-12 along with that section; two sections fit
+   comfortably at any desktop width without needing a step. */
 .trends-subtabs {
   display: none;
 }
 
 .trends-sections {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -122,49 +125,6 @@
 
 .trends-negative {
   color: var(--danger);
-}
-
-.trends-rank-block {
-  border-top: 1px solid var(--border);
-  padding-top: 0.85rem;
-  margin-top: 0.75rem;
-}
-
-.trends-rank-heading {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.5rem;
-}
-
-.trends-rank-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.trends-rank-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--text-tertiary);
-}
-
-.trends-rank-row .trends-rank-season {
-  width: 48px;
-  flex-shrink: 0;
-}
-
-.trends-rank-row .trends-rank-value {
-  color: var(--text-secondary);
-  font-weight: 600;
-  min-width: 32px;
-}
-
-.trends-rank-row .trends-rank-bar {
-  flex: 1;
-  height: 1px;
-  background: var(--border);
 }
 
 @media (max-width: 768px) {

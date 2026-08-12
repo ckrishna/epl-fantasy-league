@@ -1,7 +1,7 @@
 // src/pages/Trends.jsx
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ComposedChart, Area, Line, BarChart, Bar, Cell,
+  ComposedChart, Area, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { getTrendsManagers, getTrends } from '../api/client';
@@ -10,12 +10,17 @@ import '../styles/Trends.css';
 const MANAGER_STORAGE_KEY = 'trends_manager';
 
 // Mobile shows one section at a time via these sub-tabs (avoids a long scroll on a
-// small screen); desktop ignores this entirely and shows all three side by side in a
-// grid -- see the `@media (min-width: 769px)` override in Trends.css.
+// small screen); desktop ignores this entirely and shows both side by side in a grid --
+// see the `@media (min-width: 769px)` override in Trends.css.
+//
+// "Season by season" (final points + GW10-to-finish rank movement) was a third section
+// here, removed 2026-08-12 at the user's call -- not enough standalone value yet to
+// justify the space. The backend (`seasons` in the /trends response, handleTrends in
+// trends.mjs) still computes and returns it -- only this page stopped rendering it, so
+// it can come back cheaply if that changes.
 const SECTIONS = [
   { id: 'field', label: 'Vs field' },
-  { id: 'pace', label: 'Pace' },
-  { id: 'seasons', label: 'Season' }
+  { id: 'pace', label: 'Pace' }
 ];
 
 function ordinal(n) {
@@ -129,21 +134,6 @@ export default function Trends() {
   }, [selected]);
 
   const paceChartData = useMemo(() => buildPaceChartData(data?.pace), [data]);
-  const midGameweek = data?.seasons?.[0]?.mid_gameweek;
-
-  const rankRows = useMemo(
-    () => (data?.seasons || []).filter((s) => s.mid_rank != null && s.final_rank != null),
-    [data]
-  );
-
-  const finishSummary = useMemo(() => {
-    if (rankRows.length === 0) return null;
-    const improved = rankRows.filter((s) => s.final_rank < s.mid_rank).length;
-    if (improved > rankRows.length / 2) {
-      return `Strong finisher: ranked higher at season end than at GW${midGameweek} in ${improved} of your last ${rankRows.length} seasons.`;
-    }
-    return `Rank at GW${midGameweek} tends to hold: it improved by the finish in ${improved} of ${rankRows.length} seasons.`;
-  }, [rankRows, midGameweek]);
 
   const fieldChartData = useMemo(() => buildFieldChartData(data?.field), [data]);
   const fieldRenderOrder = useMemo(() => {
@@ -342,59 +332,6 @@ export default function Trends() {
                         No prior-season data at GW{data.current_gameweek} yet to compare against.
                       </div>
                     )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className={`trends-section ${activeSection === 'seasons' ? 'active' : ''}`}>
-              <div className="trends-card">
-                <div className="trends-card-title">Season by season</div>
-                <div className="trends-card-subtitle">Final points, and how your rank moved from GW{midGameweek ?? '10'} to the finish</div>
-
-                {data.seasons.length === 0 ? (
-                  <p className="no-data">No season data available.</p>
-                ) : (
-                  <>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <BarChart data={data.seasons} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                        <XAxis dataKey="season" tick={axisTick} axisLine={false} tickLine={false} />
-                        <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} />
-                        <Tooltip
-                          contentStyle={tooltipStyle}
-                          itemStyle={tooltipItemStyle}
-                          formatter={(value) => [`${value} pts`, 'Final points']}
-                        />
-                        <Bar dataKey="final_points" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                          {data.seasons.map((s) => (
-                            <Cell key={s.season} fill={s.is_current ? 'var(--accent)' : 'var(--gray-200)'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-
-                    {rankRows.length > 0 && (
-                      <div className="trends-rank-block">
-                        <div className="trends-rank-heading">GW{midGameweek} rank &rarr; final rank</div>
-                        <div className="trends-rank-rows">
-                          {rankRows.map((s) => (
-                            <div className="trends-rank-row" key={s.season}>
-                              <span className="trends-rank-season">{s.season}</span>
-                              <span className="trends-rank-value">{ordinal(s.mid_rank)}</span>
-                              <span className="trends-rank-bar" />
-                              <span className={
-                                `trends-rank-value ${s.final_rank < s.mid_rank ? 'trends-positive' : s.final_rank > s.mid_rank ? 'trends-negative' : ''}`
-                              }>
-                                {ordinal(s.final_rank)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {finishSummary && <div className="trends-callout">{finishSummary}</div>}
                   </>
                 )}
               </div>

@@ -74,6 +74,15 @@ export default function App() {
             >
               ⚽ EPL Fantasy League
             </button>
+            <button
+              type="button"
+              className={`app-help-link ${activeTab === 'help' ? 'active' : ''}`}
+              onClick={() => setActiveTab('help')}
+              aria-label="Help"
+              title="Help"
+            >
+              ?
+            </button>
           </h1>
 
           <div className="app-header-controls">
@@ -135,12 +144,6 @@ export default function App() {
           onClick={() => setActiveTab('trends')}
         >
           Trends<sup className="beta-tag">Beta</sup>
-        </button>
-        <button
-          className={`tab ${activeTab === 'help' ? 'active' : ''}`}
-          onClick={() => setActiveTab('help')}
-        >
-          Help
         </button>
       </nav>
 
