@@ -294,6 +294,65 @@ async function getManagerSeasonAggregates(season) {
   }
 }
 
+// Individual best/worst captain PICKS this season -- distinct from
+// getManagerSeasonAggregates' captain_points_season (a per-manager cumulative sum
+// that rewards games played and chip multipliers as much as pick quality). This
+// ranks single (manager, player, gameweek) captain choices directly, which is what
+// "best captain PICKS" literally asks for -- confirmed live: a manager leading on
+// captain_points_season this season may simply have played more gameweeks, not
+// necessarily made the sharpest individual calls.
+async function getTopCaptainPicks(season, limit = 10) {
+  try {
+    const [gwResult, picksResult] = await Promise.all([
+      dynamodb.send(new ScanCommand({
+        TableName: 'fpl_entry_gameweek',
+        FilterExpression: 'season = :s',
+        ExpressionAttributeValues: { ':s': season }
+      })),
+      dynamodb.send(new ScanCommand({
+        TableName: 'fpl_entry_picks',
+        FilterExpression: 'season = :s',
+        ExpressionAttributeValues: { ':s': season }
+      }))
+    ]);
+
+    const nameByEntryId = new Map();
+    for (const row of gwResult.Items || []) {
+      if (row.entry_id != null && row.manager_name) nameByEntryId.set(row.entry_id, row.manager_name);
+    }
+
+    const picks = (picksResult.Items || [])
+      .filter((row) => row.is_captain)
+      .map((row) => {
+        // Raw per-player score -- same field storePicks writes for every pick, not
+        // pre-multiplied (see fpl-data-ingester's storePicks comment). Multiplier is
+        // applied here explicitly, same as captain_points_season does.
+        const rawPoints = Number(row.points || 0);
+        const multiplier = Number(row.multiplier) || 2;
+        return {
+          manager: nameByEntryId.get(row.entry_id) || 'Unknown',
+          player: row.player_name,
+          gameweek: row.gameweek,
+          raw_points: rawPoints,
+          multiplier,
+          total_points: rawPoints * multiplier
+        };
+      });
+
+    const best = picks.slice().sort((a, b) => b.total_points - a.total_points).slice(0, limit);
+    // Worst picks only among captains who actually played (raw_points/multiplier both
+    // present on every row regardless) -- a 0-point captain pick (player didn't play,
+    // blanked, etc.) is exactly the kind of thing "worst captain pick" is asking about,
+    // so no filtering here, just the bottom of the same sorted list.
+    const worst = picks.slice().sort((a, b) => a.total_points - b.total_points).slice(0, limit);
+
+    return { best, worst };
+  } catch (err) {
+    console.error('Error computing top captain picks:', err);
+    return { best: [], worst: [] };
+  }
+}
+
 // Current and longest GW-win streak per manager, derived from the same gw-winners-cache
 // data total_season_summary/recent_form_summary already walk -- no extra fetch needed,
 // just a different reduction over gwWinners. This is what issue #39 flagged as
@@ -500,7 +559,7 @@ export async function handleGenBI(body, corsHeaders) {
     const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
     // 1. Fetch only what the router decided is relevant, in parallel
-    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks] = await Promise.all([
       needsGwWinners ? getGWWinners(season) : Promise.resolve([]),
       fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
       (fields.managerPicks || fields.ownership) ? getOurLeaguePicks(gw) : Promise.resolve([]),
@@ -510,7 +569,8 @@ export async function handleGenBI(body, corsHeaders) {
         : Promise.resolve([]),
       fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([]),
       fields.managerStats ? getManagerSeasonAggregates(season) : Promise.resolve([]),
-      needsManagerNames ? getManagerNamesForGW(gw, season) : Promise.resolve(new Map())
+      needsManagerNames ? getManagerNamesForGW(gw, season) : Promise.resolve(new Map()),
+      fields.topCaptainPicks ? getTopCaptainPicks(season) : Promise.resolve({ best: [], worst: [] })
     ]);
 
     // 2. Calculate Total Season Wins
@@ -630,7 +690,13 @@ export async function handleGenBI(body, corsHeaders) {
       // as a side benefit when manager_picks was already fetched anyway.
       ownership_aggregates: (fields.managerPicks || fields.ownership)
         ? computeOwnershipAggregates(ourPicks, managerNamesForGW)
-        : { most_owned_player: null, differentials: [] }
+        : { most_owned_player: null, differentials: [] },
+      // Individual (manager, player, gameweek) captain picks, ranked by that pick's
+      // actual return -- the literal reading of "best/worst captain PICKS", distinct
+      // from manager_season_stats.captain_points_season's per-manager cumulative
+      // total. See getTopCaptainPicks and instruction 2 in bedrock.mjs for when to
+      // use which.
+      top_captain_picks: topCaptainPicks
     };
 
     // 5. Invoke Claude with refined context

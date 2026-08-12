@@ -78,7 +78,8 @@ const ALL_TRUE = {
   seasonTotals: true,
   managerPicks: true,
   managerStats: true,
-  ownership: true
+  ownership: true,
+  topCaptainPicks: true
 };
 
 // Returns which context fields a question needs. Every key is always present
@@ -95,10 +96,19 @@ export function selectRelevantFields(question) {
   }
 
   // A captain question with season-scope wording ("this season", "overall", "whole
-  // season" -- the same seasonTotals keyword group) needs manager_season_stats too,
-  // not just this-gameweek manager_picks.
+  // season" -- the same seasonTotals keyword group) needs BOTH manager_season_stats
+  // (captain_points_season, for "how much of the lead is captaincy"-style questions)
+  // and top_captain_picks (individual best/worst single-pick performances, for the
+  // more literal "best captain PICKS" reading -- see genbi.mjs's getTopCaptainPicks).
+  // Not the same field: captain_points_season is a per-manager cumulative sum that
+  // rewards games played as much as pick quality; top_captain_picks ranks individual
+  // (player, gameweek) choices directly. Fetching both and letting bedrock.mjs's
+  // instructions pick the right one per question matches this router's stated
+  // "under-fetching is worse than over-fetching" principle.
+  fields.topCaptainPicks = false;
   if (fields.seasonTotals && CAPTAIN_KEYWORDS.some((kw) => q.includes(kw))) {
     fields.managerStats = true;
+    fields.topCaptainPicks = true;
   }
 
   const matchedAnything = Object.values(fields).some(Boolean);

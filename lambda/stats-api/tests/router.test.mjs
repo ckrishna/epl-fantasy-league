@@ -46,6 +46,16 @@ test('[regression] a gameweek-scoped captain question does NOT force managerStat
   assert.strictEqual(fields.managerStats, false, 'No season wording present -- should not pull in season-long stats unnecessarily');
 });
 
+test('[current bug] a season-scoped captain question also selects topCaptainPicks', () => {
+  const fields = selectRelevantFields('Best captain picks this season?');
+  assert.strictEqual(fields.topCaptainPicks, true, 'The literal "best captain PICKS" reading needs individual-pick data, not just the season-total captain_points_season');
+});
+
+test('[regression] a gameweek-scoped captain question does NOT select topCaptainPicks', () => {
+  const fields = selectRelevantFields('Best captain picks this week?');
+  assert.strictEqual(fields.topCaptainPicks, false);
+});
+
 test('[current bug] an explicit numbered gameweek reference selects playerGwData', () => {
   const fields = selectRelevantFields('Who scored the most points in GW5?');
   assert.strictEqual(fields.playerGwData, true);
@@ -95,7 +105,7 @@ test('[current bug] "own"/"shown"/"known" false positives are avoided -- only sp
 
 test('[regression] every field key is always present, never undefined', () => {
   const fields = selectRelevantFields('anything at all');
-  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership']) {
+  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership', 'topCaptainPicks']) {
     assert.strictEqual(typeof fields[key], 'boolean', `Expected ${key} to always be a boolean`);
   }
 });
