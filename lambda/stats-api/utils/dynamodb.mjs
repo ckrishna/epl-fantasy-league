@@ -3,8 +3,8 @@ import { DynamoDBDocumentClient, ScanCommand, QueryCommand } from '@aws-sdk/lib-
 
 export const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'us-west-2' }));
 
-const FPL_API = 'https://fantasy.premierleague.com/api';
-const FPL_FETCH_HEADERS = {
+export const FPL_API = 'https://fantasy.premierleague.com/api';
+export const FPL_FETCH_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 };
 

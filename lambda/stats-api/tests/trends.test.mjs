@@ -9,10 +9,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
+import { installFetchMock, jsonResponse } from './helpers/mock-fetch.mjs';
 import { handleTrends, handleTrendsManagers } from '../handlers/trends.mjs';
 
 const SEASON_PAST = '2024/25';
 const SEASON_CURRENT = '2025/26';
+const LEAGUE_ID = 999111;
+
+// handleTrendsManagers sources the current roster from FPL's live league API, not
+// from ingested gameweek data (which may not exist yet pre-season, and can't tell a
+// real returner from someone who quietly dropped the league). `names` becomes
+// `standings.results[].player_name` -- the same field getLeagueManagers() in the
+// ingester reads once a league has an established (non-brand-new) history.
+function mockLeagueFetch(names) {
+  return installFetchMock((url) => {
+    if (url.includes(`leagues-classic/${LEAGUE_ID}/standings`)) {
+      return jsonResponse({
+        standings: { results: names.map((n, i) => ({ entry: i + 1, entry_name: 'Team', player_name: n })) }
+      });
+    }
+    return null;
+  });
+}
 
 function gwRow({ season, entry_id, gameweek, points_total, team_name, manager_name = null }) {
   return {
@@ -54,56 +72,81 @@ function mockScan(rows) {
       return { Items: rows };
     }
     if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'seasons') {
-      return { Items: [{ season_string: SEASON_CURRENT, season_id: 2, current: true }] };
+      return { Items: [{ season_string: SEASON_CURRENT, season_id: 2, current: true, league_id: LEAGUE_ID }] };
     }
     return undefined;
   });
 }
 
 test('handleTrendsManagers dedupes by real name and fills in a nickname when one exists', async () => {
-  const mock = mockScan(buildFixtureRows());
+  const dynamoMock = mockScan(buildFixtureRows());
+  const fetchMock = mockLeagueFetch(['Alice Smith', 'Carol White']);
   try {
     const result = await handleTrendsManagers({});
     const body = JSON.parse(result.body);
     assert.strictEqual(result.statusCode, 200);
-    // Alice and Carol both have a current-season row; Bob only ever played the past
-    // season, so he's excluded from the picker (see the next test).
+    // Alice and Carol are both on the live FPL roster this season; Bob only ever
+    // played the past season and never rejoined, so he's excluded (see next test).
     assert.strictEqual(body.managers.length, 2);
     const alice = body.managers.find((m) => m.team_name === 'Alice Smith');
     assert.strictEqual(alice.manager_name, "Alice's Aces");
   } finally {
-    mock.restore();
+    dynamoMock.restore();
+    fetchMock.restore();
   }
 });
 
-test('handleTrendsManagers excludes a manager with no row in the current season', async () => {
-  const mock = mockScan(buildFixtureRows());
+test('handleTrendsManagers excludes a manager not on the current live FPL roster', async () => {
+  const dynamoMock = mockScan(buildFixtureRows());
+  // Bob has current-season fpl_entry_gameweek rows in this fixture (unlike the past
+  // version of this test), but the LIVE FPL roster below doesn't include him -- e.g.
+  // he played last season but quietly didn't rejoin. The picker should trust the live
+  // roster over ingested history, since ingested data can't see a drop-out at all.
+  const fetchMock = mockLeagueFetch(['Alice Smith', 'Carol White']);
   try {
     const result = await handleTrendsManagers({});
     const body = JSON.parse(result.body);
-    // Bob only exists in 2024/25 (the past season in this fixture) -- shouldn't clutter
-    // a picker meant for the current league, even though his historical trends are
-    // still reachable directly via /trends?manager=Bob+Jones.
     const bob = body.managers.find((m) => m.team_name === 'Bob Jones');
     assert.strictEqual(bob, undefined);
   } finally {
-    mock.restore();
+    dynamoMock.restore();
+    fetchMock.restore();
+  }
+});
+
+test('handleTrendsManagers falls back to the latest ingested season if the live FPL API fails', async () => {
+  const dynamoMock = mockScan(buildFixtureRows());
+  const fetchMock = installFetchMock(() => ({ ok: false, status: 500, json: async () => ({}) }));
+  try {
+    const result = await handleTrendsManagers({});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(result.statusCode, 200);
+    // Fails open to whoever has a row in the most recent ingested season (2025/26:
+    // Alice and Carol) rather than showing an empty picker.
+    assert.strictEqual(body.managers.length, 2);
+    assert.ok(body.managers.some((m) => m.team_name === 'Alice Smith'));
+    assert.ok(body.managers.some((m) => m.team_name === 'Carol White'));
+  } finally {
+    dynamoMock.restore();
+    fetchMock.restore();
   }
 });
 
 test('handleTrendsManagers collapses whitespace variants of the same name', async () => {
   const rows = [
     gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 1, points_total: 50, team_name: 'Chetan Bk' }),
-    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 2, points_total: 100, team_name: 'Chetan Bk' }),
+    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 2, points_total: 100, team_name: 'Chetan Bk' }),
     gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: 1, points_total: 60, team_name: 'Chetan Bk' })
   ];
-  const mock = mockScan(rows);
+  const dynamoMock = mockScan(rows);
+  const fetchMock = mockLeagueFetch(['Chetan Bk']);
   try {
     const result = await handleTrendsManagers({});
     const body = JSON.parse(result.body);
     assert.strictEqual(body.managers.length, 1);
   } finally {
-    mock.restore();
+    dynamoMock.restore();
+    fetchMock.restore();
   }
 });
 

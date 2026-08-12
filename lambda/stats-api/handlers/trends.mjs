@@ -1,6 +1,5 @@
 import { getAllGwRows, normName } from '../utils/trends-data.mjs';
-import { getCurrentSeason } from '../utils/dynamodb.mjs';
-
+import { getCurrentSeason, getAllSeasons, FPL_API, FPL_FETCH_HEADERS } from '../utils/dynamodb.mjs';
 
 // Reference gameweek for the "hot start vs strong finish" comparison -- arbitrary but
 // consistent, chosen because GW10 is far enough in that early-season noise has settled
@@ -8,20 +7,68 @@ import { getCurrentSeason } from '../utils/dynamodb.mjs';
 // have data for it.
 const MID_SEASON_GAMEWEEK = 10;
 
+// Mirrors fpl-data-ingester's getLeagueManagers() -- separate lambda, no shared code
+// layer between them, so this is a deliberate small duplication rather than a new
+// cross-lambda dependency (same tradeoff already made for the winner-derivation logic
+// in import-historical-seasons.mjs). Needed because fpl_entry_gameweek alone CANNOT
+// answer "who's really in the league right now": before a season's first gameweek is
+// ingested it has zero rows for that season (exactly the current situation -- 2026/27
+// doesn't start until Aug 21), and even once it does, someone who played last season
+// isn't necessarily still in the league this season -- dropping out leaves no trace in
+// already-ingested data at all. Only FPL's own live league API actually knows.
+async function getCurrentLeagueMemberNames(leagueId) {
+  const response = await fetch(`${FPL_API}/leagues-classic/${leagueId}/standings/`, { headers: FPL_FETCH_HEADERS });
+  if (!response.ok) throw new Error(`FPL league API HTTP ${response.status}`);
+  const data = await response.json();
+
+  const standingsResults = data.standings?.results;
+  const newEntriesResults = data.new_entries?.results;
+
+  let results = [];
+  let source = 'none';
+  if (Array.isArray(standingsResults) && standingsResults.length > 0) {
+    results = standingsResults;
+    source = 'standings';
+  } else if (Array.isArray(newEntriesResults) && newEntriesResults.length > 0) {
+    results = newEntriesResults;
+    source = 'new_entries';
+  }
+
+  return new Set(results.map((m) =>
+    normName(source === 'new_entries' ? `${m.player_first_name} ${m.player_last_name}` : m.player_name)
+  ));
+}
+
 // Powers the manager picker on the Trends tab. Built from fpl_entry_gameweek directly
 // (not a dedicated "managers" table -- there isn't one), restricted to managers who
-// are actually IN the current season's roster -- past-only managers (e.g. someone who
-// played 2019/20-2022/23 but isn't in this year's league) can still be looked up via
-// /trends?manager=..., but shouldn't clutter a "your trends" picker meant for the
-// current league. Their historical seasons still show up fine once a current manager
-// is selected -- this filter only affects who's offered in the dropdown, not what
-// handleTrends itself will return for a given name.
+// are actually IN the current season's live-FPL roster -- past-only managers (e.g.
+// someone who played 2019/20-2022/23, or who played last season but didn't rejoin)
+// can still be looked up via /trends?manager=..., but shouldn't clutter a "your
+// trends" picker meant for the current league. Their historical seasons still show up
+// fine once a current manager is selected -- this filter only affects who's offered in
+// the dropdown, not what handleTrends itself will return for a given name.
 export async function handleTrendsManagers(corsHeaders) {
-  const [rows, currentSeason] = await Promise.all([getAllGwRows(), getCurrentSeason()]);
+  const [rows, seasons] = await Promise.all([getAllGwRows(), getAllSeasons()]);
+  const currentSeasonRow = seasons.find((s) => s.current);
 
-  const currentNames = new Set(
-    rows.filter((r) => r.season === currentSeason).map((r) => normName(r.team_name))
-  );
+  let currentNames;
+  try {
+    if (!currentSeasonRow?.league_id) throw new Error('current season has no league_id set');
+    currentNames = await getCurrentLeagueMemberNames(currentSeasonRow.league_id);
+  } catch (err) {
+    // Fail open rather than showing an empty picker if the live FPL API is down or
+    // league_id is missing -- fall back to whoever has a row in the most recent season
+    // we actually have ingested data for. Not perfectly accurate (can't tell a real
+    // returner from someone who quietly dropped out this way), but strictly better
+    // than showing every manager from every season ever imported.
+    const seasonsWithData = new Set(rows.map((r) => r.season));
+    const fallbackSeason = seasons
+      .filter((s) => seasonsWithData.has(s.season_string))
+      .sort((a, b) => (b.season_id ?? 0) - (a.season_id ?? 0))[0]?.season_string;
+    currentNames = new Set(
+      rows.filter((r) => r.season === fallbackSeason).map((r) => normName(r.team_name))
+    );
+  }
 
   const byName = new Map();
   for (const row of rows) {
