@@ -89,3 +89,27 @@ export async function submitFeedback(queryId, feedback) {
     return false;
   }
 }
+
+// Free-text feedback form on the Help page -- unrelated to submitFeedback() above
+// (that's GenBI's thumbs-up/down on a specific answer). `website` is a honeypot field:
+// always sent empty by the real form, just along for the ride so a bot filling in
+// every input it sees trips it. Returns the server's actual error message on failure
+// (e.g. rate-limited, invalid email) rather than a bare boolean, since the form should
+// tell the manager *why* it didn't go through.
+export async function submitAppFeedback({ message, email, website }) {
+  try {
+    const res = await fetch(`${API_BASE}/app-feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, email, website })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('submitAppFeedback error:', err);
+    return { success: false, error: 'Network error -- please try again.' };
+  }
+}

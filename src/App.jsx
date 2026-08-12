@@ -143,6 +143,7 @@ export default function App() {
       hour12: true
     })} UTC
   </p>
+  <p className="app-footer-copyright">&copy; {new Date().getFullYear()} candorsolutions.us</p>
 </footer>
     </div>
   );

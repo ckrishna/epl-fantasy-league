@@ -66,11 +66,118 @@
   color: var(--accent);
 }
 
-/* Let the "How It Works" and "Browser Support" cards span the full row on wider
-   screens -- they read better as a single line than squeezed into a narrow column. */
-.help-grid .help-card:nth-child(4),
-.help-grid .help-card:nth-child(5) {
+/* "How It Works" and "Browser Support" span the full row on wider screens -- they read
+   better as a single line than squeezed into a narrow column. Targeted by class rather
+   than position (nth-child) -- with only 3 cards left after trimming Standings/GW
+   Winners/Stats (self-explanatory once the tabs themselves are used), position-based
+   selectors are exactly the kind of thing that silently goes stale the next time a card
+   is added, removed, or reordered. */
+.help-grid .feedback-card,
+.help-grid .help-card-wide {
   grid-column: 1 / -1;
+}
+
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  max-width: 480px;
+}
+
+.feedback-message,
+.feedback-email {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  /* 16px floor, same reasoning as Stats.css's .question-input -- anything smaller
+     triggers iOS Safari's auto-zoom-on-focus. */
+  font-size: max(0.9rem, 16px);
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.feedback-message {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.feedback-message:focus,
+.feedback-email:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.feedback-message:disabled,
+.feedback-email:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Sits right under the textarea -- states the minimum up front, then counts down live
+   once typing starts and switches back to the static "Minimum N characters" once met,
+   so there's always a reason visible for why Send stays disabled. */
+.feedback-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* Honeypot -- must be genuinely invisible to a sighted user (not just display:none,
+   which some bots skip filling in precisely because they detect it) while still being
+   part of the DOM/tab flow enough for a naive auto-fill script to find it. Off-screen
+   positioning + zero size does that; tabIndex=-1 and aria-hidden in the JSX keep it out
+   of keyboard/screen-reader navigation for real users. */
+.feedback-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.feedback-submit-btn {
+  align-self: flex-start;
+  padding: 0.6rem 1.25rem;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.feedback-submit-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.feedback-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.feedback-status {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.feedback-status-success {
+  color: var(--success);
+}
+
+.feedback-status-error {
+  color: var(--danger);
 }
 
 @media (max-width: 640px) {

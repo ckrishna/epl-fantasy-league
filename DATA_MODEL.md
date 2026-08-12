@@ -266,6 +266,24 @@ Written by `genbi.mjs` (`recordQueryLog`, in `utils/genbi-log.mjs`) after every 
 
 ---
 
+## `app-feedback` (new, 2026-08-12)
+
+Partition key `feedback_id` (S, UUID — generated per submission, no sort key).
+
+Fields: `timestamp` (S, ISO), `date` (S, `"YYYY-MM-DD"` UTC, same denormalization rationale as `genbi-query-log`), `message` (S), `email` (S, nullable — only set if the manager wants a reply), `source_ip` (S, nullable), `user_agent` (S, nullable).
+
+Written by `handlers/feedback.mjs` (`recordFeedback`, in `utils/feedback-log.mjs`) for the Help page's "Send Feedback" form (`POST /app-feedback`) -- unrelated to `genbi-query-log`'s thumbs-up/down feedback above, this is a free-text message with no relationship to a GenBI question.
+
+**Deliberately no SES email on submit.** The form exists specifically so managers don't have to email the app owner directly; writing straight to DynamoDB with no outbound notification means there's no way to get bombarded with a real-time inbox ping per submission, regardless of volume — feedback is reviewed by scanning the table on demand instead. If a digest/notification is wanted later, it should be a low-frequency scheduled summary, not a per-submission email.
+
+**Abuse guards:** a honeypot field (`website`, always empty for a real submission, hidden off-screen in `Help.jsx`/`Help.css` and out of the tab order) — a non-empty value is silently accepted (200) without being written, so a bot gets no signal it was caught. Also an IP-based rate limit (`hasRecentSubmission`, a `Scan` filtered to `source_ip` + a 5-minute window) — a second submission from the same source IP within that window gets a 429. A `null` source IP (some Lambda event shapes don't always populate it) is never rate-limited — fails open, not closed. A failure in the rate-limit check itself (e.g. a DynamoDB blip) also fails open rather than blocking a real submission. Mirrored client-side in `Help.jsx` via a `localStorage` cooldown, mainly so the button visibly disables itself right after a submission instead of waiting on a 429 round-trip.
+
+**Table needs to be created in DynamoDB before this goes live** — same as `genbi-query-log` and `ingestion_runs` above.
+
+**Coverage note:** covered by `tests/feedback.test.mjs` (message/length/email validation, the honeypot path, the rate limit and its fail-open behavior, and the happy path). No frontend test coverage for the Help.jsx form, same repo-wide gap noted elsewhere.
+
+---
+
 ## Gap analysis (2026-07-29, via `scripts/find_gaps.py`)
 
 Ran a full scan of both league tables against the expected 11 managers × 38 gameweeks. Two distinct issues found:

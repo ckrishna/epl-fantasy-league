@@ -2,6 +2,7 @@ import { handleStandings } from './handlers/standings.mjs';
 import { handleWinners } from './handlers/winners.mjs';
 import { handleGenBI, handleGenBIFeedback } from './handlers/genbi.mjs';
 import { handleSeasons } from './handlers/seasons.mjs';
+import { handleFeedbackSubmit } from './handlers/feedback.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,6 +41,17 @@ export async function handler(event) {
 
     if (path.includes('/seasons')) {
       return await handleSeasons(corsHeaders);
+    }
+
+    // Help page's "send feedback" form -- unrelated to /stats/feedback above (GenBI's
+    // thumbs-up/down), a plain free-text message instead. Named /app-feedback rather
+    // than the shorter /feedback specifically so it can never accidentally match as a
+    // substring of /stats/feedback (or vice versa) if these checks are ever reordered.
+    if (path.includes('/app-feedback')) {
+      const sourceIp = event.requestContext?.identity?.sourceIp
+        || event.requestContext?.http?.sourceIp
+        || null;
+      return await handleFeedbackSubmit(body, sourceIp, corsHeaders);
     }
 
     return { statusCode: 404, headers: corsHeaders, body: JSON.stringify({ error: 'Endpoint not found' }) };

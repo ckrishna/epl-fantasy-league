@@ -380,6 +380,16 @@ body {
   margin-top: auto;
 }
 
+.app-footer p {
+  margin: 0;
+}
+
+.app-footer p.app-footer-copyright {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
 /* Season-scope disclaimer -- shared by Standings/GWWinners/Stats (see ScopeNote.jsx),
    NOT used on Help since that page isn't season-scoped. One small pill, same styling
    everywhere so it reads as a consistent piece of UI chrome rather than a per-page
