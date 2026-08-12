@@ -123,6 +123,43 @@ test('[current bug] manager_season_stats includes transfer activity, chips, benc
   }
 });
 
+test('[current bug] "Best captain picks this season?" gets manager_season_stats, not just this-gameweek manager_picks', async () => {
+  // Live bug (2026-08-12): this exact question -- one of the app's own default
+  // suggested queries -- declined with "no season-long captain data available",
+  // even though captain_points_season has existed in manager_season_stats since #39
+  // Phase 1. Root cause: router.mjs's managerStats keyword group had no "captain"
+  // entry at all, so a season-scoped captain question only ever triggered
+  // managerPicks (this-gameweek-only picks) and manager_season_stats was never even
+  // fetched, let alone sent to Claude.
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    entryGw: () => ({
+      Items: [
+        entryGwRow({ entryId: 101, name: 'Da Movement', gw: 1, ptsThisWeek: 60, ptsTotal: 60, transfersMade: 0, transferHit: 0 })
+      ]
+    }),
+    picks: () => ({
+      Items: [
+        pickRow({ entryId: 101, gw: 1, isCaptain: true, points: 20 })
+      ]
+    })
+  }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'Best captain picks this season?', season: '2025/26' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
+
+    assert.strictEqual(stats.length, 1, 'Expected manager_season_stats to actually be populated, not skipped by the router');
+    assert.strictEqual(stats[0].captain_points_season, 40, 'Expected 20 x 2 (default captain multiplier)');
+    assert.match(payload.system, /captain_points_season from <manager_season_stats>/, 'Expected the season-scoped captain instruction to be present in the prompt');
+  } finally {
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
 test('[current bug] chips_used_totals surfaces the manually-imported season fallback when per-gameweek active_chip is unavailable', async () => {
   const dynamoMock = installDynamoMock(baseDynamoRouter({
     entryGw: () => ({

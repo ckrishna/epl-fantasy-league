@@ -61,6 +61,15 @@ const KEYWORD_GROUPS = {
 // manager-level, not player-level, questions).
 const NUMBERED_GW_PATTERN = /\bgw\s?\d+\b|\bgameweek\s+\d+\b/i;
 
+// "captain"/"captaincy"/"armband" already trigger managerPicks (this-gameweek-only
+// picks) via KEYWORD_GROUPS above -- but a SEASON-scoped captain question ("best
+// captain picks this season?") needs manager_season_stats.captain_points_season
+// instead, which managerPicks alone never pulls in. Confirmed live: this question was
+// declining with "no season-long captain data available" even though
+// captain_points_season has existed since #39 Phase 1 -- the router just never sent
+// it, because no keyword in the managerStats group mentions "captain" at all.
+const CAPTAIN_KEYWORDS = ['captain', 'captaincy', 'armband'];
+
 const ALL_TRUE = {
   standings: true,
   seasonWins: true,
@@ -83,6 +92,13 @@ export function selectRelevantFields(question) {
   }
   if (NUMBERED_GW_PATTERN.test(q)) {
     fields.playerGwData = true;
+  }
+
+  // A captain question with season-scope wording ("this season", "overall", "whole
+  // season" -- the same seasonTotals keyword group) needs manager_season_stats too,
+  // not just this-gameweek manager_picks.
+  if (fields.seasonTotals && CAPTAIN_KEYWORDS.some((kw) => q.includes(kw))) {
+    fields.managerStats = true;
   }
 
   const matchedAnything = Object.values(fields).some(Boolean);

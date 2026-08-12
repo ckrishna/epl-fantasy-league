@@ -36,6 +36,16 @@ test('[current bug] a captain question selects both managerPicks and playerGwDat
   assert.strictEqual(fields.playerGwData, true, 'Captain math needs player_data (their points)');
 });
 
+test('[current bug] a season-scoped captain question also selects managerStats (captain_points_season)', () => {
+  const fields = selectRelevantFields('Best captain picks this season?');
+  assert.strictEqual(fields.managerStats, true, 'Season-scoped captain questions need manager_season_stats.captain_points_season, not just this-gameweek manager_picks');
+});
+
+test('[regression] a gameweek-scoped captain question does NOT force managerStats', () => {
+  const fields = selectRelevantFields('Best captain picks this week?');
+  assert.strictEqual(fields.managerStats, false, 'No season wording present -- should not pull in season-long stats unnecessarily');
+});
+
 test('[current bug] an explicit numbered gameweek reference selects playerGwData', () => {
   const fields = selectRelevantFields('Who scored the most points in GW5?');
   assert.strictEqual(fields.playerGwData, true);
