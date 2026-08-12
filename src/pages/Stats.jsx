@@ -193,7 +193,10 @@ export default function Stats({ season = null, seasonLabel = null }) {
                 </div>
                 {typeof result.durationMs === 'number' && (
                   <div className="stat-chip">
-                    <span className="stat-chip-label">Time</span>
+                    {/* Was just "Time" -- easy to mistake for the total wait shown by
+                        the "Churning" loader, when this is actually only the Bedrock
+                        call itself (routing + DynamoDB fetches aren't included). */}
+                    <span className="stat-chip-label">AI Time</span>
                     <span className="stat-chip-value">{(result.durationMs / 1000).toFixed(1)}s</span>
                   </div>
                 )}
