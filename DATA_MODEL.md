@@ -314,6 +314,22 @@ The payoff: **no new frontend code was needed.** Standings.jsx and GWWinners.jsx
 
 ---
 
+## Trends tab (new, 2026-08-12)
+
+New `/trends` and `/trends/managers` endpoints in `stats-api`, backing a new "Trends" tab (marked Beta, like Stats) that reads across every season on record for one manager at a time -- the payoff of the historical backfill above. Two views: pace vs. your own history (cumulative points by gameweek this season vs. your average/range at the same gameweek across past seasons) and season-by-season (final points per season, plus rank at GW10 vs. final rank, to surface hot-start-vs-strong-finish patterns).
+
+**Data source:** reads `fpl_entry_gameweek` only, via one unfiltered `Scan` (`utils/trends-data.mjs`'s `getAllGwRows()`). No new table. That table already has full weekly granularity for every season -- historical rows were backfilled GW-by-GW, live rows are written GW-by-GW by the ingester -- so a single scan plus in-memory grouping is enough for both the manager picker and the per-manager aggregation. Revisit with a GSI on `team_name` if the table grows enough that a full scan per request gets slow (a few thousand rows as of this writing, not a concern yet).
+
+**Manager identity across seasons:** joined on `team_name` (the field that holds a manager's real name on every row, historical and live -- see the `getLeagueManagers()` naming-inversion note above: `manager_name` is actually the FPL team nickname, and is `null` on every historical row). Real-FPL `entry_id`s are NOT usable as the join key -- they differ between the synthetic negative IDs the historical import assigned and a manager's real live-season FPL ID. Names go through the same `normName()` whitespace-collapsing used by the import script before being compared, for the same reason (non-breaking-space variants in the source data).
+
+**Rank computation:** `final_rank`/`mid_rank` (rank at GW10) are computed by ranking the requested manager against everyone else who has a row at that exact `(season, gameweek)`, sorted by `points_total` (cumulative net points) descending -- not looked up from a stored rank field (there isn't one; see the `fpl_league_standings.rank` dead-code note above for why that pattern was deliberately avoided this time).
+
+**Edge cases handled:** a manager with no live-season row yet (pace section empty, `at_current_gw: null`); a manager who never reached GW10 in a given season (`mid_rank: null` rather than a wrong guess); a requested manager not found at all (404). Covered in `lambda/stats-api/tests/trends.test.mjs`.
+
+**Not yet built (see task backlog):** hit-taking behavior (do transfer hits historically pay off) and comeback/collapse stories (biggest mid-season rank swings) -- both came out of the same brainstorm, deliberately deferred to a second pass since they need slightly different aggregations than the two views built here.
+
+---
+
 ## Gap analysis (2026-07-29, via `scripts/find_gaps.py`)
 
 Ran a full scan of both league tables against the expected 11 managers × 38 gameweeks. Two distinct issues found:

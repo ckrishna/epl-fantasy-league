@@ -4,6 +4,7 @@ import './styles/App.css';
 import Standings from './pages/Standings';
 import GWWinners from './pages/GWWinners';
 import Stats from './pages/Stats';
+import Trends from './pages/Trends';
 import Help from './pages/Help';
 import { getSeasons } from './api/client';
 
@@ -130,6 +131,12 @@ export default function App() {
           Stats<sup className="beta-tag">Beta</sup>
         </button>
         <button
+          className={`tab ${activeTab === 'trends' ? 'active' : ''}`}
+          onClick={() => setActiveTab('trends')}
+        >
+          Trends<sup className="beta-tag">Beta</sup>
+        </button>
+        <button
           className={`tab ${activeTab === 'help' ? 'active' : ''}`}
           onClick={() => setActiveTab('help')}
         >
@@ -141,6 +148,7 @@ export default function App() {
         {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} />}
         {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} />}
         {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} />}
+        {activeTab === 'trends' && <Trends />}
         {activeTab === 'help' && <Help />}
       </main>
 

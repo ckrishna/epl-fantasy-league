@@ -3,6 +3,7 @@ import { handleWinners } from './handlers/winners.mjs';
 import { handleGenBI, handleGenBIFeedback } from './handlers/genbi.mjs';
 import { handleSeasons } from './handlers/seasons.mjs';
 import { handleFeedbackSubmit } from './handlers/feedback.mjs';
+import { handleTrends, handleTrendsManagers } from './handlers/trends.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,6 +42,17 @@ export async function handler(event) {
 
     if (path.includes('/seasons')) {
       return await handleSeasons(corsHeaders);
+    }
+
+    // Checked before the plain /trends route below since '/trends/managers' also
+    // contains '/trends' as a substring (same ordering trick as /app-feedback vs
+    // /stats/feedback above).
+    if (path.includes('/trends/managers')) {
+      return await handleTrendsManagers(corsHeaders);
+    }
+
+    if (path.includes('/trends')) {
+      return await handleTrends(queryParams, corsHeaders);
     }
 
     // Help page's "send feedback" form -- unrelated to /stats/feedback above (GenBI's

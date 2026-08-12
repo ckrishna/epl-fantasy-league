@@ -46,6 +46,34 @@ export async function getSeasons() {
   }
 }
 
+// Trends tab manager picker -- every real name with at least one fpl_entry_gameweek
+// row, historical or live, deduped server-side.
+export async function getTrendsManagers() {
+  try {
+    const res = await fetch(`${API_BASE}/trends/managers`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.managers || [];
+  } catch (err) {
+    console.error('getTrendsManagers error:', err);
+    return [];
+  }
+}
+
+// Pace-vs-history and season-by-season data for one manager, keyed by their real name
+// (team_name -- see the naming-inversion note in DATA_MODEL.md). Returns null on
+// failure so the page can show a friendly empty state instead of throwing.
+export async function getTrends(managerTeamName) {
+  try {
+    const res = await fetch(`${API_BASE}/trends?manager=${encodeURIComponent(managerTeamName)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('getTrends error:', err);
+    return null;
+  }
+}
+
 export async function getTrendingPlayers(gw = null, limit = 10) {
   try {
     const res = await fetch(`${API_BASE}/players/trending?gw=${gw}&limit=${limit}`);
