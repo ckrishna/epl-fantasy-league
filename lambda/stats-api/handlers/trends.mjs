@@ -1,6 +1,7 @@
 import { getAllGwRows, normName } from '../utils/trends-data.mjs';
 import { getCurrentSeason } from '../utils/dynamodb.mjs';
 
+
 // Reference gameweek for the "hot start vs strong finish" comparison -- arbitrary but
 // consistent, chosen because GW10 is far enough in that early-season noise has settled
 // a bit, and early enough that most seasons (even ones that ended early/were disrupted)
@@ -8,15 +9,24 @@ import { getCurrentSeason } from '../utils/dynamodb.mjs';
 const MID_SEASON_GAMEWEEK = 10;
 
 // Powers the manager picker on the Trends tab. Built from fpl_entry_gameweek directly
-// (not a dedicated "managers" table -- there isn't one) so it reflects exactly who has
-// data, historical or live, with no separate list to keep in sync.
+// (not a dedicated "managers" table -- there isn't one), restricted to managers who
+// are actually IN the current season's roster -- past-only managers (e.g. someone who
+// played 2019/20-2022/23 but isn't in this year's league) can still be looked up via
+// /trends?manager=..., but shouldn't clutter a "your trends" picker meant for the
+// current league. Their historical seasons still show up fine once a current manager
+// is selected -- this filter only affects who's offered in the dropdown, not what
+// handleTrends itself will return for a given name.
 export async function handleTrendsManagers(corsHeaders) {
-  const rows = await getAllGwRows();
+  const [rows, currentSeason] = await Promise.all([getAllGwRows(), getCurrentSeason()]);
+
+  const currentNames = new Set(
+    rows.filter((r) => r.season === currentSeason).map((r) => normName(r.team_name))
+  );
 
   const byName = new Map();
   for (const row of rows) {
     const name = normName(row.team_name);
-    if (!name) continue;
+    if (!name || !currentNames.has(name)) continue;
     if (!byName.has(name)) {
       byName.set(name, { team_name: name, manager_name: row.manager_name || null });
     } else if (!byName.get(name).manager_name && row.manager_name) {
@@ -152,6 +162,57 @@ export async function handleTrends(queryParams, corsHeaders) {
       }
     : null;
 
+  // "Vs the field" worm graph: every manager's cumulative points by gameweek, for the
+  // CURRENT season only (unlike pace/seasons above, which deliberately span every
+  // season on record). Reuses the same bySeasonGw index already built for ranking, so
+  // no extra scan or pass over allRows is needed.
+  const field = [];
+  const currentSeasonAllRows = bySeasonGw.get(currentSeason);
+  if (currentSeasonAllRows) {
+    const byManager = new Map(); // normalized name -> { team_name, manager_name, points: Map(gw -> points_total) }
+    for (const [gw, rowsAtGw] of currentSeasonAllRows) {
+      for (const row of rowsAtGw) {
+        const key = normName(row.team_name);
+        if (!byManager.has(key)) {
+          byManager.set(key, { team_name: key, manager_name: row.manager_name || null, points: new Map() });
+        }
+        const entry = byManager.get(key);
+        if (!entry.manager_name && row.manager_name) entry.manager_name = row.manager_name;
+        entry.points.set(gw, row.points_total);
+      }
+    }
+
+    // Leader = whoever has the most points at the current gameweek specifically (not
+    // just whoever's ahead on some other week) -- matches what "leader" means anywhere
+    // else in this app.
+    let leaderKey = null;
+    let leaderPoints = -Infinity;
+    if (currentGameweek) {
+      for (const [key, entry] of byManager) {
+        const pts = entry.points.get(currentGameweek);
+        if (typeof pts === 'number' && pts > leaderPoints) {
+          leaderPoints = pts;
+          leaderKey = key;
+        }
+      }
+    }
+
+    for (const [key, entry] of byManager) {
+      field.push({
+        team_name: entry.team_name,
+        manager_name: entry.manager_name,
+        is_you: key === requestedName,
+        // If the requested manager IS the leader, only is_you should read true -- the
+        // frontend highlights on is_you OR is_leader, and a manager only needs one
+        // highlighted line even when both are true.
+        is_leader: key !== requestedName && key === leaderKey,
+        points: [...entry.points.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([gameweek, points]) => ({ gameweek, points }))
+      });
+    }
+  }
+
   return {
     statusCode: 200,
     headers: corsHeaders,
@@ -164,7 +225,8 @@ export async function handleTrends(queryParams, corsHeaders) {
         history_envelope: historyEnvelope,
         at_current_gw: atCurrentGw
       },
-      seasons
+      seasons,
+      field
     })
   };
 }

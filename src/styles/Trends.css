@@ -32,12 +32,31 @@
   min-width: 220px;
 }
 
+/* Desktop-first, matching the rest of this app's convention: base styles here are the
+   desktop layout (all three sections shown at once, side by side -- plenty of width,
+   no need for tabs). The @media (max-width: 768px) block at the bottom overrides this
+   for mobile, where showing all three stacked would mean a long scroll -- instead only
+   the active section is shown, switched via the sub-tab row. */
+.trends-subtabs {
+  display: none;
+}
+
+.trends-sections {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.trends-section {
+  display: block;
+}
+
 .trends-card {
   background: var(--bg-surface);
   border-radius: 12px;
   padding: clamp(1.25rem, 4vw, 1.75rem);
   box-shadow: var(--shadow);
-  margin-bottom: 1.25rem;
 }
 
 .trends-card-title {
@@ -146,4 +165,50 @@
   flex: 1;
   height: 1px;
   background: var(--border);
+}
+
+@media (max-width: 768px) {
+  .trends-subtabs {
+    display: flex;
+    background: var(--bg-surface-alt);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 1rem;
+    gap: 2px;
+  }
+
+  .trends-subtab {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .trends-subtab.active {
+    /* --accent + --text-on-accent, not --primary -- --primary is a light-mode-dark /
+       dark-mode-light TEXT color (see App.css's dark-theme override comment), not a
+       fill-safe token. Using it as a background here was the "lot of white in dark
+       mode" bug: it resolves to a light lavender fill in dark mode, same class of bug
+       as the .query-btn.active fix earlier in this app. */
+    background: var(--accent);
+    color: var(--text-on-accent);
+  }
+
+  .trends-sections {
+    display: block;
+  }
+
+  .trends-section {
+    display: none;
+  }
+
+  .trends-section.active {
+    display: block;
+  }
 }

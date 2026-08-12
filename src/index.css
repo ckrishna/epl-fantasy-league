@@ -6,7 +6,13 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background-color: #fafafa;
+  /* Was hardcoded to a light gray, never updated for dark mode. Neither .app nor
+     .app-content paint their own background (see App.css) -- they rely on body's
+     background showing through wherever a page's content is shorter than the
+     viewport. Every other page always has enough rows to fill the screen, so this
+     never surfaced until Trends' short "no games played yet" empty state exposed the
+     gap: a solid light-gray band below the card, in the middle of dark mode. */
+  background-color: var(--bg-page, #fafafa);
 }
 
 #root {

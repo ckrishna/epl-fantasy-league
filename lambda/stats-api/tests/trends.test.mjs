@@ -28,10 +28,13 @@ function gwRow({ season, entry_id, gameweek, points_total, team_name, manager_na
   };
 }
 
-// Two managers, one past season (full 12 GWs) and one current season (through GW6),
-// so both the historical-envelope logic and the "at current GW" diff have something to
-// chew on. Alice is ahead of her own history at the current GW; Bob has no live-season
-// row at all (only ever played the historical season) to exercise that edge case.
+// Three managers, one past season (full 12 GWs, Alice and Bob only) and one current
+// season through GW6 (Alice and Carol), so both the historical-envelope logic and the
+// "vs the field" worm-graph logic have something real to chew on. Alice is ahead of
+// her own history at the current GW and is also this season's leader; Bob has no
+// live-season row at all (only ever played the historical season), to exercise that
+// edge case; Carol only exists in the current season, to exercise the field/worm
+// output having a manager with no historical seasons at all.
 function buildFixtureRows() {
   const rows = [];
   for (let gw = 1; gw <= 12; gw++) {
@@ -40,6 +43,7 @@ function buildFixtureRows() {
   }
   for (let gw = 1; gw <= 6; gw++) {
     rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: gw, points_total: gw * 60, team_name: 'Alice Smith', manager_name: "Alice's Aces" }));
+    rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 3, gameweek: gw, points_total: gw * 45, team_name: 'Carol White', manager_name: "Carol's Crew" }));
   }
   return rows;
 }
@@ -62,11 +66,26 @@ test('handleTrendsManagers dedupes by real name and fills in a nickname when one
     const result = await handleTrendsManagers({});
     const body = JSON.parse(result.body);
     assert.strictEqual(result.statusCode, 200);
+    // Alice and Carol both have a current-season row; Bob only ever played the past
+    // season, so he's excluded from the picker (see the next test).
     assert.strictEqual(body.managers.length, 2);
     const alice = body.managers.find((m) => m.team_name === 'Alice Smith');
     assert.strictEqual(alice.manager_name, "Alice's Aces");
+  } finally {
+    mock.restore();
+  }
+});
+
+test('handleTrendsManagers excludes a manager with no row in the current season', async () => {
+  const mock = mockScan(buildFixtureRows());
+  try {
+    const result = await handleTrendsManagers({});
+    const body = JSON.parse(result.body);
+    // Bob only exists in 2024/25 (the past season in this fixture) -- shouldn't clutter
+    // a picker meant for the current league, even though his historical trends are
+    // still reachable directly via /trends?manager=Bob+Jones.
     const bob = body.managers.find((m) => m.team_name === 'Bob Jones');
-    assert.strictEqual(bob.manager_name, null);
+    assert.strictEqual(bob, undefined);
   } finally {
     mock.restore();
   }
@@ -75,7 +94,8 @@ test('handleTrendsManagers dedupes by real name and fills in a nickname when one
 test('handleTrendsManagers collapses whitespace variants of the same name', async () => {
   const rows = [
     gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 1, points_total: 50, team_name: 'Chetan Bk' }),
-    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 2, points_total: 100, team_name: 'Chetan Bk' })
+    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 2, points_total: 100, team_name: 'Chetan Bk' }),
+    gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: 1, points_total: 60, team_name: 'Chetan Bk' })
   ];
   const mock = mockScan(rows);
   try {
@@ -166,6 +186,61 @@ test('handleTrends handles a manager with only historical data (no current-seaso
     assert.strictEqual(body.pace.this_season.length, 0);
     assert.strictEqual(body.pace.at_current_gw, null);
     assert.strictEqual(body.seasons.length, 1);
+    // The field always reflects who's actually in the current season (Alice and
+    // Carol), regardless of who's asking -- Bob just won't be one of the entries, and
+    // won't be flagged is_you on either of them.
+    assert.strictEqual(body.field.length, 2);
+    assert.ok(body.field.every((m) => m.is_you === false));
+  } finally {
+    mock.restore();
+  }
+});
+
+test('handleTrends builds the "vs the field" worm-graph data for the current season', async () => {
+  const mock = mockScan(buildFixtureRows());
+  try {
+    const result = await handleTrends({ manager: 'Alice Smith' }, {});
+    const body = JSON.parse(result.body);
+
+    // Alice (60/gw) and Carol (45/gw) both played the current season -- Bob never did,
+    // so he must not show up as a third line.
+    assert.strictEqual(body.field.length, 2);
+
+    const alice = body.field.find((m) => m.team_name === 'Alice Smith');
+    const carol = body.field.find((m) => m.team_name === 'Carol White');
+
+    // Alice out-scores Carol every week, so she's actually the leader too -- but
+    // is_leader is deliberately suppressed on your OWN entry (only is_you is set),
+    // so the frontend never needs to draw two highlighted lines for the same person.
+    assert.strictEqual(alice.is_you, true);
+    assert.strictEqual(alice.is_leader, false);
+    assert.strictEqual(carol.is_you, false);
+    assert.strictEqual(carol.is_leader, false);
+
+    // Full weekly series, not just the latest point.
+    assert.strictEqual(alice.points.length, 6);
+    assert.deepStrictEqual(alice.points[5], { gameweek: 6, points: 360 });
+    assert.deepStrictEqual(carol.points[5], { gameweek: 6, points: 270 });
+  } finally {
+    mock.restore();
+  }
+});
+
+test('handleTrends marks the field leader correctly when the requested manager is behind', async () => {
+  const mock = mockScan(buildFixtureRows());
+  try {
+    // Carol (45/gw) is behind Alice (60/gw) this season -- Alice should be flagged as
+    // leader on Carol's own response, and Carol should not be marked leader on her own.
+    const result = await handleTrends({ manager: 'Carol White' }, {});
+    const body = JSON.parse(result.body);
+
+    const alice = body.field.find((m) => m.team_name === 'Alice Smith');
+    const carol = body.field.find((m) => m.team_name === 'Carol White');
+
+    assert.strictEqual(carol.is_you, true);
+    assert.strictEqual(carol.is_leader, false);
+    assert.strictEqual(alice.is_you, false);
+    assert.strictEqual(alice.is_leader, true);
   } finally {
     mock.restore();
   }
