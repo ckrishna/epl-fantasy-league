@@ -1,50 +1,57 @@
-/* src/App.css - Mobile-first, modern & clean */
+/* src/App.css - FPL-branded: near-black purple + neon green accent.
+   Rebrand (2026-08-12): replaced the generic navy/gold palette with FPL's own brand
+   colors -- deep purple as the structural/primary tone, the signature neon green
+   (#00ff87 family) as the single accent used everywhere something needs to stand out
+   (active tab, top rank, links, buttons, focus rings). Only the VALUES changed here,
+   not the token NAMES -- every page's CSS already reaches for these same custom
+   properties, so the whole app re-skins from this one file with no page-specific
+   color edits needed. Stats.css no longer gets a separate accent/gradient identity --
+   see --stats-bg-gradient below, now just var(--bg-page) like every other page. */
 :root {
-  --primary: #003d7a;
-  --primary-dark: #002447;
-  --primary-light: #1e5fa8;
-  --secondary: #ffb81c;
+  --primary: #37003c;
+  --primary-dark: #21001f;
+  --primary-light: #6b1f70;
+  --secondary: #00a86b;
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
-  --neutral: #1f2937;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --border: #e5e7eb;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --neutral: #1a1224;
+  --gray-50: #f4f1fa;
+  --gray-100: #ece5f6;
+  --gray-200: #ddd2ee;
+  --gray-300: #beadd6;
+  --gray-400: #9483b3;
+  --gray-500: #756a92;
+  --gray-600: #574d70;
+  --border: #e4dcf2;
+  --shadow-sm: 0 1px 2px 0 rgba(26, 8, 41, 0.06);
+  --shadow: 0 4px 6px -1px rgba(26, 8, 41, 0.12);
+  --shadow-lg: 0 10px 15px -3px rgba(26, 8, 41, 0.14);
 
   /* Semantic surface/text tokens -- every page's CSS should reach for these instead of
      literal "white"/hex grays, so a single dark-mode override block (below) is enough
      to re-theme the whole app. Values here are the light-mode defaults. */
-  --bg-page: linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%);
+  --bg-page: #faf8fd;
   --bg-surface: #ffffff;
-  --bg-surface-alt: #f9fafb;
-  --bg-surface-alt-2: #f3f4f6;
-  --text-primary: #1f2937;
-  --text-secondary: #4b5563;
-  --text-tertiary: #6b7280;
-  --text-muted: #9ca3af;
+  --bg-surface-alt: #f4f1fa;
+  --bg-surface-alt-2: #ece5f6;
+  --text-primary: #1a1224;
+  --text-secondary: #5c5075;
+  --text-tertiary: #79708f;
+  --text-muted: #a79ec2;
 
-  /* Stats page's own accent (distinct from the navy --primary the rest of the app
-     uses) -- kept as its own token since Stats.css leans on it heavily for buttons,
-     focus rings, and the answer-box border. */
-  --accent: #667eea;
-  --accent-hover: #5568d3;
-  --accent-soft: rgba(102, 126, 234, 0.1);
-  /* Was a loud purple/violet gradient (#667eea -> #764ba2) wrapping the whole page --
-     a completely different visual language from the navy header/tabs everywhere else,
-     and the single biggest source of "jazz" on the page. Toned down to a near-neutral
-     gradient in the app's own gray scale so Stats reads as part of the same app instead
-     of a separate, louder one; --accent still carries the page's identity via buttons,
-     focus rings, and the answer-box border. */
-  --stats-bg-gradient: linear-gradient(135deg, var(--gray-50) 0%, var(--gray-100) 100%);
+  /* The one accent color, used consistently everywhere (was a separate purple/violet
+     token Stats.css alone used, now unified across the whole app -- active tab,
+     top-rank badges, links, buttons, focus rings). Deeper green in light mode for text
+     contrast on white; the true neon shows up in dark mode where it belongs. */
+  --accent: #00a86b;
+  --accent-hover: #018f5b;
+  --accent-soft: rgba(0, 168, 107, 0.12);
+  /* Dark, fixed text color for content sitting ON TOP of an --accent fill (e.g. the
+     #1 rank badge) -- doesn't flip with the theme since --accent itself is always a
+     bright/mid green in both modes, so a single dark green reads fine against either. */
+  --text-on-accent: #04342c;
+  --stats-bg-gradient: var(--bg-page);
   --stats-card-shadow: var(--shadow-lg);
 
   --info-bg: #eff6ff;
@@ -63,50 +70,57 @@
    every page that already reaches for var(--bg-surface) etc. re-themes automatically;
    nothing below needs page-specific overrides. */
 [data-theme='dark'] {
-  --primary: #5b9bf0;
-  --primary-dark: #1e5fa8;
-  --primary-light: #8ab4f8;
-  --secondary: #ffc94d;
+  /* --primary is used almost entirely as TEXT color across Standings/GWWinners/Help
+     (team names, ranks, points, headings) -- needs to read clearly against the dark
+     purple surfaces, so unlike the deep #37003c used for light-mode text-on-white,
+     dark mode needs a genuinely LIGHT purple here, the same way the old navy theme
+     always lightened --primary for dark mode. (Fixed 2026-08-12: an earlier pass used
+     a deep purple that was nearly unreadable against dark cards.) */
+  --primary: #d9a8f0;
+  --primary-dark: #9c4fa3;
+  --primary-light: #f0d9ff;
+  --secondary: #00ff87;
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
-  --neutral: #e5e7eb;
-  --gray-50: #1c1c24;
-  --gray-100: #22222b;
-  --gray-200: #2c2c37;
-  --gray-300: #3a3a46;
-  --gray-400: #71717f;
-  --gray-500: #9494a3;
-  --gray-600: #c7c7d1;
-  --border: #2c2c37;
+  --neutral: #f4f0ff;
+  --gray-50: #1c1032;
+  --gray-100: #241640;
+  --gray-200: #2e1c4f;
+  --gray-300: #3f2d63;
+  --gray-400: #6b5d85;
+  --gray-500: #a89bc4;
+  --gray-600: #d4c9ea;
+  --border: #201333;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 10px 24px -3px rgba(0, 0, 0, 0.55);
 
-  --bg-page: #0a0a0f;
-  --bg-surface: #16161d;
-  --bg-surface-alt: #1c1c24;
-  --bg-surface-alt-2: #22222b;
-  --text-primary: #f3f4f6;
-  --text-secondary: #c7c7d1;
-  --text-tertiary: #9494a3;
-  --text-muted: #6f6f7d;
+  --bg-page: #0c0718;
+  --bg-surface: #161028;
+  --bg-surface-alt: #1c1032;
+  --bg-surface-alt-2: #241640;
+  --text-primary: #f4f0ff;
+  --text-secondary: #b8aed4;
+  --text-tertiary: #8a7ba8;
+  --text-muted: #5a4d78;
 
-  --accent: #8b9bf5;
-  --accent-hover: #a5b3f8;
-  --accent-soft: rgba(139, 155, 245, 0.16);
-  --stats-bg-gradient: linear-gradient(135deg, var(--gray-50) 0%, var(--bg-page) 100%);
+  --accent: #00ff87;
+  --accent-hover: #33ffa1;
+  --accent-soft: rgba(0, 255, 135, 0.14);
+  --text-on-accent: #04342c;
+  --stats-bg-gradient: var(--bg-page);
   --stats-card-shadow: var(--shadow-lg);
 
-  --info-bg: rgba(91, 155, 240, 0.12);
-  --info-text: #93c5fd;
+  --info-bg: rgba(107, 31, 112, 0.25);
+  --info-text: #d9a6dc;
   --danger-bg: rgba(248, 113, 113, 0.12);
   --danger-border: rgba(248, 113, 113, 0.35);
   --danger-text-strong: #fca5a5;
   --danger-text: #f3b4b4;
   --success-bg: rgba(52, 211, 153, 0.16);
-  --code-bg: #23232e;
-  --code-text: #b4beff;
+  --code-bg: #1c1032;
+  --code-text: #33ffa1;
 }
 
 * {
@@ -170,11 +184,15 @@ body {
 
 /* Header -- a slim bar, similar height to .tabs below it rather than a hero banner.
    Title + the combined league/season picker share one row instead of three stacked
-   lines (title, subtitle, dropdown). */
+   lines (title, subtitle, dropdown).
+   Rebrand (2026-08-12): dropped the separate navy gradient banner -- header now shares
+   the same flat --bg-page as the rest of the app, with a hairline border to separate it
+   from content below. Matches the approved mockup: no "loud colored bar" competing with
+   the single green accent, everything reads as one continuous surface. */
 .app-header {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: white;
-  box-shadow: var(--shadow);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header-inner {
@@ -201,8 +219,8 @@ body {
 .theme-toggle {
   display: inline-flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 3px;
   gap: 2px;
@@ -216,14 +234,14 @@ body {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--text-muted);
   font-size: 0.85rem;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .theme-toggle-option.active {
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--primary-dark);
+  background: var(--accent);
+  color: var(--text-on-accent);
 }
 
 .app-title {
@@ -232,6 +250,7 @@ body {
   letter-spacing: -0.3px;
   white-space: nowrap;
   flex-shrink: 0;
+  color: var(--text-primary);
 }
 
 /* League/season picker -- combines what used to be static "League 438107" header text
@@ -244,9 +263,9 @@ body {
    clears mobile Safari's own built-in dropdown arrow; text-overflow handles the rare
    case a very long label still doesn't fit. */
 .league-picker {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.4rem 1.5rem 0.4rem 0.85rem;
   font-size: clamp(0.8rem, 2vw, 0.9rem);
@@ -269,20 +288,23 @@ body {
 }
 
 /* Flags "you're not looking at the current season" via color instead of a separate
-   "Viewing past season" text badge -- the dropdown itself becomes the indicator. */
+   "Viewing past season" text badge -- the dropdown itself becomes the indicator. Uses
+   --accent (the app's one green) rather than --secondary now that --secondary isn't a
+   separate gold tone anymore -- see --text-on-accent for the fixed dark text on top. */
 .league-picker.viewing-history {
-  background: var(--secondary);
-  color: var(--primary-dark);
-  border-color: var(--secondary);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-color: var(--accent);
   font-weight: 700;
 }
 
-/* Tabs */
+/* Tabs -- shares the header's flat --bg-page rather than a separate --bg-surface band,
+   so header + tabs read as one continuous zone; only card content below (which sits on
+   --bg-surface) visually separates itself, per the approved mockup. */
 .tabs {
   display: flex;
-  background: var(--bg-surface);
+  background: var(--bg-page);
   border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -307,16 +329,16 @@ body {
 }
 
 .tab:hover {
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .tab:active {
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .tab.active {
-  color: var(--primary);
-  border-bottom-color: var(--secondary);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .beta-tag {
@@ -347,15 +369,45 @@ body {
   }
 }
 
-/* Footer */
+/* Footer -- flat, same as header/tabs (see note above). */
 .app-footer {
-  background: var(--bg-surface);
+  background: var(--bg-page);
   border-top: 1px solid var(--border);
   padding: clamp(1rem, 3vw, 1.5rem);
   text-align: center;
   color: var(--gray-400);
   font-size: clamp(0.75rem, 2vw, 0.85rem);
   margin-top: auto;
+}
+
+/* Season-scope disclaimer -- shared by Standings/GWWinners/Stats (see ScopeNote.jsx),
+   NOT used on Help since that page isn't season-scoped. One small pill, same styling
+   everywhere so it reads as a consistent piece of UI chrome rather than a per-page
+   note that happens to look different each time. Sits directly under each page's
+   heading (Standings/GWWinners dropped their separate descriptive subtitle line in
+   favor of folding that into the heading itself via .page-title-note -- see below --
+   so title -> pill is 2 rows, not 3). Stats' left panel is a flex column with its own
+   gap, hence no margin needed there either; this bottom margin only matters on
+   Standings/GWWinners, which aren't flex containers. */
+.scope-note {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--bg-surface-alt-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  margin: 0 0 1.5rem 0;
+}
+
+/* Small muted qualifier appended inline to a page heading (e.g. "League Standings
+   (Net Points)") instead of a separate descriptive subtitle line -- same idea as
+   .beta-tag on the Stats tab label. */
+.page-title-note {
+  font-size: 0.55em;
+  font-weight: 600;
+  color: var(--text-muted);
+  vertical-align: middle;
 }
 
 /* Loading States */
@@ -372,7 +424,7 @@ body {
   height: 40px;
   border: 4px solid var(--gray-200);
   border-radius: 50%;
-  border-top-color: var(--primary);
+  border-top-color: var(--accent);
   animation: spin 0.8s linear infinite;
   margin-right: 1rem;
 }
@@ -385,7 +437,7 @@ body {
 button:focus,
 input:focus,
 textarea:focus {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

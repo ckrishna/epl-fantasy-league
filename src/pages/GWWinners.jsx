@@ -1,9 +1,10 @@
 // src/pages/GWWinners.jsx - Updated with compact summary
 import { useEffect, useState } from 'react';
 import { getWinners } from '../api/client';
+import ScopeNote from '../components/ScopeNote';
 import '../styles/GWWinners.css';
 
-export default function GWWinners({ season = null } = {}) {
+export default function GWWinners({ season = null, seasonLabel = null } = {}) {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -56,15 +57,15 @@ export default function GWWinners({ season = null } = {}) {
 
   return (
     <div className="gw-winners-page">
-      <h2>Gameweek Winners</h2>
-      <p>Weekly winner determined by highest net points (after transfer costs)</p>
+      <h2>Gameweek Winners <span className="page-title-note">(Net Points)</span></h2>
+      <ScopeNote season={seasonLabel} />
       
       {/* Manager Wins Summary - Compact */}
       <div className="winners-dashboard">
         <h3>Top Winners</h3>
         <div className="stats-grid">
           {sortedStats.slice(0, 5).map((stat, idx) => (
-            <div key={stat.manager_name} className="stat-card">
+            <div key={stat.manager_name} className={`stat-card ${idx === 0 ? 'top-1' : ''}`}>
               <div className="stat-rank">#{idx + 1}</div>
               <div className="stat-team">{stat.team_name}</div>
               <div className="stat-manager">{stat.manager_name}</div>

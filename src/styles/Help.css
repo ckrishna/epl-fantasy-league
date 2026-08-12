@@ -21,13 +21,13 @@
 .help-card {
   background: var(--bg-surface-alt);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 1.25rem 1.5rem;
   transition: all 0.2s ease;
 }
 
 .help-card:hover {
-  border-color: var(--primary);
+  border-color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
 
@@ -63,7 +63,7 @@
 }
 
 .help-card li::marker {
-  color: var(--secondary);
+  color: var(--accent);
 }
 
 /* Let the "How It Works" and "Browser Support" cards span the full row on wider

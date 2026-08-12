@@ -53,7 +53,13 @@
   padding: 0.75rem;
   border: 2px solid var(--border);
   border-radius: 8px;
-  font-size: 0.95rem;
+  /* iOS Safari auto-zooms the page on focus for any input with font-size under 16px --
+     that's almost certainly the "white background shifts when we try to type" report:
+     the zoom-in/zoom-out around focus/blur briefly reveals the browser chrome/viewport
+     edges. 16px floor here (and in the mobile override below, which had shrunk it
+     further to 0.9rem) prevents the zoom entirely rather than trying to patch its
+     visual side effects. */
+  font-size: max(0.95rem, 16px);
   background: var(--bg-surface);
   color: var(--text-primary);
   transition: border-color 0.2s;
@@ -68,7 +74,11 @@
 .submit-btn {
   padding: 0.75rem 1.25rem;
   background: var(--accent);
-  color: white;
+  /* var(--text-on-accent), not hardcoded white -- white-on-neon-green is low contrast
+     (both are light/high-luminance), which was exactly the "arrow is tough to read"
+     complaint in dark mode. This dark-green token is designed to stay legible against
+     --accent in both themes. */
+  color: var(--text-on-accent);
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -121,7 +131,21 @@
 
 .query-btn.active {
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
+  border-color: var(--accent);
+}
+
+/* :hover:not(:disabled) above is MORE specific (3 selectors) than .active alone (2),
+   so on any device that keeps :hover applied after a tap -- which is most mobile
+   Safari/Chrome, since there's no real mouse to "leave" -- tapping a suggested
+   question left it stuck in the hover background while .active's own bright-green
+   fill lost the specificity fight. The result: dark on-accent text meant for a bright
+   green background was rendered on the dark hover background instead -- exactly the
+   "unreadable" report. Repeating the selector at equal specificity to :hover's forces
+   the active fill to always win once a question has actually been selected. */
+.query-btn.active:hover {
+  background: var(--accent);
+  color: var(--text-on-accent);
   border-color: var(--accent);
 }
 
@@ -145,7 +169,7 @@
 }
 
 .query-btn.active .query-arrow {
-  color: white;
+  color: var(--text-on-accent);
 }
 
 /* Info Box */
@@ -553,7 +577,8 @@
 
   .question-input {
     padding: 0.6rem 0.75rem;
-    font-size: 0.9rem;
+    /* Keep the 16px floor from the base rule -- do not shrink below it here. */
+    font-size: max(0.9rem, 16px);
   }
 
   .submit-btn {

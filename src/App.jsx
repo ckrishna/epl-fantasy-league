@@ -50,6 +50,11 @@ export default function App() {
 
   const currentSeason = seasons.find((s) => s.current)?.season || null;
   const viewingHistory = selectedSeason !== null && selectedSeason !== currentSeason;
+  // Resolved display label for the ScopeNote disclaimer on each page -- selectedSeason
+  // is only ever an explicit string (a past season) or null (meaning "current", which
+  // the server picks); this resolves null down to the actual current season string so
+  // pages always have something concrete to show ("2026/27"), not "current".
+  const seasonLabel = selectedSeason || currentSeason;
 
   return (
     <div className="app">
@@ -120,9 +125,9 @@ export default function App() {
       </nav>
 
       <main className="app-content">
-        {activeTab === 'standings' && <Standings season={selectedSeason} />}
-        {activeTab === 'winners' && <GWWinners season={selectedSeason} />}
-        {activeTab === 'stats' && <Stats season={selectedSeason} />}
+        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} />}
+        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} />}
+        {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} />}
         {activeTab === 'help' && <Help />}
       </main>
 

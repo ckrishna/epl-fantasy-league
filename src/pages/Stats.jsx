@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { queryStats, submitFeedback } from '../api/client';
+import ScopeNote from '../components/ScopeNote';
 import '../styles/Stats.css';
 
 // "5m 42.7s" style formatting, minutes only shown once there are any -- matches the
@@ -20,7 +21,7 @@ const SUGGESTED_QUERIES = [
   "Best captain picks this season?"
 ];
 
-export default function Stats({ season = null }) {
+export default function Stats({ season = null, seasonLabel = null }) {
   const [selectedQuery, setSelectedQuery] = useState(null);
   const [customQuestion, setCustomQuestion] = useState('');
   const [loading, setLoading] = useState(false);
@@ -107,6 +108,9 @@ export default function Stats({ season = null }) {
         {/* Left Panel */}
         <div className="stats-left">
           <h2>⚡ League Intelligence</h2>
+          <ScopeNote season={seasonLabel}>
+            Questions are answered using {seasonLabel} season data only
+          </ScopeNote>
 
           <form className="custom-question" onSubmit={handleCustomQuestion}>
             <input

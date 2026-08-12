@@ -1,4 +1,4 @@
-/* src/styles/Standings.css - Enhanced with medals */
+/* src/styles/Standings.css */
 .standings-page {
   background: var(--bg-surface);
   border-radius: 12px;
@@ -12,12 +12,6 @@
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
-.standings-page > .subtitle {
-  color: var(--text-tertiary);
-  margin-bottom: 2rem;
-  font-size: 0.95rem;
-}
-
 /* Mobile Card View */
 .standings-cards {
   display: grid;
@@ -28,27 +22,20 @@
 .standings-card {
   display: flex;
   gap: 1rem;
-  padding: 1rem;
+  padding: 1.1rem 1.25rem;
   background: var(--bg-surface-alt);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 14px;
   align-items: center;
   transition: all 0.2s ease;
 }
 
+/* Only rank 1 gets color treatment now -- matches the approved mockup direction
+   (minimal: a single highlighted leader card, everyone else reads as one plain,
+   even list rather than a 3-tier gold/silver/bronze medal system). */
 .standings-card.top-1 {
-  background: linear-gradient(135deg, rgba(255, 184, 28, 0.1) 0%, rgba(255, 184, 28, 0.05) 100%);
-  border-color: #ffb81c;
-}
-
-.standings-card.top-2 {
-  background: linear-gradient(135deg, rgba(192, 192, 192, 0.1) 0%, rgba(192, 192, 192, 0.05) 100%);
-  border-color: #c0c0c0;
-}
-
-.standings-card.top-3 {
-  background: linear-gradient(135deg, rgba(205, 127, 50, 0.1) 0%, rgba(205, 127, 50, 0.05) 100%);
-  border-color: #cd7f32;
+  background: linear-gradient(135deg, var(--accent-soft) 0%, transparent 100%);
+  border-color: var(--accent);
 }
 
 .card-rank {
@@ -69,9 +56,20 @@
   border-radius: 50%;
 }
 
-.standings-card:not(.top-1):not(.top-2):not(.top-3) .rank-badge {
-  background: var(--primary);
-  color: white;
+/* Muted, neutral badge for every rank except #1 (was a solid --primary-filled circle
+   with hardcoded white text -- broke once --primary became a light color for text
+   readability elsewhere on this page; also matches the approved design direction,
+   where only the leader gets color treatment, not a 3-tier medal system). */
+.standings-card:not(.top-1) .rank-badge {
+  background: var(--bg-surface-alt-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  font-size: 1.2rem;
+}
+
+.standings-card.top-1 .rank-badge {
+  background: var(--accent);
+  color: var(--text-on-accent);
   font-size: 1.2rem;
 }
 
@@ -155,28 +153,21 @@
   background: var(--bg-surface-alt);
 }
 
+/* Only rank 1 highlighted, same simplification as the mobile card view above. */
 .standings-table tbody tr.top-1 {
-  background: linear-gradient(90deg, rgba(255, 184, 28, 0.08) 0%, transparent 100%);
-}
-
-.standings-table tbody tr.top-2 {
-  background: linear-gradient(90deg, rgba(192, 192, 192, 0.08) 0%, transparent 100%);
-}
-
-.standings-table tbody tr.top-3 {
-  background: linear-gradient(90deg, rgba(205, 127, 50, 0.08) 0%, transparent 100%);
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 100%);
 }
 
 .rank {
   font-weight: 800;
-  color: var(--primary);
+  color: var(--text-tertiary);
   width: 60px;
   text-align: center;
   font-size: 1.3rem;
 }
 
-.medal {
-  font-size: 1.5rem;
+.standings-table tbody tr.top-1 .rank {
+  color: var(--accent);
 }
 
 .team-manager {

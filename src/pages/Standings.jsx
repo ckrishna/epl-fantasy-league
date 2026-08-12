@@ -1,9 +1,10 @@
-// src/pages/Standings.jsx - Updated with medal icons
+// src/pages/Standings.jsx
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
+import ScopeNote from '../components/ScopeNote';
 import '../styles/Standings.css';
 
-export default function Standings({ season = null } = {}) {
+export default function Standings({ season = null, seasonLabel = null } = {}) {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
 const [activeGW, setActiveGW] = useState(null);
@@ -38,29 +39,19 @@ useEffect(() => {
   });
 }, [season]);
 
-  // Get medal for rank
-  const getMedal = (rank) => {
-    if (rank === 1) return '🥇';
-    if (rank === 2) return '🥈';
-    if (rank === 3) return '🥉';
-    return null;
-  };
-
   if (loading) return <div className="loading">Loading standings...</div>;
 
   return (
     <div className="standings-page">
-      <h2>League Standings</h2>
-      <p className="subtitle">Ranked by total season points</p>
+      <h2>League Standings <span className="page-title-note">(Net Points)</span></h2>
+      <ScopeNote season={seasonLabel} />
 
       {/* Mobile Card View */}
       <div className="standings-cards">
         {standings.map((manager) => (
-          <div key={manager.manager_id} className={`standings-card ${manager.rank <= 3 ? `top-${manager.rank}` : ''}`}>
+          <div key={manager.manager_id} className={`standings-card ${manager.rank === 1 ? 'top-1' : ''}`}>
             <div className="card-rank">
-              <span className="rank-badge">
-                {getMedal(manager.rank) || manager.rank}
-              </span>
+              <span className="rank-badge">{manager.rank}</span>
             </div>
             <div className="card-info">
               <h3 className="card-team">{manager.team_name}</h3>
@@ -92,14 +83,8 @@ useEffect(() => {
         </thead>
         <tbody>
           {standings.map((manager) => (
-            <tr key={manager.manager_id} className={manager.rank <= 3 ? `top-${manager.rank}` : ''}>
-              <td className="rank">
-                {getMedal(manager.rank) ? (
-                  <span className="medal">{getMedal(manager.rank)}</span>
-                ) : (
-                  manager.rank
-                )}
-              </td>
+            <tr key={manager.manager_id} className={manager.rank === 1 ? 'top-1' : ''}>
+              <td className="rank">{manager.rank}</td>
               <td className="team-manager">
                 <div className="team-name">{manager.team_name}</div>
                 <div className="manager-name">{manager.manager_name}</div>
