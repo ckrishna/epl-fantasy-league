@@ -237,7 +237,11 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
       )}
 
       {!loading && !error && (!squad || squad.players.length === 0) && (
-        <p className="squad-loading">No squad data available for this manager yet.</p>
+        <p className="squad-loading">
+          {squad?.reason === 'season_not_started'
+            ? "The season hasn't started yet -- squads unlock once the Gameweek 1 deadline passes."
+            : 'No squad data available for this manager yet.'}
+        </p>
       )}
 
       {showHelp && <PlayerCardHelpModal onClose={() => setShowHelp(false)} />}

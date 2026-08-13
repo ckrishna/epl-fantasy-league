@@ -1,6 +1,9 @@
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { dynamodb, getCurrentSeason, getCurrentSeasonInfo, getActiveGameweek } from '../utils/dynamodb.mjs';
 
+const FPL_API = 'https://fantasy.premierleague.com/api';
+const FPL_FETCH_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
+
 // FPL's own 3-letter club code plus its numeric club `code` (the identifier FPL's
 // crest CDN keys images by -- NOT the same as `teams.team_id`, which is just a
 // per-season array index), keyed by full team name as stored on `teams`/
@@ -145,6 +148,27 @@ async function getTransferCost(season, gw, entryId) {
   }
 }
 
+// Distinguishes "this manager has a real gap in our data" from "nobody has picks yet
+// because the season hasn't kicked off" -- confirmed live 2026-08-12 against entry
+// 728477 (this app's own test manager): FPL's bootstrap-static showed every 2026/27
+// gameweek with is_current: false and finished: false, GW1's deadline nine days out,
+// and the entry itself had entered_events: []. Our own ingester correctly finds
+// nothing to store in that state (there's nothing on FPL's side to fetch), so the
+// empty-squad response needs to say so plainly instead of reading like a bug. Fails
+// "open" (returns true, i.e. "assume started") on any fetch error -- a transient FPL
+// outage shouldn't make the UI falsely claim the season hasn't begun.
+async function hasSeasonStarted() {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
+    if (!response.ok) return true;
+    const data = await response.json();
+    return (data.events || []).some((e) => e.is_current || e.finished);
+  } catch (err) {
+    console.error('hasSeasonStarted error:', err);
+    return true;
+  }
+}
+
 function nextTwoFixtures(fixtures, teamId) {
   return fixtures
     .filter((f) => f.team_h === teamId || f.team_a === teamId)
@@ -182,7 +206,17 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
   }
 
   if (!picks || picks.length === 0) {
-    return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ season, gameweek: gw, players: [] }) };
+    const seasonStarted = await hasSeasonStarted();
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        season,
+        gameweek: gw,
+        players: [],
+        reason: seasonStarted ? 'no_data' : 'season_not_started'
+      })
+    };
   }
 
   const [formMap, teamNames, fixtures, transferCost] = await Promise.all([
