@@ -193,9 +193,6 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
 
       {!loading && squad && squad.players.length > 0 && (
         <>
-          {squad._isMock && (
-            <p className="squad-mock-note">Preview data -- the live /manager-squad endpoint isn't deployed yet.</p>
-          )}
           <div className="squad-pitch">
             <div className="squad-legend">
               <button
