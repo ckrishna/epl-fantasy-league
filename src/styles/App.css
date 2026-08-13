@@ -245,19 +245,26 @@ body {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 0.75rem;
-  line-height: 1;
+  display: flex;
   transition: opacity 0.15s ease;
 }
 
+/* Fixed, explicit colors -- NOT var(--accent) or anything theme-derived -- chosen for
+   guaranteed contrast against this icon's own fixed track color (see the note on
+   .theme-toggle above for why the track itself doesn't use --accent either). A plain
+   sun/moon emoji was tried first and dropped: emoji carry their own built-in color that
+   can't be overridden, and the sun emoji's default yellow was nearly invisible against
+   the track's own orange (confirmed live via screenshot). */
 .theme-toggle-icon-sun {
   left: 7px;
   opacity: 1;
+  color: #712b13;
 }
 
 .theme-toggle-icon-moon {
   right: 7px;
   opacity: 0;
+  color: #ffffff;
 }
 
 [data-theme='dark'] .theme-toggle-icon-sun {
