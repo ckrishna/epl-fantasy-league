@@ -158,6 +158,16 @@ export default function Stats({ season = null, seasonLabel = null }) {
           <div className="info-box">
             <p>💡 Each question is answered fresh — no memory of earlier questions. e.g., "Who made the best transfers?" or "Which player is a differential?"</p>
           </div>
+
+          {/* Mobile-only equivalent of .info-box above -- that box (with its examples)
+              is hidden below 640px to reclaim vertical space for the answer panel (see
+              Stats.css's mobile block), but the "answered fresh" clarification itself
+              still matters there, maybe more so since a phone screen makes this look
+              exactly like a chat box. Trimmed to a single short line with no examples
+              (the suggested-question chips right above already show examples) and no
+              box/border, so it doesn't reintroduce the height problem that redesign
+              fixed. */}
+          <p className="mobile-fresh-note">💡 Each question is answered fresh, no memory of earlier ones.</p>
         </div>
 
         {/* Right Panel */}

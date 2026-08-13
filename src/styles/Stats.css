@@ -188,6 +188,13 @@
   line-height: 1.5;
 }
 
+/* Mobile-only stand-in for .info-box (hidden below 640px, see that media block) --
+   desktop already shows the full tip via .info-box, so this stays hidden there to
+   avoid showing the same message twice. */
+.mobile-fresh-note {
+  display: none;
+}
+
 /* Right Panel */
 .stats-right {
   background: var(--bg-surface);
@@ -573,6 +580,14 @@
 
   .divider, .info-box {
     display: none;
+  }
+
+  .mobile-fresh-note {
+    display: block;
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    line-height: 1.4;
   }
 
   .question-input {
