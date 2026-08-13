@@ -145,7 +145,7 @@ export default function Stats({ season = null, seasonLabel = null }) {
           </div>
 
           <div className="info-box">
-            <p>💡 Ask anything about your league! e.g., "Who made the best transfers?" or "Which player is a differential?"</p>
+            <p>💡 Each question is answered fresh — no memory of earlier questions. e.g., "Who made the best transfers?" or "Which player is a differential?"</p>
           </div>
         </div>
 
