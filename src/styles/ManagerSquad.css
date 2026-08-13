@@ -4,48 +4,9 @@
   margin-top: 4px;
 }
 
-.squad-back-link {
-  background: none;
-  border: none;
-  padding: 0;
-  margin-bottom: 14px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--primary);
-  cursor: pointer;
-}
-
-.squad-back-link:hover {
-  text-decoration: underline;
-}
-
-.squad-page-header {
-  margin-bottom: 16px;
-}
-
-.squad-page-header h3 {
-  margin: 0;
-  font-size: 18px;
-  color: var(--text-primary);
-}
-
-.squad-panel-subtitle {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.squad-loading,
-.squad-mock-note {
+.squad-loading {
   color: var(--text-secondary);
   font-size: 13px;
-}
-
-.squad-mock-note {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  background: var(--bg-surface-alt);
-  border-radius: 8px;
 }
 
 /* Everything below renders the pitch and player cards. These colors are deliberately
@@ -74,15 +35,69 @@
 .squad-legend {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   font-size: 12px;
   color: #ffffff;
   padding: 0 4px 2px;
 }
 
-.squad-legend-total {
+/* Fills the space between the help button and the points block, so the team/manager
+   name sits right next to the "?" (per the mockup review that removed the separate
+   "Back to standings" header entirely -- the Standings nav tab already does that job,
+   so this identity block replaces the old squad-page-header instead of duplicating it
+   above the pitch). Truncates rather than wraps -- long team/manager names shouldn't
+   push the points block off the right edge. */
+.squad-legend-identity {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Row 1 (team name, left / GW number, right) and row 2 (manager name, left / net
+   points, right) are each a matched pair -- same font, same size, same weight on both
+   sides of a row -- so the two rows read as "big prominent line" then "smaller
+   secondary line" rather than four independently-sized pieces of text. Sizes are
+   shared with .squad-legend-gw / .squad-legend-net / .squad-legend-hit below. */
+.squad-legend-team {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squad-legend-manager {
+  margin: 1px 0 0;
+  font-size: 11.5px;
   font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Two-line points block, right-aligned: GW number on top, NET total (with the hit
+   penalty folded in, shown only when a hit was actually taken) below. */
+.squad-legend-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  flex-shrink: 0;
+  line-height: 1.3;
+}
+
+.squad-legend-gw {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.squad-legend-net {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
   white-space: nowrap;
 }
 
@@ -519,6 +534,10 @@
   .squad-points-chip { font-size: 10px; padding: 2.5px 8px; margin-bottom: 5px; }
 
   .squad-legend { font-size: 13px; }
+  .squad-legend-team,
+  .squad-legend-gw { font-size: 17px; }
+  .squad-legend-manager,
+  .squad-legend-net { font-size: 13px; }
 }
 
 /* Full desktop: matches the extra width most of this app's other pages already use. */
@@ -563,4 +582,8 @@
   .squad-points-chip { font-size: 11px; padding: 3px 9px; margin-bottom: 6px; }
 
   .squad-legend { font-size: 14px; }
+  .squad-legend-team,
+  .squad-legend-gw { font-size: 18px; }
+  .squad-legend-manager,
+  .squad-legend-net { font-size: 13.5px; }
 }

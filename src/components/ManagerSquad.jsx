@@ -180,53 +180,51 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
 
   return (
     <div className="squad-page">
-      <button type="button" className="squad-back-link" onClick={onClose}>
-        &larr; Back to standings
-      </button>
-
-      <div className="squad-page-header">
-        <h3>{teamName}</h3>
-        {managerName && <p className="squad-panel-subtitle">{managerName}</p>}
-      </div>
-
       {loading && <p className="squad-loading">Loading squad...</p>}
 
       {!loading && squad && squad.players.length > 0 && (
-        <>
-          <div className="squad-pitch">
-            <div className="squad-legend">
-              <button
-                type="button"
-                className="squad-help-btn"
-                onClick={() => setShowHelp(true)}
-                aria-haspopup="dialog"
-                aria-label="How to read a player card"
-                title="How to read a player card"
-              >
-                ?
-              </button>
-              {typeof squad.team_gw_points_net === 'number' && (
-                <span className="squad-legend-total">
-                  GW{squad.gameweek} net: {squad.team_gw_points_net} pts
+        <div className="squad-pitch">
+          <div className="squad-legend">
+            <button
+              type="button"
+              className="squad-help-btn"
+              onClick={() => setShowHelp(true)}
+              aria-haspopup="dialog"
+              aria-label="How to read a player card"
+              title="How to read a player card"
+            >
+              ?
+            </button>
+
+            <div className="squad-legend-identity">
+              <p className="squad-legend-team">{teamName}</p>
+              {managerName && <p className="squad-legend-manager">{managerName}</p>}
+            </div>
+
+            {typeof squad.team_gw_points_net === 'number' && (
+              <div className="squad-legend-total">
+                <span className="squad-legend-gw">GW{squad.gameweek}</span>
+                <span className="squad-legend-net">
+                  NET {squad.team_gw_points_net} pts
                   {squad.transfer_cost > 0 && (
                     <span className="squad-legend-hit"> (&minus;{squad.transfer_cost} hit)</span>
                   )}
                 </span>
-              )}
-            </div>
-
-            {POSITION_ORDER.map((pos) => (
-              <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} />
-            ))}
-
-            {bench.length > 0 && (
-              <div className="squad-bench-section">
-                <p className="squad-bench-label">Subs</p>
-                <PositionRow players={bench} />
               </div>
             )}
           </div>
-        </>
+
+          {POSITION_ORDER.map((pos) => (
+            <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} />
+          ))}
+
+          {bench.length > 0 && (
+            <div className="squad-bench-section">
+              <p className="squad-bench-label">Subs</p>
+              <PositionRow players={bench} />
+            </div>
+          )}
+        </div>
       )}
 
       {!loading && (!squad || squad.players.length === 0) && (
