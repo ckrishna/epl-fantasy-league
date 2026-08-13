@@ -165,14 +165,19 @@ function PlayerCardHelpModal({ onClose }) {
 export default function ManagerSquad({ entryId, teamName, managerName, onClose }) {
   const [squad, setSquad] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    getManagerSquad(entryId).then((data) => {
-      setSquad(data);
-      setLoading(false);
-    });
+    setError(false);
+    getManagerSquad(entryId)
+      .then((data) => setSquad(data))
+      .catch((err) => {
+        console.error('getManagerSquad failed:', err.message);
+        setError(true);
+      })
+      .finally(() => setLoading(false));
   }, [entryId]);
 
   const starters = (squad?.players || []).filter((p) => !p.is_bench);
@@ -182,7 +187,11 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
     <div className="squad-page">
       {loading && <p className="squad-loading">Loading squad...</p>}
 
-      {!loading && squad && squad.players.length > 0 && (
+      {!loading && error && (
+        <p className="squad-loading">Couldn't load this squad right now. Try again in a moment.</p>
+      )}
+
+      {!loading && !error && squad && squad.players.length > 0 && (
         <div className="squad-pitch">
           <div className="squad-legend">
             <button
@@ -227,7 +236,7 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
         </div>
       )}
 
-      {!loading && (!squad || squad.players.length === 0) && (
+      {!loading && !error && (!squad || squad.players.length === 0) && (
         <p className="squad-loading">No squad data available for this manager yet.</p>
       )}
 
