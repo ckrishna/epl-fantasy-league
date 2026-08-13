@@ -1,0 +1,566 @@
+/* src/styles/ManagerSquad.css */
+
+.squad-page {
+  margin-top: 4px;
+}
+
+.squad-back-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.squad-back-link:hover {
+  text-decoration: underline;
+}
+
+.squad-page-header {
+  margin-bottom: 16px;
+}
+
+.squad-page-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.squad-panel-subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.squad-loading,
+.squad-mock-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.squad-mock-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--bg-surface-alt);
+  border-radius: 8px;
+}
+
+/* Everything below renders the pitch and player cards. These colors are deliberately
+   fixed, NOT sourced from the app's light/dark theme tokens -- per an explicit design
+   rule from the mockup review: every player card must look identical regardless of
+   which theme the rest of the app is in. */
+
+/* Sized for the narrowest phones by default, then scaled up in the two breakpoints at
+   the bottom of this file for tablet/desktop. The "always fit 5 across in one row"
+   guarantee (flex-wrap: nowrap below) holds at every size -- FPL's squad rules cap
+   DEF/MID at 5 players and subs at 4, so that's the worst case each row has to fit;
+   growing the pitch and card sizes on wider screens just means that guarantee is met
+   with bigger, more legible cards instead of a small block floating in empty space. */
+.squad-pitch {
+  background: #1d6b3a;
+  background-image: repeating-linear-gradient(0deg, #1d6b3a 0 36px, #226e3d 36px 72px);
+  border-radius: 12px;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 16px 6px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.squad-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #ffffff;
+  padding: 0 4px 2px;
+}
+
+.squad-legend-total {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.squad-legend-hit {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* Matches the app's existing "?" help-icon convention (App.jsx's app-help-link next to
+   the page title) rather than inventing a new icon style just for this panel. */
+.squad-help-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: #ffffff;
+  color: #37003c;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ---- "?" help popup ---- */
+
+.squad-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 6, 20, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+
+.squad-help-modal {
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.squad-help-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.squad-help-modal-header h4 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.squad-close-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.squad-close-btn:hover {
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
+}
+
+.squad-help-modal-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* Real cards live on the green pitch, so the example card does too -- otherwise its
+   colors (and the "these never change with light/dark theme" rule) wouldn't read the
+   same way they do in the real squad view. */
+.squad-help-pitch {
+  background: #1d6b3a;
+  background-image: repeating-linear-gradient(0deg, #1d6b3a 0 36px, #226e3d 36px 72px);
+  border-radius: 12px;
+  padding: 40px 30px;
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* One fixed size, not built from the responsive .squad-player-card breakpoints --
+   this card only ever renders inside this modal, so its six numbered callouts (below)
+   can use hardcoded pixel offsets that stay correct without needing to track three
+   different breakpoint sizes. */
+.squad-help-example-card {
+  position: relative;
+  width: 220px;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 50px 16px 20px;
+  text-align: center;
+}
+
+.squad-club-badge.squad-help-example-crest {
+  width: 56px;
+  height: 56px;
+  top: -28px;
+}
+
+.squad-cap-badge.squad-help-example-cap {
+  width: 34px;
+  height: 34px;
+  top: 12px;
+  left: 12px;
+  font-size: 15px;
+}
+
+.squad-form-badge.squad-help-example-hot {
+  width: 34px;
+  height: 34px;
+  top: 12px;
+  right: 12px;
+}
+
+.squad-form-badge.squad-help-example-hot svg {
+  width: 16px;
+  height: 16px;
+}
+
+.squad-help-example-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.squad-help-example-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1224;
+}
+
+.squad-points-chip.squad-help-example-points {
+  font-size: 13px;
+  padding: 4px 12px;
+}
+
+.squad-help-example-fixtures {
+  display: flex;
+  gap: 8px;
+}
+
+.squad-help-example-fixtures .squad-fixture-pill {
+  padding: 4px 14px;
+  font-size: 12px;
+}
+
+/* Small numbered markers -- reused both floating on the example card (positioned per
+   number below) and inline in the legend list, so the same number always looks the
+   same wherever it appears. */
+.squad-help-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1a1224;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.squad-help-dot-1 { position: absolute; top: -4px; left: calc(50% + 36px); }
+.squad-help-dot-5 { position: absolute; top: 50px; left: 12px; }
+.squad-help-dot-6 { position: absolute; top: 50px; right: 12px; }
+
+.squad-help-modal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+  max-width: 300px;
+}
+
+.squad-help-modal-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.squad-help-modal-list .squad-help-dot {
+  margin-top: 1px;
+}
+
+.squad-position-row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.squad-player-card {
+  width: 70px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-radius: 9px;
+  padding: 16px 2px 5px;
+  text-align: center;
+  position: relative;
+}
+
+.squad-club-badge {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+}
+
+.squad-club-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Fallback for clubs with no known crest URL, or if the image fails to load --
+   the plain 3-letter badge this replaced. */
+.squad-club-badge-text {
+  background: #37003c;
+  border: none;
+  padding: 0;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.squad-cap-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #00a86b;
+  color: #04342c;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.squad-vice-badge {
+  background: #b7e4d3;
+  color: #04342c;
+}
+
+.squad-form-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.squad-form-badge svg {
+  width: 9px;
+  height: 9px;
+}
+
+.squad-cold-badge {
+  background: #185fa5;
+}
+
+.squad-hot-badge {
+  background: #d85a30;
+}
+
+.squad-name-wrap {
+  /* A little taller than one line so a rare wrapping name (long ones like
+     "Estupinan") isn't cut off -- but NOT a full two-line reservation anymore, since
+     that left a wall of dead space under every normal one-line name (which is most of
+     them). The odd two-line card just ends up very slightly taller than its row
+     neighbors now instead of every card being padded out to match it. */
+  min-height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 5px 0 4px;
+}
+
+.squad-player-name {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 10px;
+  margin: 0;
+  color: #1a1224;
+}
+
+.squad-position-letter {
+  color: #79708f;
+  font-weight: 500;
+}
+
+/* Deliberately a neutral dark ink pill rather than reaching for green/blue/coral --
+   every other color on this card already carries a specific meaning (club badge
+   purple, captain green, cold blue, hot coral, fixture difficulty red/gray/green), so
+   a "stat readout" color needed to read as its own thing rather than being mistaken
+   for one of those. */
+.squad-points-chip {
+  display: inline-block;
+  margin: 0 0 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #1a1224;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.squad-fixture-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.squad-fixture-pill {
+  font-size: 7.5px;
+  font-weight: 600;
+  color: #ffffff;
+  padding: 1.5px 0;
+  border-radius: 999px;
+}
+
+.squad-fixture-easy { background: #639922; }
+.squad-fixture-neutral { background: #888780; }
+.squad-fixture-hard { background: #d85a30; }
+
+.squad-bench-section {
+  border-top: 1px dashed rgba(255, 255, 255, 0.4);
+  padding-top: 10px;
+}
+
+.squad-bench-label {
+  color: #c8e6d3;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 360px) {
+  .squad-player-card { width: 62px; }
+  .squad-pitch { padding-left: 3px; padding-right: 3px; }
+}
+
+/* Tablet and up: real room to breathe, so the pitch and every card scale up together
+   instead of staying phone-sized inside a wide desktop layout. */
+@media (min-width: 640px) {
+  .squad-pitch {
+    max-width: 560px;
+    padding: 20px 14px 18px;
+    gap: 16px;
+  }
+
+  .squad-position-row { gap: 10px; }
+
+  .squad-player-card {
+    width: 100px;
+    border-radius: 10px;
+    padding: 20px 4px 8px;
+  }
+
+  .squad-club-badge {
+    width: 30px;
+    height: 30px;
+    font-size: 9.5px;
+    top: -13px;
+  }
+
+  .squad-cap-badge,
+  .squad-form-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  .squad-form-badge svg { width: 11px; height: 11px; }
+
+  .squad-name-wrap { min-height: 16px; margin: 6px 0 5px; }
+
+  .squad-player-name { font-size: 10.5px; line-height: 13px; }
+
+  .squad-fixture-list { gap: 3px; }
+
+  .squad-fixture-pill { font-size: 9px; padding: 2px 0; }
+
+  .squad-points-chip { font-size: 10px; padding: 2.5px 8px; margin-bottom: 5px; }
+
+  .squad-legend { font-size: 13px; }
+}
+
+/* Full desktop: matches the extra width most of this app's other pages already use. */
+@media (min-width: 1000px) {
+  .squad-pitch {
+    max-width: 760px;
+    padding: 24px 18px 20px;
+    gap: 20px;
+  }
+
+  .squad-position-row { gap: 14px; }
+
+  .squad-player-card {
+    width: 122px;
+    padding: 24px 5px 10px;
+  }
+
+  .squad-club-badge {
+    width: 34px;
+    height: 34px;
+    font-size: 10.5px;
+    top: -15px;
+  }
+
+  .squad-cap-badge,
+  .squad-form-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+
+  .squad-form-badge svg { width: 12px; height: 12px; }
+
+  .squad-name-wrap { min-height: 18px; margin: 8px 0 6px; }
+
+  .squad-player-name { font-size: 11.5px; line-height: 14px; }
+
+  .squad-fixture-list { gap: 4px; }
+
+  .squad-fixture-pill { font-size: 10px; padding: 2.5px 0; }
+
+  .squad-points-chip { font-size: 11px; padding: 3px 9px; margin-bottom: 6px; }
+
+  .squad-legend { font-size: 14px; }
+}

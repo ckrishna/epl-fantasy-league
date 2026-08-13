@@ -30,14 +30,13 @@ function MoonIcon() {
   );
 }
 
-// Reads any previously-saved choice; falls back to the OS/browser's own light/dark
-// preference for a first-time visitor rather than always defaulting to light.
+// Reads any previously-saved choice; a first-time visitor with no saved preference
+// gets dark by default (the app's own default, not the OS/browser's light/dark
+// preference -- a visitor can still switch via the toggle, which then persists here).
 function getInitialTheme() {
   const saved = localStorage.getItem('theme');
   if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
+  return 'dark';
 }
 
 export default function App() {
@@ -47,6 +46,11 @@ export default function App() {
   // user explicitly selects a past season from the dropdown.
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [theme, setTheme] = useState(getInitialTheme);
+  // Bumped on every click of the Standings nav tab (even when it's already the active
+  // tab) so Standings.jsx can reset out of the manager-squad view back to the list --
+  // that's the "click Standings again to go back" behavior, without lifting the
+  // selected-manager state itself up into App.
+  const [standingsResetKey, setStandingsResetKey] = useState(0);
 
   useEffect(() => {
     getSeasons().then(setSeasons);
@@ -90,6 +94,7 @@ export default function App() {
               onClick={() => {
                 setSelectedSeason(null);
                 setActiveTab('standings');
+                setStandingsResetKey((k) => k + 1);
               }}
               aria-label="Go to current season standings"
               title="Go to current season standings"
@@ -148,7 +153,10 @@ export default function App() {
       <nav className="tabs">
         <button
           className={`tab ${activeTab === 'standings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('standings')}
+          onClick={() => {
+            setActiveTab('standings');
+            setStandingsResetKey((k) => k + 1);
+          }}
         >
           Standings
         </button>
@@ -173,7 +181,7 @@ export default function App() {
       </nav>
 
       <main className="app-content">
-        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} />}
+        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} />}
         {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} />}
         {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} />}
         {activeTab === 'trends' && <Trends />}

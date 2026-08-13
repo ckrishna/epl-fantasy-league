@@ -4,6 +4,7 @@ import { handleGenBI, handleGenBIFeedback } from './handlers/genbi.mjs';
 import { handleSeasons } from './handlers/seasons.mjs';
 import { handleFeedbackSubmit } from './handlers/feedback.mjs';
 import { handleTrends, handleTrendsManagers } from './handlers/trends.mjs';
+import { handleManagerSquad } from './handlers/manager-squad.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,6 +54,10 @@ export async function handler(event) {
 
     if (path.includes('/trends')) {
       return await handleTrends(queryParams, corsHeaders);
+    }
+
+    if (path.includes('/manager-squad')) {
+      return await handleManagerSquad(queryParams, corsHeaders);
     }
 
     // Help page's "send feedback" form -- unrelated to /stats/feedback above (GenBI's

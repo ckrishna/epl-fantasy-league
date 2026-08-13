@@ -2,13 +2,22 @@
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
 import ScopeNote from '../components/ScopeNote';
+import ManagerSquad from '../components/ManagerSquad';
 import '../styles/Standings.css';
 
-export default function Standings({ season = null, seasonLabel = null } = {}) {
+export default function Standings({ season = null, seasonLabel = null, resetKey = 0 } = {}) {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
 const [activeGW, setActiveGW] = useState(null);
 const [displayGW, setDisplayGW] = useState(null);  // ← ADD THIS
+const [selectedManager, setSelectedManager] = useState(null); // { entryId, teamName, managerName }
+
+// Re-clicking the "Standings" nav tab while already on this page should return from
+// the squad view to the list -- App.jsx bumps resetKey on every Standings tab click
+// (even when it's already the active tab) specifically so this effect can catch that.
+useEffect(() => {
+  setSelectedManager(null);
+}, [resetKey]);
 
 
 useEffect(() => {
@@ -41,6 +50,19 @@ useEffect(() => {
 
   if (loading) return <div className="loading">Loading standings...</div>;
 
+  if (selectedManager) {
+    return (
+      <div className="standings-page">
+        <ManagerSquad
+          entryId={selectedManager.entryId}
+          teamName={selectedManager.teamName}
+          managerName={selectedManager.managerName}
+          onClose={() => setSelectedManager(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="standings-page">
       <h2>League Standings <span className="page-title-note">(Net Points)</span></h2>
@@ -54,7 +76,13 @@ useEffect(() => {
               <span className="rank-badge">{manager.rank}</span>
             </div>
             <div className="card-info">
-              <h3 className="card-team">{manager.team_name}</h3>
+              <button
+                type="button"
+                className="card-team card-team-link"
+                onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
+              >
+                {manager.team_name}
+              </button>
               {/* Historical (pre-2025/26) seasons only have a manager's real name on
                   record, no separate team nickname -- manager_name is null for those
                   rows rather than a blank/duplicate line. */}
@@ -89,7 +117,13 @@ useEffect(() => {
             <tr key={manager.manager_id} className={manager.rank === 1 ? 'top-1' : ''}>
               <td className="rank">{manager.rank}</td>
               <td className="team-manager">
-                <div className="team-name">{manager.team_name}</div>
+                <button
+                  type="button"
+                  className="team-name team-name-link"
+                  onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
+                >
+                  {manager.team_name}
+                </button>
                 {manager.manager_name && <div className="manager-name">{manager.manager_name}</div>}
               </td>
               <td className="week-points">{manager.points_this_week}</td>
