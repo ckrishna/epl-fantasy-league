@@ -108,13 +108,16 @@ export default function App() {
 
             <button
               type="button"
+              role="switch"
+              aria-checked={theme === 'dark'}
               className="theme-toggle"
               onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
-              <span className={`theme-toggle-option ${theme === 'light' ? 'active' : ''}`}>☀️</span>
-              <span className={`theme-toggle-option ${theme === 'dark' ? 'active' : ''}`}>🌙</span>
+              <span className="theme-toggle-icon theme-toggle-icon-sun" aria-hidden="true">☀️</span>
+              <span className="theme-toggle-icon theme-toggle-icon-moon" aria-hidden="true">🌙</span>
+              <span className="theme-toggle-thumb" />
             </button>
           </div>
         </div>

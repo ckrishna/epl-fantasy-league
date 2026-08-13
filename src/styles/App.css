@@ -213,35 +213,78 @@ body {
   flex-shrink: 0;
 }
 
-/* Sun/moon pill toggle. Two icon buttons inside a rounded track; the active side gets
-   a solid "thumb" background so it's obvious which mode is selected at a glance --
-   same pattern as the reference site's light/dark switch. */
+/* Sun/moon SLIDING switch (2026-08-12, replaced the two-icon segmented pill above with
+   this per a mocked-then-approved design). One thumb slides between two resting
+   positions inside a pill track; the track itself recolors per mode (warm orange for
+   light, dark navy for dark) rather than reusing --accent -- these are deliberately
+   fixed "day/night" colors, independent of the app's own green accent, so the switch
+   still reads clearly even against whichever accent color the rest of the app uses.
+   Sun/moon emoji sit at fixed positions at each end of the track and crossfade opacity
+   (rather than moving) -- only the currently-relevant one is visible, and the thumb's
+   resting position always leaves it uncovered. */
 .theme-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  background: var(--bg-surface-alt);
-  border: 1px solid var(--border);
+  width: 56px;
+  height: 30px;
   border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
+  border: none;
+  padding: 0;
   cursor: pointer;
+  background: #f0997b;
+  transition: background 0.25s ease;
+  flex-shrink: 0;
 }
 
-.theme-toggle-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
+[data-theme='dark'] .theme-toggle {
+  background: #1a1f2e;
+}
+
+.theme-toggle-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: opacity 0.15s ease;
+}
+
+.theme-toggle-icon-sun {
+  left: 7px;
+  opacity: 1;
+}
+
+.theme-toggle-icon-moon {
+  right: 7px;
+  opacity: 0;
+}
+
+[data-theme='dark'] .theme-toggle-icon-sun {
+  opacity: 0;
+}
+
+[data-theme='dark'] .theme-toggle-icon-moon {
+  opacity: 1;
+}
+
+.theme-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  transition: background 0.15s ease, color 0.15s ease;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.25s ease;
+  /* Light mode: thumb rests right, leaving the sun icon (left) uncovered. */
+  transform: translateX(26px);
 }
 
-.theme-toggle-option.active {
-  background: var(--accent);
-  color: var(--text-on-accent);
+[data-theme='dark'] .theme-toggle-thumb {
+  /* Dark mode: thumb rests left, leaving the moon icon (right) uncovered. */
+  transform: translateX(0);
 }
 
 .app-title {
