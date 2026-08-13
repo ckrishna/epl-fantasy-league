@@ -204,6 +204,13 @@ export default function App() {
       hour12: true
     })} UTC
   </p>
+  <button
+    type="button"
+    className="app-footer-help-link"
+    onClick={() => setActiveTab('help')}
+  >
+    Help & Support
+  </button>
   <p className="app-footer-copyright">&copy; {new Date().getFullYear()} candorsolutions.us</p>
 </footer>
     </div>
