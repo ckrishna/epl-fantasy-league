@@ -50,6 +50,12 @@ useEffect(() => {
 
   if (loading) return <div className="loading">Loading standings...</div>;
 
+  // The squad pitch view only ever reads the CURRENT season's picks/fixtures (see
+  // handleManagerSquad's comment -- upcoming fixtures/form has no meaning for a past
+  // season). `season` here is null for "current" and an explicit string for a past
+  // season picked from the dropdown, so that's the only signal this component needs.
+  const isCurrentSeason = !season;
+
   if (selectedManager) {
     return (
       <div className="standings-page">
@@ -76,13 +82,17 @@ useEffect(() => {
               <span className="rank-badge">{manager.rank}</span>
             </div>
             <div className="card-info">
-              <button
-                type="button"
-                className="card-team card-team-link"
-                onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
-              >
-                {manager.team_name}
-              </button>
+              {isCurrentSeason ? (
+                <button
+                  type="button"
+                  className="card-team card-team-link"
+                  onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
+                >
+                  {manager.team_name}
+                </button>
+              ) : (
+                <p className="card-team">{manager.team_name}</p>
+              )}
               {/* Historical (pre-2025/26) seasons only have a manager's real name on
                   record, no separate team nickname -- manager_name is null for those
                   rows rather than a blank/duplicate line. */}
@@ -117,13 +127,17 @@ useEffect(() => {
             <tr key={manager.manager_id} className={manager.rank === 1 ? 'top-1' : ''}>
               <td className="rank">{manager.rank}</td>
               <td className="team-manager">
-                <button
-                  type="button"
-                  className="team-name team-name-link"
-                  onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
-                >
-                  {manager.team_name}
-                </button>
+                {isCurrentSeason ? (
+                  <button
+                    type="button"
+                    className="team-name team-name-link"
+                    onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
+                  >
+                    {manager.team_name}
+                  </button>
+                ) : (
+                  <div className="team-name">{manager.team_name}</div>
+                )}
                 {manager.manager_name && <div className="manager-name">{manager.manager_name}</div>}
               </td>
               <td className="week-points">{manager.points_this_week}</td>
