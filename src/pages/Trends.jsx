@@ -13,14 +13,10 @@ const MANAGER_STORAGE_KEY = 'trends_manager';
 // small screen); desktop ignores this entirely and shows both side by side in a grid --
 // see the `@media (min-width: 769px)` override in Trends.css.
 //
-// "Season by season" (final points + GW10-to-finish rank movement) was a third section
-// here, removed 2026-08-12 at the user's call -- not enough standalone value yet to
-// justify the space. The backend (`seasons` in the /trends response, handleTrends in
-// trends.mjs) still computes and returns it -- only this page stopped rendering it, so
-// it can come back cheaply if that changes.
 const SECTIONS = [
   { id: 'field', label: 'Vs field' },
-  { id: 'pace', label: 'Pace' }
+  { id: 'pace', label: 'Pace' },
+  { id: 'seasons', label: 'Seasons' }
 ];
 
 function ordinal(n) {
@@ -161,7 +157,7 @@ export default function Trends() {
 
   return (
     <div className="trends-page">
-      <h2>Your trends <span className="page-title-note">Beta</span></h2>
+      <h2>Your trends</h2>
       <p className="scope-note">Always spans every season on record for the manager you pick below — the season selector above doesn't apply on this tab.</p>
 
       <div className="trends-manager-picker">
@@ -333,6 +329,49 @@ export default function Trends() {
                       </div>
                     )}
                   </>
+                )}
+              </div>
+            </div>
+
+            <div className={`trends-section trends-section-wide ${activeSection === 'seasons' ? 'active' : ''}`}>
+              <div className="trends-card">
+                <div className="trends-card-title">Season by season</div>
+                <div className="trends-card-subtitle">Total points, finish, and pace across every season on record</div>
+
+                {(!data.seasons || data.seasons.length === 0) ? (
+                  <p className="no-data">No season data available yet.</p>
+                ) : (
+                  <table className="trends-seasons-table">
+                    <thead>
+                      <tr>
+                        <th>Season</th>
+                        <th>Finish</th>
+                        <th>Total pts</th>
+                        <th>Avg/GW</th>
+                        <th>Gap to 1st</th>
+                        <th>Hits taken</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.seasons.map((s) => (
+                        <tr key={s.season} className={s.is_current ? 'is-current' : ''}>
+                          <td>
+                            {s.season}
+                            {s.is_current && <span className="trends-seasons-current-tag">Current</span>}
+                          </td>
+                          <td className={s.final_rank === 1 ? 'trends-seasons-won' : ''}>{ordinal(s.final_rank)}</td>
+                          <td>{s.final_points ?? '—'}</td>
+                          <td>{s.avg_points_per_gw ?? '—'}</td>
+                          <td className={s.gap_to_first ? 'trends-negative' : s.gap_to_first === 0 ? 'trends-seasons-won' : ''}>
+                            {s.gap_to_first === null ? '—' : s.gap_to_first === 0 ? '—' : `${s.gap_to_first} pts`}
+                          </td>
+                          <td className={s.total_transfer_cost > 0 ? 'trends-negative' : ''}>
+                            {s.total_transfer_cost > 0 ? `-${s.total_transfer_cost}` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </div>

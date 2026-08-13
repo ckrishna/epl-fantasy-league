@@ -180,7 +180,7 @@ export default function App() {
           className={`tab ${activeTab === 'trends' ? 'active' : ''}`}
           onClick={() => setActiveTab('trends')}
         >
-          Trends<sup className="beta-tag">Beta</sup>
+          Trends
         </button>
       </nav>
 

@@ -56,6 +56,16 @@ function rankAt(bySeasonGw, requestedName, season, gameweek) {
   return idx === -1 ? null : idx + 1;
 }
 
+// Whoever had the most cumulative points at that exact (season, gameweek) -- used to
+// compute "how far behind the season winner did you finish" at a season's final
+// gameweek. Returns null under the same conditions rankAt does (nothing recorded for
+// that gameweek), so a missing value reads as "unknown" rather than a false 0-point gap.
+function leaderPointsAt(bySeasonGw, season, gameweek) {
+  const rows = bySeasonGw.get(season)?.get(gameweek);
+  if (!rows || rows.length === 0) return null;
+  return Math.max(...rows.map((r) => r.points_total || 0));
+}
+
 export async function handleTrends(queryParams, corsHeaders) {
   const requestedName = normName(queryParams.manager || '');
   if (!requestedName) {
@@ -105,6 +115,7 @@ export async function handleTrends(queryParams, corsHeaders) {
     .map(([season, seasonRows]) => {
       const finalRow = seasonRows[seasonRows.length - 1];
       const midRow = seasonRows.find((r) => r.gameweek === MID_SEASON_GAMEWEEK);
+      const leaderPoints = leaderPointsAt(bySeasonGw, season, finalRow.gameweek);
       return {
         season,
         is_current: season === currentSeason,
@@ -112,7 +123,21 @@ export async function handleTrends(queryParams, corsHeaders) {
         final_points: finalRow.points_total,
         final_rank: rankAt(bySeasonGw, requestedName, season, finalRow.gameweek),
         mid_gameweek: MID_SEASON_GAMEWEEK,
-        mid_rank: midRow ? rankAt(bySeasonGw, requestedName, season, MID_SEASON_GAMEWEEK) : null
+        mid_rank: midRow ? rankAt(bySeasonGw, requestedName, season, MID_SEASON_GAMEWEEK) : null,
+        // Rounded to 1 decimal -- final_points is already net (gross minus hits), so
+        // this reads as "average net points per gameweek" matching every other net
+        // figure this app shows, not a second gross-based average.
+        avg_points_per_gw: finalRow.gameweek > 0
+          ? Math.round((finalRow.points_total / finalRow.gameweek) * 10) / 10
+          : null,
+        // Points behind whoever actually won that season (0 if this manager was the
+        // winner). Null rather than 0 if the season's final gameweek has no data at
+        // all for anyone -- an absent value, not a false "tied for first".
+        gap_to_first: leaderPoints !== null ? leaderPoints - finalRow.points_total : null,
+        // Sum of every gameweek's transfer_cost that season -- points given up to paid
+        // ("hit") transfers, not a count of transfers made. Same field Standings/GW
+        // Winners already read per-gameweek, just totaled across the season here.
+        total_transfer_cost: seasonRows.reduce((sum, r) => sum + (r.transfer_cost || 0), 0)
       };
     })
     .sort((a, b) => a.season.localeCompare(b.season));

@@ -55,6 +55,14 @@
   display: block;
 }
 
+/* The season-by-season table wants its full 6 columns of room, not squeezed into one
+   half of the 2-column desktop grid alongside the field/pace charts -- only matters on
+   desktop (mobile's max-width:768px override switches .trends-sections to block, where
+   grid-column has no effect anyway). */
+.trends-section-wide {
+  grid-column: 1 / -1;
+}
+
 .trends-card {
   background: var(--bg-surface);
   border-radius: 12px;
@@ -125,6 +133,64 @@
 
 .trends-negative {
   color: var(--danger);
+}
+
+.trends-seasons-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.trends-seasons-table th {
+  text-align: center;
+  padding: 0.6rem 0.4rem;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.trends-seasons-table th:first-child {
+  text-align: left;
+}
+
+.trends-seasons-table td {
+  text-align: center;
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.trends-seasons-table tr:last-child td {
+  border-bottom: none;
+}
+
+.trends-seasons-table td:first-child {
+  text-align: left;
+}
+
+.trends-seasons-table tr.is-current {
+  background: var(--accent-soft);
+}
+
+.trends-seasons-current-tag {
+  margin-left: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Same bright accent green used for Standings' rank-1 highlight -- legible directly on
+   the card's own background, unlike .trends-positive (tuned for text sitting ON TOP of
+   an accent-soft fill, e.g. inside .trends-callout, where it'd be unreadable here). */
+.trends-seasons-won {
+  color: var(--accent);
 }
 
 @media (max-width: 768px) {
