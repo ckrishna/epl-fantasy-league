@@ -127,7 +127,7 @@ export default function App() {
               >
                 {seasons.map((s) => (
                   <option key={s.season} value={s.season}>
-                    {s.league_id ? `League ${s.league_id} — ${s.season}` : s.season}
+                    {s.season}
                     {s.current ? ' (current)' : ''}
                   </option>
                 ))}

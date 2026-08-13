@@ -14,10 +14,37 @@ const MANAGER_STORAGE_KEY = 'trends_manager';
 // see the `@media (min-width: 769px)` override in Trends.css.
 //
 const SECTIONS = [
-  { id: 'field', label: 'Vs field' },
   { id: 'pace', label: 'Pace' },
+  { id: 'field', label: 'Vs field' },
   { id: 'seasons', label: 'Seasons' }
 ];
+
+// Seasons table columns: `key` matches the field read off each season object (or
+// 'season' itself), and `dir` is the direction that column sorts to on its FIRST click --
+// chosen per-column so the "better" value lands on top rather than always defaulting to
+// ascending. Rank/gap/hits are all "lower is better" fields, so their first click is
+// ascending; season/points/pace are "higher/newer is better", so theirs is descending.
+const SEASON_SORT_DEFAULTS = {
+  season: 'desc',
+  final_rank: 'asc',
+  final_points: 'desc',
+  avg_points_per_gw: 'desc',
+  gap_to_first: 'asc',
+  total_transfer_cost: 'asc'
+};
+
+// null/undefined sort to the bottom regardless of direction -- an unknown value isn't
+// "worse" or "better" than a real one, it's just missing, so it shouldn't jump to the
+// top under an ascending sort.
+function compareSeasons(a, b, key, dir) {
+  const av = key === 'season' ? a.season : a[key];
+  const bv = key === 'season' ? b.season : b[key];
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+  return dir === 'asc' ? cmp : -cmp;
+}
 
 function ordinal(n) {
   if (n == null) return '—';
@@ -100,7 +127,14 @@ export default function Trends() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [activeSection, setActiveSection] = useState('field');
+  const [activeSection, setActiveSection] = useState('pace');
+  // Seasons table sort state. Defaults to season, descending, so the latest season
+  // (current, if any) lands on top without the user having to click anything -- matches
+  // how every other list in this app (Standings, GW Winners) already reads newest/best
+  // first. `dir` is 'asc' | 'desc'; clicking the already-active column header flips it,
+  // clicking a different column switches to that column at its own sensible default
+  // direction (see SEASON_SORT_DEFAULTS below) rather than always starting ascending.
+  const [seasonSort, setSeasonSort] = useState({ key: 'season', dir: 'desc' });
 
   useEffect(() => {
     getTrendsManagers().then((list) => {
@@ -128,6 +162,19 @@ export default function Trends() {
       setLoading(false);
     });
   }, [selected]);
+
+  const sortedSeasons = useMemo(() => {
+    if (!data?.seasons) return [];
+    return [...data.seasons].sort((a, b) => compareSeasons(a, b, seasonSort.key, seasonSort.dir));
+  }, [data, seasonSort]);
+
+  function handleSeasonSort(key) {
+    setSeasonSort((prev) => (
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: SEASON_SORT_DEFAULTS[key] }
+    ));
+  }
 
   const paceChartData = useMemo(() => buildPaceChartData(data?.pace), [data]);
 
@@ -200,61 +247,6 @@ export default function Trends() {
           </div>
 
           <div className="trends-sections">
-            <div className={`trends-section ${activeSection === 'field' ? 'active' : ''}`}>
-              <div className="trends-card">
-                <div className="trends-card-title">Vs the field</div>
-                <div className="trends-card-subtitle">Cumulative points this season, everyone in the league</div>
-
-                {fieldChartData.length === 0 ? (
-                  <p className="no-data">No games played yet this season — check back once it kicks off.</p>
-                ) : (
-                  <>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <ComposedChart data={fieldChartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                        <XAxis
-                          dataKey="gameweek"
-                          tickFormatter={(gw) => `GW${gw}`}
-                          tick={axisTick}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} />
-                        <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelFormatter={(gw) => `Gameweek ${gw}`} />
-                        {fieldRenderOrder.map((idx) => {
-                          const m = data.field[idx];
-                          const highlighted = m.is_you || m.is_leader;
-                          const stroke = m.is_you ? 'var(--accent)' : m.is_leader ? 'var(--primary)' : 'var(--gray-200)';
-                          return (
-                            <Line
-                              key={idx}
-                              type="monotone"
-                              dataKey={`m${idx}`}
-                              stroke={stroke}
-                              strokeWidth={highlighted ? 2.5 : 1.5}
-                              dot={false}
-                              isAnimationActive={false}
-                              connectNulls
-                            />
-                          );
-                        })}
-                      </ComposedChart>
-                    </ResponsiveContainer>
-
-                    <div className="trends-legend">
-                      <span><i className="trends-legend-swatch solid" style={{ background: 'var(--accent)' }} /> You</span>
-                      {data.field.some((m) => m.is_leader) && (
-                        <span><i className="trends-legend-swatch solid" style={{ background: 'var(--primary)' }} /> Leader</span>
-                      )}
-                      <span><i className="trends-legend-swatch band" /> Everyone else</span>
-                    </div>
-
-                    {fieldSummary && <div className="trends-callout">{fieldSummary}</div>}
-                  </>
-                )}
-              </div>
-            </div>
-
             <div className={`trends-section ${activeSection === 'pace' ? 'active' : ''}`}>
               <div className="trends-card">
                 <div className="trends-card-title">Pace vs your history</div>
@@ -333,6 +325,61 @@ export default function Trends() {
               </div>
             </div>
 
+            <div className={`trends-section ${activeSection === 'field' ? 'active' : ''}`}>
+              <div className="trends-card">
+                <div className="trends-card-title">Vs the field</div>
+                <div className="trends-card-subtitle">Cumulative points this season, everyone in the league</div>
+
+                {fieldChartData.length === 0 ? (
+                  <p className="no-data">No games played yet this season — check back once it kicks off.</p>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <ComposedChart data={fieldChartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                        <XAxis
+                          dataKey="gameweek"
+                          tickFormatter={(gw) => `GW${gw}`}
+                          tick={axisTick}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} />
+                        <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelFormatter={(gw) => `Gameweek ${gw}`} />
+                        {fieldRenderOrder.map((idx) => {
+                          const m = data.field[idx];
+                          const highlighted = m.is_you || m.is_leader;
+                          const stroke = m.is_you ? 'var(--accent)' : m.is_leader ? 'var(--primary)' : 'var(--gray-200)';
+                          return (
+                            <Line
+                              key={idx}
+                              type="monotone"
+                              dataKey={`m${idx}`}
+                              stroke={stroke}
+                              strokeWidth={highlighted ? 2.5 : 1.5}
+                              dot={false}
+                              isAnimationActive={false}
+                              connectNulls
+                            />
+                          );
+                        })}
+                      </ComposedChart>
+                    </ResponsiveContainer>
+
+                    <div className="trends-legend">
+                      <span><i className="trends-legend-swatch solid" style={{ background: 'var(--accent)' }} /> You</span>
+                      {data.field.some((m) => m.is_leader) && (
+                        <span><i className="trends-legend-swatch solid" style={{ background: 'var(--primary)' }} /> Leader</span>
+                      )}
+                      <span><i className="trends-legend-swatch band" /> Everyone else</span>
+                    </div>
+
+                    {fieldSummary && <div className="trends-callout">{fieldSummary}</div>}
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className={`trends-section trends-section-wide ${activeSection === 'seasons' ? 'active' : ''}`}>
               <div className="trends-card">
                 <div className="trends-card-title">Season by season</div>
@@ -344,16 +391,30 @@ export default function Trends() {
                   <table className="trends-seasons-table">
                     <thead>
                       <tr>
-                        <th>Season</th>
-                        <th>Finish</th>
-                        <th>Total pts</th>
-                        <th>Avg/GW</th>
-                        <th>Gap to 1st</th>
-                        <th>Hits taken</th>
+                        {[
+                          ['season', 'Season'],
+                          ['final_rank', 'Finish'],
+                          ['final_points', 'Total pts'],
+                          ['avg_points_per_gw', 'Avg/GW'],
+                          ['gap_to_first', 'Gap to 1st'],
+                          ['total_transfer_cost', 'Hits taken']
+                        ].map(([key, label]) => (
+                          <th
+                            key={key}
+                            className="trends-seasons-sortable"
+                            onClick={() => handleSeasonSort(key)}
+                            aria-sort={seasonSort.key === key ? (seasonSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                          >
+                            {label}
+                            <span className="trends-seasons-sort-arrow">
+                              {seasonSort.key === key ? (seasonSort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+                            </span>
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {data.seasons.map((s) => (
+                      {sortedSeasons.map((s) => (
                         <tr key={s.season} className={s.is_current ? 'is-current' : ''}>
                           <td>
                             {s.season}

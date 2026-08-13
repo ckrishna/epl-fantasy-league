@@ -157,6 +157,22 @@
   text-align: left;
 }
 
+.trends-seasons-table th.trends-seasons-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.trends-seasons-table th.trends-seasons-sortable:hover {
+  color: var(--text-secondary);
+}
+
+.trends-seasons-sort-arrow {
+  display: inline-block;
+  font-size: 0.6rem;
+  color: var(--accent);
+  margin-left: 2px;
+}
+
 .trends-seasons-table td {
   text-align: center;
   padding: 0.6rem 0.4rem;
