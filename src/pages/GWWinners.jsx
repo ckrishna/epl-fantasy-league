@@ -1,13 +1,95 @@
 // src/pages/GWWinners.jsx - Updated with compact summary
 import { useEffect, useState } from 'react';
-import { getWinners } from '../api/client';
-import ScopeNote from '../components/ScopeNote';
+import { getWinners, getStandings } from '../api/client';
 import '../styles/GWWinners.css';
 
-export default function GWWinners({ season = null, seasonLabel = null } = {}) {
+// Clicking a row in "All Gameweek Winners" swaps in the full manager listing for that
+// specific gameweek, ranked by THAT week's net points (leader on top) rather than the
+// season-long total Standings itself sorts by. Reuses the existing /standings endpoint
+// with an explicit gw param -- queryLeagueStandings(gw, season) already returns every
+// manager's points_this_week/transfer_cost/net_points for an arbitrary past gameweek
+// (it's the same data Standings' own walk-back logic reads), so this needed no backend
+// change at all.
+function GWDetail({ gameweek, season }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getStandings(gameweek, season).then((data) => {
+      const sorted = (data.standings || [])
+        .slice()
+        .sort((a, b) => (b.net_points ?? 0) - (a.net_points ?? 0))
+        .map((m, idx) => ({ ...m, rank: idx + 1 }));
+      setRows(sorted);
+      setLoading(false);
+    }).catch((err) => {
+      console.error('Error fetching GW detail standings:', err);
+      setLoading(false);
+    });
+  }, [gameweek, season]);
+
+  if (loading) return <div className="loading">Loading Gameweek {gameweek}...</div>;
+
+  return (
+    <div className="winners-table-section">
+      <h3>Gameweek {gameweek} &mdash; Full Standings</h3>
+      <table className="winners-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th className="desktop-only">Team</th>
+            <th>Manager</th>
+            <th className="desktop-only">Gross Points</th>
+            <th className="desktop-only">Transfer Cost</th>
+            <th>Net Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => (
+            <tr key={m.manager_id} className={m.rank === 1 ? 'top-1' : ''}>
+              <td className="gw-cell">{m.rank}</td>
+              <td className="team-cell desktop-only">{m.team_name}</td>
+              <td className="manager-cell">{m.manager_name || m.team_name}</td>
+              <td className="gross-points desktop-only">{m.points_this_week}</td>
+              <td className="transfer-cost desktop-only">
+                {m.transfer_cost > 0 ? `-${m.transfer_cost}` : '—'}
+              </td>
+              <td className="net-points">
+                <strong>{m.net_points}</strong>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {rows.length === 0 && (
+        <p className="no-data">No standings data available for this gameweek</p>
+      )}
+    </div>
+  );
+}
+
+export default function GWWinners({ season = null, seasonLabel = null, resetKey = 0 } = {}) {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedGW, setSelectedGW] = useState(null);
+
+  // Re-clicking the "GW Winners" nav tab while already on this page should return from
+  // a gameweek's full listing back to the summary -- App.jsx bumps resetKey on every
+  // GW Winners tab click (even when it's already the active tab), same pattern as
+  // Standings' manager-squad view.
+  useEffect(() => {
+    setSelectedGW(null);
+  }, [resetKey]);
+
+  // Switching seasons via the dropdown while a gameweek's full listing is open would
+  // otherwise keep showing that GW number under the newly-selected season -- close it
+  // back to the summary instead.
+  useEffect(() => {
+    setSelectedGW(null);
+  }, [season]);
 
   useEffect(() => {
     setLoading(true);
@@ -26,7 +108,7 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
           });
         });
       });
-      
+
       setWinners(flatWinners);
       setActiveGW(data.active_gameweek);
       setLoading(false);
@@ -37,6 +119,15 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
   }, [season]);
 
   if (loading) return <div className="loading">Loading weekly winners...</div>;
+
+  if (selectedGW) {
+    return (
+      <div className="gw-winners-page">
+        <h2>Gameweek Winners{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
+        <GWDetail gameweek={selectedGW} season={season} />
+      </div>
+    );
+  }
 
   const managerStats = {};
   winners.forEach(w => {
@@ -58,9 +149,8 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
 
   return (
     <div className="gw-winners-page">
-      <h2>Gameweek Winners <span className="page-title-note">(Net Points)</span></h2>
-      <ScopeNote season={seasonLabel} />
-      
+      <h2>Gameweek Winners{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
+
       {/* Manager Wins Summary - Compact */}
       <div className="winners-dashboard">
         <h3>Top Winners</h3>
@@ -78,7 +168,9 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
         </div>
       </div>
 
-      {/* Full Table View */}
+      {/* Full Table View -- each row belongs to one gameweek; clicking it opens the
+          full manager listing for that gameweek (GWDetail above), ranked by that
+          week's net points with the leader on top. */}
       <div className="winners-table-section">
         <h3>All Gameweek Winners</h3>
         <table className="winners-table">
@@ -89,12 +181,17 @@ export default function GWWinners({ season = null, seasonLabel = null } = {}) {
               <th>Manager</th>
               <th className="desktop-only">Gross Points</th>
               <th className="desktop-only">Transfer Cost</th>
-              <th>Net Points</th>
+              <th>Net Total</th>
             </tr>
           </thead>
           <tbody>
             {winners.map((w) => (
-              <tr key={`${w.gameweek}-${w.entry_id}`}>
+              <tr
+                key={`${w.gameweek}-${w.entry_id}`}
+                className="winners-row-link"
+                onClick={() => setSelectedGW(w.gameweek)}
+                title={`View full GW${w.gameweek} standings`}
+              >
                 <td className="gw-cell">{w.gameweek}</td>
                 <td className="team-cell desktop-only">{w.team_name}</td>
                 <td className="manager-cell">{w.manager_name || w.team_name}</td>

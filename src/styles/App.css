@@ -543,6 +543,11 @@ body {
      big heading's x-height, which reads as floating too low/centered rather than
      sitting on the same line as the rest of the heading. */
   vertical-align: baseline;
+  /* Guarantees breathing room from the heading text even where the JSX has no literal
+     space before this span (e.g. Standings/GWWinners' conditional {seasonLabel && ...}
+     -- the season label doesn't render at all until data loads, so there's nothing to
+     put a reliable literal space next to). */
+  margin-left: 0.4em;
 }
 
 /* Loading States */

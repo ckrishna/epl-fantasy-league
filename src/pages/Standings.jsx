@@ -1,7 +1,6 @@
 // src/pages/Standings.jsx
 import { useEffect, useState } from 'react';
 import { getStandings } from '../api/client';
-import ScopeNote from '../components/ScopeNote';
 import ManagerSquad from '../components/ManagerSquad';
 import '../styles/Standings.css';
 
@@ -71,11 +70,28 @@ useEffect(() => {
 
   return (
     <div className="standings-page">
-      <h2>League Standings <span className="page-title-note">(Net Points)</span></h2>
-      <ScopeNote season={seasonLabel} />
+      <h2>League Standings{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
 
       {/* Mobile Card View */}
       <div className="standings-cards">
+        {/* Column labels shown once above the list instead of repeated on every card
+            (each card used to carry its own "GW N"/"Total" labels, which just meant
+            reading the same two words N times scrolling down the page). Rank/team
+            columns are left blank here on purpose -- they're self-explanatory without
+            a label -- and reuse the exact same classes as a real card so the numbers
+            below line up under these labels without any separate width bookkeeping. */}
+        <div className="standings-cards-header" aria-hidden="true">
+          <div className="card-rank"></div>
+          <div className="card-info"></div>
+          <div className="card-stats">
+            <div className="stat">
+              <span className="stat-label">GW {displayGW || activeGW}</span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Net Total</span>
+            </div>
+          </div>
+        </div>
         {standings.map((manager) => (
           <div key={manager.manager_id} className={`standings-card ${manager.rank === 1 ? 'top-1' : ''}`}>
             <div className="card-rank">
@@ -100,11 +116,9 @@ useEffect(() => {
             </div>
             <div className="card-stats">
               <div className="stat">
-                <span className="stat-label">GW {displayGW || activeGW}</span>
                 <span className="stat-value">{manager.points_this_week}</span>
               </div>
               <div className="stat">
-                <span className="stat-label">Total</span>
                 <span className="stat-value">{manager.total_points}</span>
               </div>
             </div>
@@ -118,8 +132,8 @@ useEffect(() => {
           <tr>
             <th>RANK</th>
             <th>TEAM & MANAGER</th>
-            <th>GW {displayGW || activeGW}</th>
-            <th>TOTAL POINTS</th>
+            <th className="col-divider">GW {displayGW || activeGW}</th>
+            <th className="col-divider">Net Total</th>
           </tr>
         </thead>
         <tbody>
@@ -140,8 +154,8 @@ useEffect(() => {
                 )}
                 {manager.manager_name && <div className="manager-name">{manager.manager_name}</div>}
               </td>
-              <td className="week-points">{manager.points_this_week}</td>
-              <td className="points">{manager.total_points}</td>
+              <td className="week-points col-divider">{manager.points_this_week}</td>
+              <td className="points col-divider">{manager.total_points}</td>
             </tr>
           ))}
         </tbody>

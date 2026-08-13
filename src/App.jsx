@@ -51,6 +51,7 @@ export default function App() {
   // that's the "click Standings again to go back" behavior, without lifting the
   // selected-manager state itself up into App.
   const [standingsResetKey, setStandingsResetKey] = useState(0);
+  const [winnersResetKey, setWinnersResetKey] = useState(0);
 
   useEffect(() => {
     getSeasons().then(setSeasons);
@@ -162,7 +163,10 @@ export default function App() {
         </button>
         <button
           className={`tab ${activeTab === 'winners' ? 'active' : ''}`}
-          onClick={() => setActiveTab('winners')}
+          onClick={() => {
+            setActiveTab('winners');
+            setWinnersResetKey((k) => k + 1);
+          }}
         >
           GW Winners
         </button>
@@ -182,7 +186,7 @@ export default function App() {
 
       <main className="app-content">
         {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} />}
-        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} />}
+        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} resetKey={winnersResetKey} />}
         {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} />}
         {activeTab === 'trends' && <Trends />}
         {activeTab === 'help' && <Help />}

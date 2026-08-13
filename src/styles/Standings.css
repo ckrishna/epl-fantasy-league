@@ -38,6 +38,16 @@
   border-color: var(--accent);
 }
 
+/* One label row above the card list instead of repeating "GW N"/"Net Total" on every
+   card -- same horizontal padding as .standings-card so its labels land directly
+   above the numbers in the cards below. */
+.standings-cards-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0 1.25rem;
+}
+
 .card-rank {
   display: flex;
   align-items: center;
@@ -120,11 +130,25 @@
   gap: 0.25rem;
 }
 
+/* Fixed per-column widths so the header row's labels and each card's values land in
+   the same place regardless of content length -- without this, a column sized only by
+   its own content ("NET TOTAL" vs a short "0") drifts out of alignment between the
+   header row and the cards below it. Sized to fit "NET TOTAL" (the widest label)
+   without wrapping; the GW column is narrower since "GW N" is always shorter. */
+.card-stats .stat:first-child {
+  width: 52px;
+}
+
+.card-stats .stat:last-child {
+  width: 76px;
+}
+
 .stat-label {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .stat-value {
@@ -212,6 +236,25 @@
 .points {
   font-weight: 800;
   color: var(--primary);
+  text-align: center;
+}
+
+/* A thin vertical rule ahead of the GW and Net Total columns -- on wide desktop
+   screens the flexible Team & Manager column leaves a lot of open space before the
+   two numeric columns, and with no divider they read as floating in that empty area
+   rather than as a distinct "stats" block. Extra left padding keeps the number from
+   crowding the line itself. */
+.col-divider {
+  border-left: 1px solid var(--border);
+  padding-left: 1.5rem;
+}
+
+/* .standings-table th's base rule sets text-align: left for every header (correct for
+   RANK/TEAM & MANAGER), and beats a plain .col-divider by specificity since it's a
+   more specific th+class selector -- so without this, "GW 1"/"Net Total" sat
+   left-aligned right after the divider line while the centered numbers below them
+   didn't, throwing the two out of alignment. This selector is specific enough to win. */
+.standings-table th.col-divider {
   text-align: center;
 }
 

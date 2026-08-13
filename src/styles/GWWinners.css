@@ -131,6 +131,18 @@
   background: var(--bg-surface-alt);
 }
 
+/* Each row in "All Gameweek Winners" opens that gameweek's full standings -- the
+   pointer cursor plus a slightly stronger hover than the plain hover above is the
+   only affordance needed, matching how Standings' team-name links are styled (an
+   underline felt too heavy across an entire row). */
+.winners-row-link {
+  cursor: pointer;
+}
+
+.winners-row-link:hover {
+  background: var(--accent-soft);
+}
+
 .gw-cell {
   font-weight: 700;
   color: var(--primary);
