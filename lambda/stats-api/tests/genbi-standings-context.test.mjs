@@ -68,10 +68,12 @@ test('[current bug] current_standings reaches the Bedrock context, sorted by poi
     const standings = JSON.parse(contextBlock.match(/<current_standings>(.*?)<\/current_standings>/)[1]);
 
     assert.strictEqual(standings.length, 2);
-    assert.strictEqual(standings[0].manager, 'Da Movement', 'Expected standings sorted by total_points descending');
+    // manager is "real name (nickname)" -- team_name is the real name, manager_name the
+    // FPL squad nickname (see formatManagerDisplay's comment in genbi.mjs).
+    assert.strictEqual(standings[0].manager, 'Da Movement FC (Da Movement)', 'Expected standings sorted by total_points descending');
     assert.strictEqual(standings[0].rank, 1);
     assert.strictEqual(standings[0].total_points, 512);
-    assert.strictEqual(standings[1].manager, 'Suberox');
+    assert.strictEqual(standings[1].manager, 'Suberox FC (Suberox)');
     assert.strictEqual(standings[1].rank, 2);
 
     assert.match(payload.system, /STANDINGS:/, 'Expected an explicit instruction routing standings questions to current_standings');
@@ -102,7 +104,7 @@ test('[current bug] walks back a gameweek if fpl_league_standings has a gap at t
     const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
     const standings = JSON.parse(contextBlock.match(/<current_standings>(.*?)<\/current_standings>/)[1]);
     assert.strictEqual(standings.length, 1);
-    assert.strictEqual(standings[0].manager, 'Suberox');
+    assert.strictEqual(standings[0].manager, 'Suberox FC (Suberox)');
     assert.ok(calls >= 2, 'Expected at least two queries (gw10 gap, then gw9 fallback)');
   } finally {
     dynamoMock.restore();

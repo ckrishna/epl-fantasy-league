@@ -15,6 +15,21 @@ import { recordQueryLog, submitFeedback } from '../utils/genbi-log.mjs';
 import { sendBudgetWarningEmail } from '../utils/notify.mjs';
 import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
+// Manager identity convention across this whole schema (see DATA_MODEL.md's
+// getLeagueManagers() naming-inversion note): `team_name` holds the manager's real
+// name and is populated on EVERY row, historical and live; `manager_name` holds the
+// FPL squad nickname and is only ever populated on live-ingested rows (null on
+// historical imports). Every context array GenBI sent to Claude used to surface
+// `manager_name` alone as a manager's entire identity -- e.g. "Biosfear", "Suberox" --
+// with no real name anywhere, backwards from Standings/Trends, which both lead with
+// the real name and show the nickname secondary ("Yash Thakker (VARsenal)"). This
+// builds that same "real name (nickname)" string everywhere a manager is surfaced to
+// Claude, and falls back to the real name alone when there's no nickname to show.
+function formatManagerDisplay(teamName, managerName) {
+  if (!teamName) return managerName || 'Unknown';
+  return managerName ? `${teamName} (${managerName})` : teamName;
+}
+
 /**
  * Fetches all teams for the current season to map IDs to actual names.
  * This prevents the AI from guessing team names based on its memory.
@@ -158,6 +173,12 @@ async function getOurLeaguePicks(gw) {
 // Scoped to a single gameweek (not the whole season, unlike getManagerSeasonAggregates)
 // since this is only ever used for gameweek-scoped picks data -- cheaper than a
 // season-wide scan for what's normally an ~11-row lookup.
+//
+// Keyed off team_name presence, not manager_name -- team_name is the real name field
+// populated on every row (see formatManagerDisplay's comment); manager_name is only
+// the nickname, present on live rows and null on historical imports. Gating on
+// manager_name alone (the old behavior) meant no historical gameweek could ever
+// resolve a name here at all.
 async function getManagerNamesForGW(gw, season) {
   try {
     const result = await dynamodb.send(new ScanCommand({
@@ -167,7 +188,9 @@ async function getManagerNamesForGW(gw, season) {
     }));
     const nameByEntryId = new Map();
     for (const row of result.Items || []) {
-      if (row.entry_id != null && row.manager_name) nameByEntryId.set(row.entry_id, row.manager_name);
+      if (row.entry_id != null && row.team_name) {
+        nameByEntryId.set(row.entry_id, formatManagerDisplay(row.team_name, row.manager_name));
+      }
     }
     return nameByEntryId;
   } catch (err) {
@@ -207,11 +230,17 @@ async function getManagerSeasonAggregates(season) {
     const gwRows = gwResult.Items || [];
     const pickRows = picksResult.Items || [];
 
+    // Keyed by team_name (the real-name field, populated on every row -- see
+    // formatManagerDisplay's comment), NOT manager_name. Keying by manager_name (the
+    // old behavior) meant this whole aggregate silently dropped every manager from any
+    // historical season entirely, since manager_name is null on every historical row --
+    // `if (!name) continue` skipped them before a Map entry ever got created.
     const managers = new Map();
-    function getManager(name) {
-      if (!managers.has(name)) {
-        managers.set(name, {
-          manager: name,
+    function getManager(teamName) {
+      if (!managers.has(teamName)) {
+        managers.set(teamName, {
+          team_name: teamName,
+          manager_name: null,
           gameweeks_played: 0,
           highest_gw_score: -Infinity,
           lowest_gw_score: Infinity,
@@ -224,17 +253,18 @@ async function getManagerSeasonAggregates(season) {
           captain_points_season: 0
         });
       }
-      return managers.get(name);
+      return managers.get(teamName);
     }
 
     const nameByEntryId = new Map();
 
     for (const row of gwRows) {
-      const name = row.manager_name;
-      if (!name) continue;
-      if (row.entry_id != null) nameByEntryId.set(row.entry_id, name);
+      const teamName = row.team_name;
+      if (!teamName) continue;
+      if (row.entry_id != null) nameByEntryId.set(row.entry_id, teamName);
 
-      const m = getManager(name);
+      const m = getManager(teamName);
+      if (!m.manager_name && row.manager_name) m.manager_name = row.manager_name;
       const ptsThisWeek = Number(row.points_this_week || 0);
       m.gameweeks_played += 1;
       m.highest_gw_score = Math.max(m.highest_gw_score, ptsThisWeek);
@@ -259,9 +289,9 @@ async function getManagerSeasonAggregates(season) {
     }
 
     for (const row of pickRows) {
-      const name = nameByEntryId.get(row.entry_id);
-      if (!name) continue;
-      const m = getManager(name);
+      const teamName = nameByEntryId.get(row.entry_id);
+      if (!teamName) continue;
+      const m = getManager(teamName);
       // `points` on fpl_entry_picks is each PLAYER's raw gameweek score, not multiplied
       // by squad role (see fpl-data-ingester's storePicks comment) -- correct as-is for
       // bench_points_wasted (a benched player's raw score IS what got wasted, since
@@ -274,7 +304,8 @@ async function getManagerSeasonAggregates(season) {
     }
 
     return Array.from(managers.values()).map((m) => ({
-      manager: m.manager,
+      manager: formatManagerDisplay(m.team_name, m.manager_name),
+      team_name: m.team_name,
       gameweeks_played: m.gameweeks_played,
       highest_gw_score: m.gameweeks_played > 0 ? m.highest_gw_score : 0,
       lowest_gw_score: m.gameweeks_played > 0 ? m.lowest_gw_score : 0,
@@ -316,9 +347,14 @@ async function getTopCaptainPicks(season, limit = 10) {
       }))
     ]);
 
+    // Same team_name-gated join as getManagerNamesForGW -- gating on manager_name alone
+    // meant historical captain picks could never resolve a name here (null on every
+    // historical row).
     const nameByEntryId = new Map();
     for (const row of gwResult.Items || []) {
-      if (row.entry_id != null && row.manager_name) nameByEntryId.set(row.entry_id, row.manager_name);
+      if (row.entry_id != null && row.team_name) {
+        nameByEntryId.set(row.entry_id, formatManagerDisplay(row.team_name, row.manager_name));
+      }
     }
 
     const picks = (picksResult.Items || [])
@@ -358,25 +394,30 @@ async function getTopCaptainPicks(season, limit = 10) {
 // just a different reduction over gwWinners. This is what issue #39 flagged as
 // impossible to answer ("who won the most consecutive gameweeks") since only win
 // *counts* existed, never streaks.
+//
+// Keyed by team_name (real name, always present on gw-winners-cache's winner entries --
+// see index.mjs's PutCommand), not manager_name -- this result gets merged into
+// getManagerSeasonAggregates' output by team_name (see handleGenBI below), so the two
+// need the same key.
 function computeWinStreaks(gwWinners) {
   const sorted = [...gwWinners].sort((a, b) => a.gameweek - b.gameweek);
 
-  const managerNames = new Set();
+  const teamNames = new Set();
   sorted.forEach((gwData) => (gwData.winners || []).forEach((w) => {
-    const name = w.manager_name || w.M?.manager_name?.S;
-    if (name) managerNames.add(name);
+    const name = w.team_name || w.M?.team_name?.S;
+    if (name) teamNames.add(name);
   }));
 
   const streaks = new Map();
-  for (const name of managerNames) streaks.set(name, { current: 0, longest: 0 });
+  for (const name of teamNames) streaks.set(name, { current: 0, longest: 0 });
 
   for (const gwData of sorted) {
     const winnerNames = new Set(
       (gwData.winners || [])
-        .map((w) => w.manager_name || w.M?.manager_name?.S)
+        .map((w) => w.team_name || w.M?.team_name?.S)
         .filter(Boolean)
     );
-    for (const name of managerNames) {
+    for (const name of teamNames) {
       const s = streaks.get(name);
       if (winnerNames.has(name)) {
         s.current += 1;
@@ -460,8 +501,7 @@ async function getCurrentStandings(gw, season) {
       .sort((a, b) => (b.total_points || 0) - (a.total_points || 0))
       .map((row, i) => ({
         rank: i + 1,
-        manager: row.manager_name,
-        team_name: row.team_name,
+        manager: formatManagerDisplay(row.team_name, row.manager_name),
         total_points: row.total_points,
         points_this_week: row.points_this_week,
         gameweek: targetGw
@@ -574,12 +614,18 @@ export async function handleGenBI(body, corsHeaders) {
     ]);
 
     // 2. Calculate Total Season Wins
+    // Keyed by the combined "real name (nickname)" display string, built from
+    // gw-winners-cache's team_name (real name, always present) + manager_name
+    // (nickname) -- see formatManagerDisplay's comment. Gating on team_name's presence,
+    // not manager_name's, since manager_name is null on historical rows.
     const totalWinnersSummary = {};
     gwWinners.forEach(gwData => {
       (gwData.winners || []).forEach(winner => {
+        const teamName = winner.team_name || winner.M?.team_name?.S;
         const managerName = winner.manager_name || winner.M?.manager_name?.S;
-        if (managerName) {
-          totalWinnersSummary[managerName] = (totalWinnersSummary[managerName] || 0) + 1;
+        if (teamName) {
+          const key = formatManagerDisplay(teamName, managerName);
+          totalWinnersSummary[key] = (totalWinnersSummary[key] || 0) + 1;
         }
       });
     });
@@ -588,12 +634,14 @@ export async function handleGenBI(body, corsHeaders) {
     const recentFormSummary = {};
     const sortedGWs = [...gwWinners].sort((a, b) => b.gameweek - a.gameweek);
     const last5Weeks = sortedGWs.slice(0, 5);
-    
+
     last5Weeks.forEach(gwData => {
       (gwData.winners || []).forEach(winner => {
+        const teamName = winner.team_name || winner.M?.team_name?.S;
         const managerName = winner.manager_name || winner.M?.manager_name?.S;
-        if (managerName) {
-          recentFormSummary[managerName] = (recentFormSummary[managerName] || 0) + 1;
+        if (teamName) {
+          const key = formatManagerDisplay(teamName, managerName);
+          recentFormSummary[key] = (recentFormSummary[key] || 0) + 1;
         }
       });
     });
@@ -601,11 +649,19 @@ export async function handleGenBI(body, corsHeaders) {
     // 3b. Merge win streaks (derived from gwWinners, no extra fetch) into the season
     // aggregates fetched above -- only when managerStats was actually requested, since
     // computeWinStreaks is wasted work otherwise and gwWinners may be empty.
+    // Merged by team_name (the raw real-name key both computeWinStreaks and
+    // getManagerSeasonAggregates now key by), NOT by m.manager (the already-formatted
+    // "real name (nickname)" display string) -- those two strings only matched by
+    // coincidence back when both sides used manager_name as the key.
     const winStreaks = fields.managerStats ? computeWinStreaks(gwWinners) : {};
-    const managerSeasonStats = managerSeasonAggregates.map((m) => ({
+    // Drops the raw team_name/manager_name fields once the streak merge is done --
+    // they were only needed internally as the join key; Claude should only ever see the
+    // single already-formatted `manager` display string, not two overlapping name
+    // fields that invite it to pick the wrong one.
+    const managerSeasonStats = managerSeasonAggregates.map(({ team_name, manager_name, ...m }) => ({
       ...m,
-      current_win_streak: winStreaks[m.manager]?.current_win_streak ?? 0,
-      longest_win_streak: winStreaks[m.manager]?.longest_win_streak ?? 0
+      current_win_streak: winStreaks[team_name]?.current_win_streak ?? 0,
+      longest_win_streak: winStreaks[team_name]?.longest_win_streak ?? 0
     }));
 
     // 4. Enrich Context with joined data and fixed types

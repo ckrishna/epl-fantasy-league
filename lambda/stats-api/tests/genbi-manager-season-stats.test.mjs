@@ -20,11 +20,18 @@ import { installDynamoMock } from './helpers/mock-dynamo.mjs';
 import { installBedrockMock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
-function entryGwRow({ entryId, name, gw, ptsThisWeek, ptsTotal, transfersMade, transferHit, chip, chipTotalsManual }) {
+// `name` becomes team_name -- the real-name field genbi.mjs now keys manager identity
+// off of (populated on every row, historical and live; see formatManagerDisplay's
+// comment in genbi.mjs). `nickname` is optional and becomes manager_name (the FPL
+// squad nickname, only ever present on live rows) -- most fixtures below omit it, so
+// `m.manager` resolves to exactly `name` with no parenthetical, keeping existing
+// assertions unchanged; the nickname-specific test further down sets it explicitly.
+function entryGwRow({ entryId, name, nickname, gw, ptsThisWeek, ptsTotal, transfersMade, transferHit, chip, chipTotalsManual }) {
   const row = {
     entry_id: entryId,
     season: '2025/26',
-    manager_name: name,
+    team_name: name,
+    manager_name: nickname || null,
     gameweek: gw,
     points_this_week: ptsThisWeek,
     points_total: ptsTotal,
@@ -258,9 +265,9 @@ test('[current bug] win streaks reset when a manager stops winning, not just acc
     // Movement's streak should reset to 1 at GW3, not read as a 2-week streak.
     gwWinners: () => ({
       Items: [
-        { season: '2025/26', gameweek: 1, winners: [{ manager_name: 'Da Movement' }] },
-        { season: '2025/26', gameweek: 2, winners: [{ manager_name: 'Suberox' }] },
-        { season: '2025/26', gameweek: 3, winners: [{ manager_name: 'Da Movement' }] }
+        { season: '2025/26', gameweek: 1, winners: [{ team_name: 'Da Movement' }] },
+        { season: '2025/26', gameweek: 2, winners: [{ team_name: 'Suberox' }] },
+        { season: '2025/26', gameweek: 3, winners: [{ team_name: 'Da Movement' }] }
       ]
     })
   }));
@@ -279,6 +286,40 @@ test('[current bug] win streaks reset when a manager stops winning, not just acc
     assert.strictEqual(daMovement.longest_win_streak, 1);
     assert.strictEqual(suberox.current_win_streak, 0, 'Suberox lost the most recent gameweek (GW3)');
     assert.strictEqual(suberox.longest_win_streak, 1);
+  } finally {
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
+test('[current bug] manager_season_stats leads with the real name, nickname secondary in parentheses', async () => {
+  // Live bug (2026-08-12): GenBI answers referred to managers only by their FPL squad
+  // nickname (e.g. "Biosfear", "Suberox") with no real name anywhere -- backwards from
+  // Standings/Trends, which both lead with the real name and show the nickname
+  // secondary ("Yash Thakker (VARsenal)"). manager_name is the nickname field, populated
+  // only on live rows; team_name is the real name, populated on every row.
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    entryGw: () => ({
+      Items: [
+        entryGwRow({ entryId: 101, name: 'aditya shringarpure', nickname: 'Biosfear', gw: 1, ptsThisWeek: 60, ptsTotal: 60, transfersMade: 0, transferHit: 0 })
+      ]
+    })
+  }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'How many transfers has each manager made?', season: '2025/26' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
+
+    assert.strictEqual(stats.length, 1);
+    assert.strictEqual(stats[0].manager, 'aditya shringarpure (Biosfear)', 'Expected real name first, nickname secondary in parentheses');
+    // The raw join fields (team_name/manager_name) were only needed internally to
+    // build the combined string -- Claude should see one unambiguous "manager" field,
+    // not two overlapping name fields inviting it to pick the wrong one.
+    assert.strictEqual(stats[0].team_name, undefined);
+    assert.strictEqual(stats[0].manager_name, undefined);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

@@ -25,11 +25,14 @@ import { installDynamoMock } from './helpers/mock-dynamo.mjs';
 import { installBedrockMock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
+// `name` becomes team_name -- see the identical comment in
+// genbi-manager-season-stats.test.mjs for why (real-name field, always present;
+// manager_name is the nickname, only ever present on live rows).
 function entryGwRow({ entryId, name, gw }) {
   return {
     entry_id: entryId,
     season: '2025/26',
-    manager_name: name,
+    team_name: name,
     gameweek: gw,
     points_this_week: 0,
     points_total: 0,
