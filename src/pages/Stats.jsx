@@ -21,6 +21,17 @@ const SUGGESTED_QUERIES = [
   "Best captain picks this season?"
 ];
 
+// Only auto-focus the question input on desktop. On mobile, autofocusing pops the
+// virtual keyboard the instant this page loads, and that keyboard-open/viewport-resize
+// dance is what was causing the whole page to appear shifted right (reported live on
+// GenBI specifically). 640px matches this page's own mobile breakpoint (see Stats.css).
+// Read once at mount, not tracked live -- a page reflowing mid-session because the
+// user rotated their phone isn't worth chasing here, this only needs to be right at
+// the moment the page first renders.
+function shouldAutoFocus() {
+  return typeof window !== 'undefined' && window.matchMedia('(min-width: 641px)').matches;
+}
+
 export default function Stats({ season = null, seasonLabel = null }) {
   const [selectedQuery, setSelectedQuery] = useState(null);
   const [customQuestion, setCustomQuestion] = useState('');
@@ -120,7 +131,7 @@ export default function Stats({ season = null, seasonLabel = null }) {
               onChange={(e) => setCustomQuestion(e.target.value)}
               disabled={loading}
               className="question-input"
-              autoFocus
+              autoFocus={shouldAutoFocus()}
             />
             <button type="submit" disabled={loading || !customQuestion.trim()} className="submit-btn">
               →
