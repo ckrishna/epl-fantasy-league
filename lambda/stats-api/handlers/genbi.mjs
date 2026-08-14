@@ -6,7 +6,9 @@ import {
   getAllSeasons,
   getLatestStoredGameweek,
   queryLeagueStandings,
-  dynamodb
+  dynamodb,
+  FPL_API,
+  FPL_FETCH_HEADERS
 } from '../utils/dynamodb.mjs';
 import { askClaude } from '../utils/bedrock.mjs';
 import { selectRelevantFields } from '../utils/router.mjs';
@@ -435,6 +437,104 @@ function computeWinStreaks(gwWinners) {
   return result;
 }
 
+// fpl_fixture_data's partition key embeds the fixture id itself, so there's no direct
+// "give me exactly gameweek N" query -- same scan-and-filter shape manager-squad.mjs's
+// getUpcomingFixtures already uses. Scoped to a single gameweek here (not "from N
+// onward" like that one), since this only ever needs the immediate next fixture per
+// team, not a forward-looking list.
+async function getFixturesForGW(seasonId, gw) {
+  try {
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'fpl_fixture_data',
+      FilterExpression: 'season_id = :sid AND #ev = :gw',
+      ExpressionAttributeNames: { '#ev': 'event' },
+      ExpressionAttributeValues: { ':sid': seasonId, ':gw': gw }
+    }));
+    return result.Items || [];
+  } catch (err) {
+    console.error('Error fetching fixtures for gameweek:', err);
+    return [];
+  }
+}
+
+// Forward-looking captain/strategy signal for the NEXT gameweek -- the one thing every
+// other context field in this file cannot provide, since they're all built from points
+// already scored (meaningless before a gameweek has been played, and entirely empty
+// pre-season). Live-fetches bootstrap-static for `ep_next` (FPL's own "expected points
+// next gameweek" projection per player) and `now_cost` (price) -- neither is ingested
+// anywhere in our own tables (confirmed against DATA_MODEL.md's `players` table
+// schema, which stores now_cost but not ep_next), so this can't be answered from
+// DynamoDB alone the way every other aggregate in this file is. Fixture difficulty,
+// by contrast, DOES already exist in our own `fpl_fixture_data` table (same data
+// manager-squad.mjs's getUpcomingFixtures reads), so that half is a cheap Scan, not a
+// second live call.
+//
+// Uses bootstrap-static's own `is_next` flag to find the target gameweek rather than
+// gw+1 arithmetic on whatever getActiveGameweek() resolved -- verified live that FPL
+// marks exactly one event `is_next: true` at any given time, including pre-season
+// (when there's no is_current/finished event at all for gw+1 math to even work from).
+// Returns null if no next gameweek exists (e.g. the season has fully concluded).
+//
+// Filtered to status 'a' (available) only -- no point surfacing an injured/suspended
+// player as a "good pick", and the model has no other signal to weigh that against.
+// Sliced to the top 30 by projected points after filtering, same bounding-for-token-cost
+// pattern as players_gw_data/season_totals elsewhere in this file.
+async function getNextGwProjections(seasonId) {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
+    if (!response.ok) return null;
+    const data = await response.json();
+
+    const nextEvent = (data.events || []).find((e) => e.is_next);
+    if (!nextEvent) return null;
+    const nextGw = nextEvent.id;
+
+    const teamNameById = new Map((data.teams || []).map((t) => [t.id, t.name]));
+
+    const fixtures = await getFixturesForGW(seasonId, nextGw);
+    // team_h/team_a here are bootstrap-static's own numeric team ids (same id space as
+    // `elements[].team`), not this app's `teams` DynamoDB table's own season-scoped
+    // team_id -- fpl_fixture_data stores whichever FPL sent, which is bootstrap-static's,
+    // so both sides of this join line up without translation.
+    const nextFixtureByTeamId = new Map();
+    for (const f of fixtures) {
+      if (f.team_h != null) {
+        nextFixtureByTeamId.set(f.team_h, {
+          opponent: teamNameById.get(f.team_a) || 'Unknown',
+          is_home: true,
+          difficulty: f.team_h_difficulty
+        });
+      }
+      if (f.team_a != null) {
+        nextFixtureByTeamId.set(f.team_a, {
+          opponent: teamNameById.get(f.team_h) || 'Unknown',
+          is_home: false,
+          difficulty: f.team_a_difficulty
+        });
+      }
+    }
+
+    const players = (data.elements || [])
+      .filter((el) => el.status === 'a')
+      .map((el) => ({
+        name: el.web_name,
+        team_name: teamNameById.get(el.team) || 'Unknown',
+        // now_cost is FPL's price in tenths (e.g. 125 = £12.5m) -- same unit convention
+        // as the `players` table's own now_cost field (see DATA_MODEL.md).
+        price: Math.round(el.now_cost) / 10,
+        projected_points: parseFloat(el.ep_next) || 0,
+        next_fixture: nextFixtureByTeamId.get(el.team) || null
+      }))
+      .sort((a, b) => b.projected_points - a.projected_points)
+      .slice(0, 30);
+
+    return { next_gameweek: nextGw, players };
+  } catch (err) {
+    console.error('Error fetching next-gameweek projections:', err);
+    return null;
+  }
+}
+
 // #39 Phase 2: ownership aggregates -- most-owned player and differentials (owned by
 // exactly one manager), for the resolved gameweek. Pure function over already-fetched
 // picks + the entry_id -> manager_name map (same data getOurLeaguePicks/
@@ -538,7 +638,7 @@ async function resolveSeasonContext(requestedSeason) {
     ? await getLatestStoredGameweek(targetSeason)
     : await getActiveGameweek();
 
-  return { season: targetSeason, seasonId, gw };
+  return { season: targetSeason, seasonId, gw, isHistorical };
 }
 
 /**
@@ -576,7 +676,7 @@ export async function handleGenBI(body, corsHeaders) {
       };
     }
 
-    const { season, seasonId, gw } = await resolveSeasonContext(requestedSeason);
+    const { season, seasonId, gw, isHistorical } = await resolveSeasonContext(requestedSeason);
 
     // Deterministic (non-model) router: decides which of the 6 context fields this
     // question actually needs, so we don't fetch/send all of them on every question
@@ -591,6 +691,11 @@ export async function handleGenBI(body, corsHeaders) {
     // entry_id -> manager_name join, since fpl_entry_picks rows never carry a name of
     // their own -- see getManagerNamesForGW's comment for how this was discovered.
     const needsManagerNames = fields.managerPicks || fields.ownership;
+    // Next-gameweek projections only mean anything for the CURRENT season -- someone
+    // browsing a past season via the dropdown is looking at a season that's already
+    // over, where "next gameweek" has no meaning (mirrors manager-squad.mjs's identical
+    // current-season-only restriction on its own fixtures/form view).
+    const needsNextGwProjections = fields.nextGwStrategy && !isHistorical;
 
     // Check for authoritative (FPL-sourced) season totals first -- cheap lookup. Only
     // fall back to the expensive full-season player_event_stats scan (below) if nothing
@@ -599,7 +704,7 @@ export async function handleGenBI(body, corsHeaders) {
     const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
     // 1. Fetch only what the router decided is relevant, in parallel
-    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks, nextGwProjections] = await Promise.all([
       needsGwWinners ? getGWWinners(season) : Promise.resolve([]),
       fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
       (fields.managerPicks || fields.ownership) ? getOurLeaguePicks(gw) : Promise.resolve([]),
@@ -610,7 +715,8 @@ export async function handleGenBI(body, corsHeaders) {
       fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([]),
       fields.managerStats ? getManagerSeasonAggregates(season) : Promise.resolve([]),
       needsManagerNames ? getManagerNamesForGW(gw, season) : Promise.resolve(new Map()),
-      fields.topCaptainPicks ? getTopCaptainPicks(season) : Promise.resolve({ best: [], worst: [] })
+      fields.topCaptainPicks ? getTopCaptainPicks(season) : Promise.resolve({ best: [], worst: [] }),
+      needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null)
     ]);
 
     // 2. Calculate Total Season Wins
@@ -752,7 +858,16 @@ export async function handleGenBI(body, corsHeaders) {
       // from manager_season_stats.captain_points_season's per-manager cumulative
       // total. See getTopCaptainPicks and instruction 2 in bedrock.mjs for when to
       // use which.
-      top_captain_picks: topCaptainPicks
+      top_captain_picks: topCaptainPicks,
+      // Forward-looking projection for the NEXT (not-yet-played) gameweek -- price and
+      // FPL's own ep_next per player, plus that team's next fixture difficulty from our
+      // own fpl_fixture_data. The only context field in this whole object built from
+      // something OTHER than points already scored -- see getNextGwProjections and
+      // instruction 10 in bedrock.mjs for why answers built from this must be framed as
+      // a projection, not a fact. null whenever not fetched (question didn't ask, or a
+      // historical season is being browsed) -- the prompt handles that explicitly rather
+      // than the model guessing why it's empty.
+      next_gw_projections: nextGwProjections
     };
 
     // 5. Invoke Claude with refined context

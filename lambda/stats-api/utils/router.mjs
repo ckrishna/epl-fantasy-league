@@ -52,6 +52,17 @@ const KEYWORD_GROUPS = {
   ownership: [
     'differential', 'differentials', 'owns', 'owned', 'ownership', 'unique',
     'exclusively', 'most owned', 'nobody else has', 'no one else has'
+  ],
+  // Forward-looking strategy questions -- "who's a good captain pick" for a gameweek
+  // that HASN'T been played yet, as opposed to managerPicks/playerGwData above (which
+  // are about a gameweek that already happened or is in progress). Deliberately keyed
+  // on "next"/"upcoming" phrasing rather than bare "captain" -- that word alone already
+  // routes to managerPicks/playerGwData, which pull already-scored data that's useless
+  // (or, pre-season, entirely empty) for this kind of question.
+  nextGwStrategy: [
+    'next gameweek', 'next gw', 'next week', 'upcoming gameweek', 'upcoming gw',
+    'who should i captain', 'good captain pick', 'best captain for', 'who to captain',
+    'who to pick', 'good pick for'
   ]
 };
 
@@ -79,7 +90,8 @@ const ALL_TRUE = {
   managerPicks: true,
   managerStats: true,
   ownership: true,
-  topCaptainPicks: true
+  topCaptainPicks: true,
+  nextGwStrategy: true
 };
 
 // Returns which context fields a question needs. Every key is always present

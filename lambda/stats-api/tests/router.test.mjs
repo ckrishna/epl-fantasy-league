@@ -105,9 +105,29 @@ test('[current bug] "own"/"shown"/"known" false positives are avoided -- only sp
 
 test('[regression] every field key is always present, never undefined', () => {
   const fields = selectRelevantFields('anything at all');
-  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership', 'topCaptainPicks']) {
+  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership', 'topCaptainPicks', 'nextGwStrategy']) {
     assert.strictEqual(typeof fields[key], 'boolean', `Expected ${key} to always be a boolean`);
   }
+});
+
+test('a "next gameweek" captain question selects nextGwStrategy', () => {
+  const fields = selectRelevantFields("Who's a good captain pick for next gameweek?");
+  assert.strictEqual(fields.nextGwStrategy, true);
+});
+
+test('a "next gw" question (short form) selects nextGwStrategy', () => {
+  const fields = selectRelevantFields('Best captain for next gw?');
+  assert.strictEqual(fields.nextGwStrategy, true);
+});
+
+test('a retrospective captain question does NOT select nextGwStrategy', () => {
+  const fields = selectRelevantFields('Who captained Haaland this week?');
+  assert.strictEqual(fields.nextGwStrategy, false);
+});
+
+test('a season-scoped captain question does NOT select nextGwStrategy', () => {
+  const fields = selectRelevantFields('Best captain picks this season?');
+  assert.strictEqual(fields.nextGwStrategy, false);
 });
 
 test('[regression] empty question string does not throw, falls back to everything', () => {
