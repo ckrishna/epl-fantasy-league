@@ -42,24 +42,37 @@ export async function getCurrentSeasonInfo() {
   throw new Error('No current season found in seasons table');
 }
 
-export async function queryLeagueStandings(gw, season) {
+// Shared "which league" filter for the two tables the ingester now stamps league_id
+// onto (fpl_league_standings, gw-winners-cache -- added 2026-08-14, see DATA_MODEL.md's
+// multi-league notes). Every row written before that has no league_id attribute at
+// all, and is kept unconditionally rather than excluded -- there is no ambiguity to
+// resolve for a row written back when this app had only ever tracked one league.
+// leagueId itself is optional throughout this file's exports specifically so every
+// EXISTING caller that hasn't been updated to pass one keeps working unfiltered,
+// exactly as before this was added.
+function filterByLeagueId(items, leagueId) {
+  if (leagueId == null) return items;
+  return items.filter((item) => item.league_id == null || String(item.league_id) === String(leagueId));
+}
+
+export async function queryLeagueStandings(gw, season, leagueId = null) {
   const currentSeason = season || await getCurrentSeason();
   const result = await dynamodb.send(new QueryCommand({
     TableName: 'fpl_league_standings',
     KeyConditionExpression: 'season_event = :se',
     ExpressionAttributeValues: { ':se': `${currentSeason}#${gw}` }
   }));
-  return result.Items || [];
+  return filterByLeagueId(result.Items || [], leagueId);
 }
 
-export async function getGWWinners(season) {
+export async function getGWWinners(season, leagueId = null) {
   const currentSeason = season || await getCurrentSeason();
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'gw-winners-cache',
     FilterExpression: 'season = :s',
     ExpressionAttributeValues: { ':s': currentSeason }
   }));
-  return result.Items || [];
+  return filterByLeagueId(result.Items || [], leagueId);
 }
 
 // Returns every row in the `seasons` table (not just the current one), newest first.

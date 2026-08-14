@@ -1,5 +1,6 @@
 import { getAllGwRows, normName } from '../utils/trends-data.mjs';
 import { getCurrentSeason, getActiveGameweek, queryLeagueStandings } from '../utils/dynamodb.mjs';
+import { getAllowedSeasonsForLeague } from '../utils/league-groups.mjs';
 
 // Reference gameweek for the "hot start vs strong finish" comparison -- arbitrary but
 // consistent, chosen because GW10 is far enough in that early-season noise has settled
@@ -23,14 +24,15 @@ const MID_SEASON_GAMEWEEK = 10;
 // but never made it into the output at all, since nothing ever created a Map entry for
 // them. fpl_league_standings already carries both team_name and manager_name directly
 // (the ingester writes both), so it's a sufficient source on its own -- no join needed.
-export async function handleTrendsManagers(corsHeaders) {
+export async function handleTrendsManagers(queryParams, corsHeaders) {
   const currentSeason = await getCurrentSeason();
+  const leagueId = queryParams?.league_id || null;
 
   let gw = await getActiveGameweek();
-  let standings = await queryLeagueStandings(gw, currentSeason);
+  let standings = await queryLeagueStandings(gw, currentSeason, leagueId);
   while ((!standings || standings.length === 0) && gw > 1) {
     gw -= 1;
-    standings = await queryLeagueStandings(gw, currentSeason);
+    standings = await queryLeagueStandings(gw, currentSeason, leagueId);
   }
 
   const managers = (standings || [])
@@ -76,7 +78,15 @@ export async function handleTrends(queryParams, corsHeaders) {
     };
   }
 
-  const [allRows, currentSeason] = await Promise.all([getAllGwRows(), getCurrentSeason()]);
+  const [allRowsRaw, currentSeason] = await Promise.all([getAllGwRows(), getCurrentSeason()]);
+
+  // Scope the cross-season walk to the current league's own group before anything else
+  // reads allRows -- see league-groups.mjs for the full reasoning. allowedSeasons is
+  // null (no filtering, today's behavior) unless the caller passed a league_id AND
+  // that league is registered with a league_group_id.
+  const leagueId = queryParams.league_id || null;
+  const allowedSeasons = await getAllowedSeasonsForLeague(leagueId);
+  const allRows = allowedSeasons ? allRowsRaw.filter((r) => allowedSeasons.has(r.season)) : allRowsRaw;
 
   const managerRows = allRows.filter((r) => normName(r.team_name) === requestedName);
   if (managerRows.length === 0) {

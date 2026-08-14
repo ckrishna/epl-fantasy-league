@@ -71,7 +71,13 @@ function buildFixtureRows() {
 // `standingsAtGw` is a Map of gameweek -> array of standings rows, used only by
 // queryLeagueStandings() (i.e. only exercised by handleTrendsManagers). Tests that
 // don't touch the manager picker can omit it entirely.
-function mockScan(rows, standingsAtGw = new Map()) {
+//
+// `leagueRows` backs the `leagues` registry table (utils/league-groups.mjs) -- only
+// consulted at all when a test passes a `league_id` query param through handleTrends;
+// every pre-existing test omits it entirely, and getAllowedSeasonsForLeague() returns
+// null (no scoping) without ever touching DynamoDB when leagueId is null, so this is a
+// pure addition that changes nothing for tests that don't opt in.
+function mockScan(rows, standingsAtGw = new Map(), leagueRows = []) {
   return installDynamoMock((command) => {
     if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'fpl_entry_gameweek') {
       return { Items: rows };
@@ -86,6 +92,14 @@ function mockScan(rows, standingsAtGw = new Map()) {
       }
       return { Items: [] };
     }
+    if (command.constructor.name === 'QueryCommand' && command.input.TableName === 'leagues') {
+      const lid = command.input.ExpressionAttributeValues[':lid'];
+      return { Items: leagueRows.filter((r) => r.league_id === lid) };
+    }
+    if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'leagues') {
+      const groupId = command.input.ExpressionAttributeValues[':g'];
+      return { Items: leagueRows.filter((r) => r.league_group_id === groupId) };
+    }
     return undefined;
   });
 }
@@ -97,7 +111,7 @@ test('handleTrendsManagers dedupes by real name and fills in a nickname when one
   ]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
-    const result = await handleTrendsManagers({});
+    const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
     assert.strictEqual(result.statusCode, 200);
     // Alice and Carol are both in fpl_league_standings at the current gameweek; Bob
@@ -121,7 +135,7 @@ test('handleTrendsManagers excludes a manager not in the current fpl_league_stan
   const dynamoMock = mockScan(buildFixtureRows(), new Map([[6, [standingsRow('Alice Smith'), standingsRow('Carol White')]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
-    const result = await handleTrendsManagers({});
+    const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
     const bob = body.managers.find((m) => m.team_name === 'Bob Jones');
     assert.strictEqual(bob, undefined);
@@ -146,7 +160,7 @@ test('handleTrendsManagers includes a manager who is on the roster but has zero 
   ]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
-    const result = await handleTrendsManagers({});
+    const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
     assert.strictEqual(body.managers.length, 3);
     const dana = body.managers.find((m) => m.team_name === 'Dana Newcomer');
@@ -168,7 +182,7 @@ test('handleTrendsManagers walks back a gameweek if fpl_league_standings has a g
   ]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
-    const result = await handleTrendsManagers({});
+    const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
     assert.strictEqual(result.statusCode, 200);
     assert.strictEqual(body.managers.length, 2);
@@ -189,7 +203,7 @@ test('handleTrendsManagers collapses whitespace variants of the same name', asyn
   const dynamoMock = mockScan(rows, new Map([[6, [standingsRow('Chetan Bk')]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
-    const result = await handleTrendsManagers({});
+    const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
     assert.strictEqual(body.managers.length, 1);
   } finally {
@@ -213,6 +227,49 @@ test('handleTrends returns 404 for a manager with no rows', async () => {
   try {
     const result = await handleTrends({ manager: 'Nobody Here' }, {});
     assert.strictEqual(result.statusCode, 404);
+  } finally {
+    mock.restore();
+  }
+});
+
+// Multi-league foundation (2026-08-14): league_group_id scoping.
+test('a league_id with no leagues-table registration behaves exactly like today (no scoping)', async () => {
+  // No leagueRows given -- the leagues table has nothing for id 438107, matching the
+  // real state for most of this app's life so far (registration is a separate, manual,
+  // opt-in step).
+  const mock = mockScan(buildFixtureRows());
+  try {
+    const result = await handleTrends({ manager: 'Alice Smith', league_id: '438107' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(result.statusCode, 200);
+    // Both the historical (2024/25) and current (2025/26) seasons are still present --
+    // unregistered means unscoped, same as passing no league_id at all.
+    assert.deepStrictEqual(body.seasons.map((s) => s.season), [SEASON_PAST, SEASON_CURRENT]);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('a registered league_id with a league_group_id excludes seasons outside that group', async () => {
+  // Alice's league_group_id only covers the CURRENT season -- the historical season
+  // (2024/25) belongs to a different, unrelated group in this scenario (e.g. it could
+  // be a totally different friend group's data that happens to share this shared
+  // fpl_entry_gameweek table once a second league's backfill exists -- see
+  // league-groups.mjs's header comment for why that's the actual risk this protects
+  // against). Once scoped, only the current season should survive the walk.
+  const leagueRows = [
+    { league_id: 438107, season_string: SEASON_CURRENT, league_group_id: 'carpe-diem' }
+    // Deliberately no row for SEASON_PAST under 'carpe-diem' -- it's outside the group.
+  ];
+  const mock = mockScan(buildFixtureRows(), new Map(), leagueRows);
+  try {
+    const result = await handleTrends({ manager: 'Alice Smith', league_id: '438107' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(result.statusCode, 200);
+    assert.deepStrictEqual(body.seasons.map((s) => s.season), [SEASON_CURRENT]);
+    // The historical envelope (built from OTHER seasons besides current) should be
+    // empty too, since its one source (2024/25) was scoped out.
+    assert.deepStrictEqual(body.pace.history_envelope, []);
   } finally {
     mock.restore();
   }

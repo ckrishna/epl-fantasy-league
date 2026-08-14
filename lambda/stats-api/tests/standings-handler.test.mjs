@@ -121,3 +121,47 @@ test('[regression] explicit ?gw= param is still honored as-is', async () => {
     dynamoMock.restore();
   }
 });
+
+// Multi-league foundation (2026-08-14): a league_id query param scopes results, but
+// only excludes rows that explicitly belong to a DIFFERENT league_id -- a row with no
+// league_id at all (every row written before this existed) is always kept, since
+// there's no ambiguity to resolve for it.
+test('league_id param keeps legacy rows (no league_id) and rows matching it, excludes other leagues', async () => {
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      return jsonResponse(buildBootstrapStatic({ events: buildPostSeasonEvents(38) }));
+    }
+    return null;
+  });
+
+  const dynamoMock = installDynamoMock((command) => {
+    const table = command.input.TableName;
+    if (table === 'seasons' && command.constructor.name === 'ScanCommand') {
+      return { Items: [{ season_id: 1, season_string: '2025/26', current: true }] };
+    }
+    if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
+      const key = command.input.ExpressionAttributeValues[':se'];
+      if (key === '2025/26#38') {
+        return {
+          Items: [
+            { season_event: '2025/26#38', manager_name: 'Legacy Manager', total_points: 100 }, // no league_id at all
+            { season_event: '2025/26#38', manager_name: 'Our Manager', total_points: 200, league_id: 438107 },
+            { season_event: '2025/26#38', manager_name: 'Other League Manager', total_points: 300, league_id: 999999 }
+          ]
+        };
+      }
+      return { Items: [] };
+    }
+    return undefined;
+  });
+
+  try {
+    const response = await handleStandings({ league_id: '438107' }, CORS);
+    const body = JSON.parse(response.body);
+    const names = body.standings.map((s) => s.manager_name).sort();
+    assert.deepStrictEqual(names, ['Legacy Manager', 'Our Manager']);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});

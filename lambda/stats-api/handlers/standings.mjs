@@ -4,6 +4,10 @@ export async function handleStandings(queryParams, corsHeaders) {
   const currentSeason = await getCurrentSeason();
   const requestedSeason = queryParams.season || currentSeason;
   const isHistorical = requestedSeason !== currentSeason;
+  // Optional -- see queryLeagueStandings for why omitting it is safe (every row today
+  // predates league_id and passes through unfiltered). Lets the frontend disambiguate
+  // once a second league shares a season, without breaking any caller that doesn't pass it.
+  const leagueId = queryParams.league_id || null;
 
   // Browsing a past season must never consult live FPL data -- that reflects whatever
   // is happening in the real, currently-active season, which has nothing to do with
@@ -15,11 +19,11 @@ export async function handleStandings(queryParams, corsHeaders) {
   let gw = queryParams.gw ? parseInt(queryParams.gw) : activeGW;
 
   // If no data for this GW, try previous GWs
-  let standings = await queryLeagueStandings(gw, requestedSeason);
+  let standings = await queryLeagueStandings(gw, requestedSeason, leagueId);
 
   while ((!standings || standings.length === 0) && gw > 1) {
     gw = gw - 1;
-    standings = await queryLeagueStandings(gw, requestedSeason);
+    standings = await queryLeagueStandings(gw, requestedSeason, leagueId);
   }
 
   // Map and sort

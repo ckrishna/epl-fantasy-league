@@ -403,6 +403,12 @@ export async function handler(event) {
         Item: {
           season,
           gameweek: parseInt(gw),
+          // Added 2026-08-14 (multi-league foundation): additive only, no key change.
+          // Lets a read scoped to a specific league exclude another league's rows once
+          // more than one exists for the same season -- see queryLeagueStandings/
+          // getGWWinners in stats-api/utils/dynamodb.mjs, which treat a missing
+          // league_id (every row written before this) as "no ambiguity, keep it".
+          league_id: leagueId,
           winners: winners.map(w => ({
             entry_id: w.entry_id,
             manager_name: w.manager_name,
@@ -454,6 +460,9 @@ for (const manager of managers) {
         manager_id: manager.entry_id,
         manager_name: manager.manager_name,
         team_name: manager.team_name,
+        // See the matching comment on gw-winners-cache above -- same additive,
+        // no-key-change addition, same reasoning.
+        league_id: leagueId,
         total_points: totalPoints,
         points_this_week: latestRecord ? parseInt(latestRecord.points_this_week || 0) : 0,  // ← ADD
         transfer_cost: latestRecord ? parseInt(latestRecord.transfer_cost || 0) : 0,       // ← ADD

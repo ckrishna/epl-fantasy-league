@@ -4,8 +4,10 @@ export async function handleWinners(queryParams, corsHeaders) {
   const currentSeason = await getCurrentSeason();
   const requestedSeason = queryParams?.season || currentSeason;
   const isHistorical = requestedSeason !== currentSeason;
+  // See handleStandings for why this is optional and safe to omit.
+  const leagueId = queryParams?.league_id || null;
 
-  const winners = (await getGWWinners(requestedSeason))
+  const winners = (await getGWWinners(requestedSeason, leagueId))
     .sort((a, b) => b.gameweek - a.gameweek)
     .map(w => ({
       gameweek: w.gameweek,

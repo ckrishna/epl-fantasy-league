@@ -49,7 +49,7 @@ export async function handler(event) {
     // contains '/trends' as a substring (same ordering trick as /app-feedback vs
     // /stats/feedback above).
     if (path.includes('/trends/managers')) {
-      return await handleTrendsManagers(corsHeaders);
+      return await handleTrendsManagers(queryParams, corsHeaders);
     }
 
     if (path.includes('/trends')) {
