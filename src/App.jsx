@@ -1,5 +1,6 @@
 // src/App.jsx
 import { useEffect, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import './styles/App.css';
 import Standings from './pages/Standings';
 import GWWinners from './pages/GWWinners';
@@ -40,10 +41,17 @@ function getInitialTheme() {
 }
 
 export default function App() {
+  const { leagueId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('standings');
   const [seasons, setSeasons] = useState([]);
-  // null = "current season" (server picks it); only set to a specific string when the
-  // user explicitly selects a past season from the dropdown.
+  // null = "current season" (server picks it); only set to a specific string when
+  // viewing a past season. The URL's leagueId is the real source of truth for this once
+  // seasons has loaded (see the effect below) -- this state exists because a handful of
+  // historical seasons (2019/20-2024/25, bulk CSV-imported) have no league_id on record
+  // and so have no URL of their own; picking one of those from the dropdown can only set
+  // this directly, the same way the dropdown worked before routing existed.
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [theme, setTheme] = useState(getInitialTheme);
   // Bumped on every click of the Standings nav tab (even when it's already the active
@@ -56,6 +64,47 @@ export default function App() {
   useEffect(() => {
     getSeasons().then(setSeasons);
   }, []);
+
+  const currentSeasonRow = seasons.find((s) => s.current) || null;
+
+  // Single source of truth for "which season is showing" is the URL's leagueId, resolved
+  // against the seasons list once it's loaded (each season row already carries its own
+  // league_id -- see handlers/seasons.mjs). Three cases:
+  //  - no leagueId at all ("/", or any path that didn't match a real one) -> redirect to
+  //    the current season's own league URL, so every visit lands on a stable, bookmarkable
+  //    link instead of a bare "/".
+  //  - leagueId matches a season we know about -> show that season (current or past).
+  //  - leagueId matches nothing -> either a typo, or (confirmed live 2026-08-14, see
+  //    DATA_MODEL.md) an id FPL has since recycled to a completely unrelated league.
+  //    Falls back to current rather than show a broken page -- and unlike the "/" case
+  //    above, this one carries a `notFoundLeagueId` flag on the redirect's location
+  //    state, purely so the banner below has something to render. Using location state
+  //    (instead of a separate piece of component state) means it clears itself for free
+  //    the moment any other navigation happens -- there's no separate "now hide the
+  //    banner" case to get wrong.
+  useEffect(() => {
+    if (seasons.length === 0) return; // wait for the list before deciding anything
+
+    if (!leagueId) {
+      if (currentSeasonRow?.league_id != null) {
+        navigate(`/${currentSeasonRow.league_id}`, { replace: true });
+      }
+      return;
+    }
+
+    const matched = seasons.find((s) => s.league_id != null && String(s.league_id) === leagueId);
+    if (!matched) {
+      console.warn(`No known season for league id "${leagueId}" -- falling back to current season.`);
+      if (currentSeasonRow?.league_id != null) {
+        navigate(`/${currentSeasonRow.league_id}`, { replace: true, state: { notFoundLeagueId: leagueId } });
+      }
+      return;
+    }
+
+    setSelectedSeason(matched.current ? null : matched.season);
+  }, [leagueId, seasons, currentSeasonRow, navigate]);
+
+  const notFoundLeagueId = location.state?.notFoundLeagueId ?? null;
 
   // The actual re-theming happens via CSS custom properties keyed off this attribute
   // (see App.css's `[data-theme='dark']` block) -- this effect's only job is to keep
@@ -76,7 +125,7 @@ export default function App() {
     });
   }, [theme]);
 
-  const currentSeason = seasons.find((s) => s.current)?.season || null;
+  const currentSeason = currentSeasonRow?.season || null;
   const viewingHistory = selectedSeason !== null && selectedSeason !== currentSeason;
   // Resolved display label for the ScopeNote disclaimer on each page -- selectedSeason
   // is only ever an explicit string (a past season) or null (meaning "current", which
@@ -93,7 +142,17 @@ export default function App() {
               type="button"
               className="app-title-link"
               onClick={() => {
+                // Set state directly rather than relying on navigate() to trigger the
+                // URL-resolution effect -- if the URL is already at the current league
+                // (e.g. the dropdown was just used to view a no-league_id historical
+                // season, which doesn't change the URL -- see its onChange below),
+                // navigate() to that same URL is a no-op and the leagueId param never
+                // actually changes, so that effect would never re-fire. Confirmed live
+                // 2026-08-14: this exact sequence left the title button doing nothing.
                 setSelectedSeason(null);
+                if (currentSeasonRow?.league_id != null) {
+                  navigate(`/${currentSeasonRow.league_id}`);
+                }
                 setActiveTab('standings');
                 setStandingsResetKey((k) => k + 1);
               }}
@@ -120,7 +179,22 @@ export default function App() {
                 value={selectedSeason ?? currentSeason ?? ''}
                 onChange={(e) => {
                   const value = e.target.value;
+                  const chosen = seasons.find((s) => s.season === value);
+                  // Always set state directly -- don't rely solely on navigate()
+                  // triggering the URL-resolution effect. That effect only re-runs when
+                  // the leagueId URL PARAM actually changes value; picking a no-league_id
+                  // historical season never changes the URL at all (nothing to route
+                  // through), so switching FROM one of those BACK to a real-league_id
+                  // season can navigate to a URL that's unchanged from before that
+                  // detour -- a no-op navigate that would otherwise leave selectedSeason
+                  // stuck. Confirmed live 2026-08-14: picking 2022/23 then trying to get
+                  // back to 2026/27 left the dropdown stuck on 2022/23 for exactly this
+                  // reason. Still navigating too (when there's a real league_id) so the
+                  // URL stays a shareable/bookmarkable reflection of what's on screen.
                   setSelectedSeason(value === currentSeason ? null : value);
+                  if (chosen?.league_id != null) {
+                    navigate(`/${chosen.league_id}`);
+                  }
                 }}
                 aria-label="Select league and season"
                 title={viewingHistory ? 'Viewing a past season' : undefined}
@@ -150,6 +224,20 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {notFoundLeagueId && (
+        <div className="league-not-found-banner" role="alert">
+          <span>League ID "{notFoundLeagueId}" wasn't found -- showing {currentSeason} instead.</span>
+          <button
+            type="button"
+            className="league-not-found-dismiss"
+            onClick={() => navigate(location.pathname, { replace: true, state: null })}
+            aria-label="Dismiss"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       <nav className="tabs">
         <button

@@ -1,0 +1,8 @@
+# Cloudflare Pages SPA fallback. Without this, directly loading or refreshing a deep
+# link like epl.candorsolutions.us/438107 404s -- Cloudflare Pages serves static files
+# by exact path match by default, and there's no actual /438107 file on disk. This tells
+# it to serve index.html for any path that isn't a real static asset, so React Router
+# (added 2026-08-14 for league-id-in-URL routing) gets to handle the route client-side
+# instead. Vite copies everything under public/ to the dist/ root unchanged at build
+# time, so this file ends up at dist/_redirects, which is where Cloudflare Pages expects it.
+/*    /index.html   200

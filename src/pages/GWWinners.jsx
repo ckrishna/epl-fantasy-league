@@ -15,8 +15,12 @@ function GWDetail({ gameweek, season }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // See Standings.jsx's main fetch effect for why this guard exists -- same
+    // stale-response risk any time `season` can change shortly after mount.
+    let cancelled = false;
     setLoading(true);
     getStandings(gameweek, season).then((data) => {
+      if (cancelled) return;
       const sorted = (data.standings || [])
         .slice()
         .sort((a, b) => (b.net_points ?? 0) - (a.net_points ?? 0))
@@ -24,9 +28,11 @@ function GWDetail({ gameweek, season }) {
       setRows(sorted);
       setLoading(false);
     }).catch((err) => {
+      if (cancelled) return;
       console.error('Error fetching GW detail standings:', err);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [gameweek, season]);
 
   if (loading) return <div className="loading">Loading Gameweek {gameweek}...</div>;
@@ -92,8 +98,13 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
   }, [season]);
 
   useEffect(() => {
+    // See Standings.jsx's main fetch effect for why this guard exists -- same
+    // stale-response risk any time `season` can change shortly after mount (URL
+    // routing resolving a leagueId asynchronously, not just a dropdown click).
+    let cancelled = false;
     setLoading(true);
     getWinners(season).then(data => {
+      if (cancelled) return;
       const flatWinners = [];
       (data.finished_gameweeks || []).forEach(gwData => {
         gwData.winners.forEach(winner => {
@@ -113,9 +124,11 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
       setActiveGW(data.active_gameweek);
       setLoading(false);
     }).catch(err => {
+      if (cancelled) return;
       console.error('Error fetching winners:', err);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [season]);
 
   if (loading) return <div className="loading">Loading weekly winners...</div>;

@@ -533,6 +533,40 @@ body {
   text-decoration: underline;
 }
 
+/* Shown when a URL's leagueId doesn't match any known season (typo, or an id FPL has
+   recycled to an unrelated league -- see DATA_MODEL.md) and App.jsx has silently
+   redirected to the current league. Without this, that redirect looked identical to a
+   normal visit -- confirmed live 2026-08-14, a genuinely bad id (999999) fell back
+   correctly but with zero indication anything had gone wrong. Uses --warning (already
+   defined for both themes) rather than --accent, since this is explicitly "something
+   you tried didn't work," not a neutral state indicator like .viewing-history above. */
+.league-not-found-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warning) 15%, var(--bg-surface));
+  border-bottom: 1px solid var(--warning);
+  padding: 0.6rem 1.25rem;
+}
+
+.league-not-found-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.league-not-found-dismiss:hover,
+.league-not-found-dismiss:focus-visible {
+  color: var(--text);
+}
+
 /* Season-scope disclaimer -- shared by Standings/GWWinners/Stats (see ScopeNote.jsx),
    NOT used on Help since that page isn't season-scoped. One small pill, same styling
    everywhere so it reads as a consistent piece of UI chrome rather than a per-page

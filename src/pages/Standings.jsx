@@ -20,11 +20,21 @@ useEffect(() => {
 
 
 useEffect(() => {
+  // Guards against a stale response overwriting a newer one. Matters now that `season`
+  // can change automatically right after mount (URL routing resolves a leagueId to a
+  // season asynchronously -- see App.jsx), not just from a user's deliberate dropdown
+  // click like before: landing on /212889 fires a first fetch for season=null (current),
+  // then almost immediately a second fetch for season="2025/26" once the URL resolves.
+  // Without this guard, whichever response happened to arrive LAST wins regardless of
+  // which request was newer -- confirmed live 2026-08-14, the current-season (all-zero,
+  // pre-season) response occasionally landed after the real 2025/26 one and overwrote it.
+  let cancelled = false;
   setLoading(true);
 
   // Fetch standings with no GW param (will use active_gameweek from API), scoped to
   // whichever season is selected (null = current season, handled server-side).
   getStandings(null, season).then(data => {
+    if (cancelled) return;
     // Set activeGW from the API response
     if (data.active_gameweek) {
       setActiveGW(data.active_gameweek);
@@ -32,7 +42,7 @@ useEffect(() => {
     if (data.gameweek) {
       setDisplayGW(data.gameweek);  // ← ADD THIS
     }
-    
+
     const sorted = (data.standings || [])
       .sort((a, b) => b.total_points - a.total_points)
       .map((manager, idx) => ({
@@ -42,9 +52,12 @@ useEffect(() => {
     setStandings(sorted);
     setLoading(false);
   }).catch(err => {
+    if (cancelled) return;
     console.error('Error fetching standings:', err);
     setLoading(false);
   });
+
+  return () => { cancelled = true; };
 }, [season]);
 
   if (loading) return <div className="loading">Loading standings...</div>;
