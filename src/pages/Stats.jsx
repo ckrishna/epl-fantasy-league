@@ -18,7 +18,6 @@ function formatElapsed(ms) {
 const SUGGESTED_QUERIES = [
   "Which player is a differential this week?",
   "Which managers are in form?",
-  "Best captain picks this season?",
   "Who's a good captain pick for next gameweek?"
 ];
 
