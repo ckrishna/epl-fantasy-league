@@ -473,6 +473,19 @@ async function getFixturesForGW(seasonId, gw) {
 // gw+1 arithmetic on whatever getActiveGameweek() resolved -- verified live that FPL
 // marks exactly one event `is_next: true` at any given time, including pre-season
 // (when there's no is_current/finished event at all for gw+1 math to even work from).
+//
+// OPEN QUESTION (2026-08-14): once real gameweeks exist, should this also weigh a
+// player's actual in-season `form` (already present in <player_data> for most captain
+// questions, since the word "captain" also triggers the playerGwData/managerPicks
+// keyword groups) rather than leaning on ep_next/price/fixture alone? Deliberately NOT
+// doing that yet -- ep_next is a live-updating number, not a static preseason figure,
+// so it may already be factoring in recent form under FPL's own hood; adding our own
+// form-weighting on top without knowing that would risk double-counting or fighting
+// FPL's own model rather than complementing it. Revisit around GW10-15 by actually
+// reading a few live answers: if ep_next-based picks keep tracking noticeably behind
+// obvious in-form/nailed-on players, that's the signal to add an explicit form
+// cross-reference to instruction 10 in bedrock.mjs. Don't guess at this without that
+// evidence.
 // Returns null if no next gameweek exists (e.g. the season has fully concluded).
 //
 // Filtered to status 'a' (available) only -- no point surfacing an injured/suspended
