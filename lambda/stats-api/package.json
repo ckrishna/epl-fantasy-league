@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test",
-    "eval:genbi": "node scripts/eval-genbi-live.mjs"
+    "eval:genbi": "node scripts/eval-genbi-live.mjs",
+    "add-league": "node scripts/add-league.mjs"
   },
   "keywords": [],
   "author": "",
