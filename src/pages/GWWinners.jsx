@@ -10,7 +10,7 @@ import '../styles/GWWinners.css';
 // manager's points_this_week/transfer_cost/net_points for an arbitrary past gameweek
 // (it's the same data Standings' own walk-back logic reads), so this needed no backend
 // change at all.
-function GWDetail({ gameweek, season }) {
+function GWDetail({ gameweek, season, leagueId }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,7 +19,7 @@ function GWDetail({ gameweek, season }) {
     // stale-response risk any time `season` can change shortly after mount.
     let cancelled = false;
     setLoading(true);
-    getStandings(gameweek, season).then((data) => {
+    getStandings(gameweek, season, leagueId).then((data) => {
       if (cancelled) return;
       const sorted = (data.standings || [])
         .slice()
@@ -33,7 +33,7 @@ function GWDetail({ gameweek, season }) {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [gameweek, season]);
+  }, [gameweek, season, leagueId]);
 
   if (loading) return <div className="loading">Loading Gameweek {gameweek}...</div>;
 
@@ -76,7 +76,7 @@ function GWDetail({ gameweek, season }) {
   );
 }
 
-export default function GWWinners({ season = null, seasonLabel = null, resetKey = 0 } = {}) {
+export default function GWWinners({ season = null, seasonLabel = null, resetKey = 0, leagueId = null } = {}) {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -103,7 +103,7 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
     // routing resolving a leagueId asynchronously, not just a dropdown click).
     let cancelled = false;
     setLoading(true);
-    getWinners(season).then(data => {
+    getWinners(season, leagueId).then(data => {
       if (cancelled) return;
       const flatWinners = [];
       (data.finished_gameweeks || []).forEach(gwData => {
@@ -129,7 +129,7 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [season]);
+  }, [season, leagueId]);
 
   if (loading) return <div className="loading">Loading weekly winners...</div>;
 
@@ -137,7 +137,7 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
     return (
       <div className="gw-winners-page">
         <h2>Gameweek Winners{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
-        <GWDetail gameweek={selectedGW} season={season} />
+        <GWDetail gameweek={selectedGW} season={season} leagueId={leagueId} />
       </div>
     );
   }

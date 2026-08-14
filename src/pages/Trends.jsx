@@ -120,7 +120,7 @@ const tooltipItemStyle = { color: 'var(--text-primary)' };
 
 const axisTick = { fontSize: 11, fill: 'var(--text-muted)' };
 
-export default function Trends() {
+export default function Trends({ leagueId = null } = {}) {
   const [managers, setManagers] = useState([]);
   const [managersLoading, setManagersLoading] = useState(true);
   const [selected, setSelected] = useState(() => localStorage.getItem(MANAGER_STORAGE_KEY) || '');
@@ -137,7 +137,7 @@ export default function Trends() {
   const [seasonSort, setSeasonSort] = useState({ key: 'season', dir: 'desc' });
 
   useEffect(() => {
-    getTrendsManagers().then((list) => {
+    getTrendsManagers(leagueId).then((list) => {
       setManagers(list);
       setManagersLoading(false);
       setSelected((prev) => {
@@ -145,14 +145,14 @@ export default function Trends() {
         return list[0]?.team_name || '';
       });
     });
-  }, []);
+  }, [leagueId]);
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     setError(null);
     localStorage.setItem(MANAGER_STORAGE_KEY, selected);
-    getTrends(selected).then((result) => {
+    getTrends(selected, leagueId).then((result) => {
       if (!result) {
         setError('Could not load trends for this manager.');
         setData(null);
@@ -161,7 +161,7 @@ export default function Trends() {
       }
       setLoading(false);
     });
-  }, [selected]);
+  }, [selected, leagueId]);
 
   const sortedSeasons = useMemo(() => {
     if (!data?.seasons) return [];

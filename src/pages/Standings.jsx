@@ -4,7 +4,7 @@ import { getStandings } from '../api/client';
 import ManagerSquad from '../components/ManagerSquad';
 import '../styles/Standings.css';
 
-export default function Standings({ season = null, seasonLabel = null, resetKey = 0 } = {}) {
+export default function Standings({ season = null, seasonLabel = null, resetKey = 0, leagueId = null } = {}) {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
 const [activeGW, setActiveGW] = useState(null);
@@ -33,7 +33,7 @@ useEffect(() => {
 
   // Fetch standings with no GW param (will use active_gameweek from API), scoped to
   // whichever season is selected (null = current season, handled server-side).
-  getStandings(null, season).then(data => {
+  getStandings(null, season, leagueId).then(data => {
     if (cancelled) return;
     // Set activeGW from the API response
     if (data.active_gameweek) {
@@ -58,7 +58,7 @@ useEffect(() => {
   });
 
   return () => { cancelled = true; };
-}, [season]);
+}, [season, leagueId]);
 
   if (loading) return <div className="loading">Loading standings...</div>;
 

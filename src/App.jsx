@@ -132,6 +132,14 @@ export default function App() {
   // the server picks); this resolves null down to the actual current season string so
   // pages always have something concrete to show ("2026/27"), not "current".
   const seasonLabel = selectedSeason || currentSeason;
+  // The league_id for whichever season is actually showing (current, or a past season
+  // picked from the dropdown) -- distinct from the URL's leagueId, which only ever
+  // reflects a season that HAS a league_id (see the dropdown's onChange above). Passed
+  // through to Standings/GWWinners so their API calls can disambiguate once a second
+  // league shares a season (2026-08-14, multi-league foundation); null for the six
+  // historical seasons with no league_id on record, which is correct -- there's nothing
+  // to scope against for those, same as omitting the param entirely.
+  const viewingLeagueId = (seasons.find((s) => s.season === seasonLabel))?.league_id ?? null;
 
   return (
     <div className="app">
@@ -273,10 +281,14 @@ export default function App() {
       </nav>
 
       <main className="app-content">
-        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} />}
-        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} resetKey={winnersResetKey} />}
+        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} leagueId={viewingLeagueId} />}
+        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} resetKey={winnersResetKey} leagueId={viewingLeagueId} />}
         {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} />}
-        {activeTab === 'trends' && <Trends />}
+        {/* Trends deliberately ignores the season dropdown (its own manager picker spans
+            every season) -- leagueId here is always the LIVE league, i.e. which
+            league_group_id "your" cross-season history should be scoped to, not
+            whatever historical season happens to be selected elsewhere in the app. */}
+        {activeTab === 'trends' && <Trends leagueId={currentSeasonRow?.league_id ?? null} />}
         {activeTab === 'help' && <Help />}
       </main>
 

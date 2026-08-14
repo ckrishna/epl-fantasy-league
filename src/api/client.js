@@ -1,11 +1,15 @@
 // src/api/client.js
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api';
 
-export async function getStandings(gw = null, season = null) {
+// leagueId is optional and only matters once a second league shares a season -- the
+// backend treats every row written before league_id existed as unambiguous (see
+// queryLeagueStandings in dynamodb.mjs), so omitting it is always safe today.
+export async function getStandings(gw = null, season = null, leagueId = null) {
   try {
     const params = new URLSearchParams();
     if (gw) params.set('gw', gw);
     if (season) params.set('season', season);
+    if (leagueId) params.set('league_id', leagueId);
     const query = params.toString();
     const url = query ? `${API_BASE}/standings?${query}` : `${API_BASE}/standings`;
     const res = await fetch(url);
@@ -17,9 +21,13 @@ export async function getStandings(gw = null, season = null) {
   }
 }
 
-export async function getWinners(season = null) {
+export async function getWinners(season = null, leagueId = null) {
   try {
-    const url = season ? `${API_BASE}/winners?season=${encodeURIComponent(season)}` : `${API_BASE}/winners`;
+    const params = new URLSearchParams();
+    if (season) params.set('season', season);
+    if (leagueId) params.set('league_id', leagueId);
+    const query = params.toString();
+    const url = query ? `${API_BASE}/winners?${query}` : `${API_BASE}/winners`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
@@ -48,9 +56,15 @@ export async function getSeasons() {
 
 // Trends tab manager picker -- every real name with at least one fpl_entry_gameweek
 // row, historical or live, deduped server-side.
-export async function getTrendsManagers() {
+// leagueId is optional -- see league-groups.mjs on the backend. Without it (or if the
+// league isn't registered with a league_group_id yet), both endpoints below match
+// against every season on record, exactly as before this existed.
+export async function getTrendsManagers(leagueId = null) {
   try {
-    const res = await fetch(`${API_BASE}/trends/managers`);
+    const url = leagueId
+      ? `${API_BASE}/trends/managers?league_id=${encodeURIComponent(leagueId)}`
+      : `${API_BASE}/trends/managers`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return data.managers || [];
@@ -63,9 +77,11 @@ export async function getTrendsManagers() {
 // Pace-vs-history and season-by-season data for one manager, keyed by their real name
 // (team_name -- see the naming-inversion note in DATA_MODEL.md). Returns null on
 // failure so the page can show a friendly empty state instead of throwing.
-export async function getTrends(managerTeamName) {
+export async function getTrends(managerTeamName, leagueId = null) {
   try {
-    const res = await fetch(`${API_BASE}/trends?manager=${encodeURIComponent(managerTeamName)}`);
+    const params = new URLSearchParams({ manager: managerTeamName });
+    if (leagueId) params.set('league_id', leagueId);
+    const res = await fetch(`${API_BASE}/trends?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
