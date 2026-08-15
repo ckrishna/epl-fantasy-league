@@ -21,8 +21,10 @@ build/
 *.log
 npm-debug.log*
 
-# Local AWS CLI output (e.g. aws lambda invoke response.json)
+# Local AWS CLI output (e.g. aws lambda invoke response.json, or a custom
+# --output-filename like trends-managers-output.json from ad-hoc debugging)
 response.json
+*-output.json
 
 *.swp
 .idea/dd
