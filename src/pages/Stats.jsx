@@ -32,7 +32,7 @@ function shouldAutoFocus() {
   return typeof window !== 'undefined' && window.matchMedia('(min-width: 641px)').matches;
 }
 
-export default function Stats({ season = null, seasonLabel = null }) {
+export default function Stats({ season = null, seasonLabel = null, leagueId = null }) {
   const [selectedQuery, setSelectedQuery] = useState(null);
   const [customQuestion, setCustomQuestion] = useState('');
   const [loading, setLoading] = useState(false);
@@ -78,7 +78,7 @@ export default function Stats({ season = null, seasonLabel = null }) {
     setFeedback(null);
     setElapsedMs(0);
     try {
-      const data = await queryStats(question, season);
+      const data = await queryStats(question, season, leagueId);
 
       if (data.error) {
         throw new Error(data.error);

@@ -116,12 +116,20 @@ export async function getTrendingPlayers(gw = null, limit = 10) {
   }
 }
 
-export async function queryStats(question, season = null) {
+// leagueId (added 2026-08-15, task #143): threads through whichever league is currently
+// on screen, same as getStandings/getTrends already do -- without it, the backend falls
+// back to the season's own primary league_id (see genbi.mjs's handleGenBI), which is
+// only actually different from "the league you're looking at" once a second league
+// shares the same season (task #48).
+export async function queryStats(question, season = null, leagueId = null) {
   try {
+    const body = { question };
+    if (season) body.season = season;
+    if (leagueId) body.league_id = leagueId;
     const res = await fetch(`${API_BASE}/stats/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(season ? { question, season } : { question })
+      body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();

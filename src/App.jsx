@@ -288,7 +288,7 @@ export default function App() {
       <main className="app-content">
         {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} leagueId={viewingLeagueId} />}
         {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} resetKey={winnersResetKey} leagueId={viewingLeagueId} />}
-        {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} />}
+        {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} leagueId={viewingLeagueId} />}
         {/* Trends deliberately ignores the season dropdown (its own manager picker spans
             every season) -- leagueId here is always the LIVE league, i.e. which
             league_group_id "your" cross-season history should be scoped to, not
