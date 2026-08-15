@@ -52,6 +52,16 @@ function installSingleGwFetchMock(picksRouter) {
   });
 }
 
+function installMultiManagerFetchMock(managers, picksRouter) {
+  return installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) return jsonResponse(buildBootstrapStatic({ events: buildMidSeasonEvents(1, 5), elements: [] }));
+    if (url.includes('leagues-classic')) return jsonResponse({ standings: { results: managers } });
+    if (url.includes('/event/') && url.includes('/live/')) return jsonResponse({ elements: [] });
+    if (url.includes('/picks/')) return picksRouter(url);
+    return null;
+  });
+}
+
 function installIngesterDynamoMock() {
   const puts = [];
   const dynamoMock = installDynamoMock((command) => {
@@ -87,6 +97,16 @@ test('a picks fetch still rate-limited after one retry is counted separately, re
     assert.ok(runPut, 'Expected an ingestion_runs row to be written');
     assert.strictEqual(runPut.item.summary.rate_limited_count, 1, 'Expected the still-failing 429 to be counted in rate_limited_count');
     assert.strictEqual(runPut.item.summary.unexpected_status_count, 0, 'A 429 is its own category, not unexpected_status');
+
+    // The whole point of this fix: ingestion_runs alone should say WHICH manager and
+    // WHICH gameweek, not just that a 429 happened somewhere in the run.
+    const events = runPut.item.summary.rate_limited_events;
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].entry_id, SAMPLE_MANAGER.entry);
+    assert.strictEqual(events[0].manager, SAMPLE_MANAGER.entry_name);
+    assert.strictEqual(events[0].gw, 1);
+    assert.ok(events[0].timestamp && !Number.isNaN(Date.parse(events[0].timestamp)), 'Expected a real ISO timestamp on the event');
+    assert.deepStrictEqual(runPut.item.summary.unexpected_status_events, []);
 
     // Retry backoff (5s) + post-failure backoff (5s) = 10s minimum. Allow slack for
     // test overhead, but this is the actual regression check for the throttle-skip
@@ -134,6 +154,12 @@ test('an unexpected non-ok status (5xx) is tracked separately from both rate-lim
     const runPut = dynamoMock.puts.find((p) => p.table === 'ingestion_runs');
     assert.strictEqual(runPut.item.summary.unexpected_status_count, 1);
     assert.strictEqual(runPut.item.summary.rate_limited_count, 0);
+
+    const events = runPut.item.summary.unexpected_status_events;
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].status, 500, 'The event should carry the actual status code, not just that something unexpected happened');
+    assert.strictEqual(events[0].entry_id, SAMPLE_MANAGER.entry);
+    assert.strictEqual(events[0].gw, 1);
   } finally {
     fetchMock.restore();
     dynamoMock.restore();
@@ -159,5 +185,33 @@ test('[regression] a genuine 404 (manager has no data for this gameweek yet) is 
   } finally {
     fetchMock.restore();
     dynamoMock.restore();
+  }
+});
+
+// Uses the 5xx (no-retry) path rather than 429 specifically so this doesn't need 25+
+// real managers each paying the 429 retry/backoff delay to exercise the cap -- an
+// unexpected-status event costs only the normal 1s throttle pause per manager.
+test('the event sample list is capped, but the count keeps counting past the cap (catches the earlier .overflow-on-array bug)', async () => {
+  process.env.MAX_STORED_FAILURE_EVENTS = '2';
+  const managers = Array.from({ length: 4 }, (_, i) => ({
+    entry: 1000 + i, entry_name: `Team ${i}`, player_name: `Manager ${i}`
+  }));
+  const fetchMock = installMultiManagerFetchMock(managers, () => errorResponse(503));
+  const dynamoMock = installIngesterDynamoMock();
+
+  try {
+    await handler({});
+
+    const runPut = dynamoMock.puts.find((p) => p.table === 'ingestion_runs');
+    assert.strictEqual(runPut.item.summary.unexpected_status_count, 4, 'The count must stay accurate for all 4 managers even though only 2 get stored as samples');
+    assert.strictEqual(runPut.item.summary.unexpected_status_events.length, 2, 'The stored sample list should be capped at MAX_STORED_FAILURE_EVENTS');
+    // Confirms the array itself round-trips cleanly through the same PutCommand.Item
+    // shape DynamoDB marshaling would see -- no property hanging off the array outside
+    // its indices, which is exactly what silently vanished in the first attempt.
+    assert.deepStrictEqual(Object.keys(runPut.item.summary.unexpected_status_events), ['0', '1']);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+    delete process.env.MAX_STORED_FAILURE_EVENTS;
   }
 });

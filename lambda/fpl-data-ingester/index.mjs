@@ -314,13 +314,35 @@ export async function handler(event) {
   const startedAt = new Date(runStartTime).toISOString();
   let apiCallCount = 0;
   let dbWriteCount = 0;
-  // Counted separately from the normal "no data" case so a rate-limit episode shows up
-  // as a glance-able number in ingestion_runs instead of requiring a CloudWatch Logs
-  // search. rateLimitedCount is still-429-after-retry; unexpectedStatusCount is any
-  // other non-ok, non-404 status (5xx, 403, etc.) -- also not FPL's normal empty
-  // result, but not the specific rate-limit case either.
+  // Captured as structured events (not just a running count) so ingestion_runs alone
+  // is enough to answer "when did this happen, and which manager/gameweek caused it" --
+  // without that, a count tells you a rate limit happened SOMEWHERE in an 11-minute
+  // run across N managers, but not where, which is exactly what you'd need to know to
+  // tell "one flaky request" apart from "FPL is rejecting everything from here on".
+  // rateLimited* is still-429-after-retry; unexpectedStatus* is any other non-ok,
+  // non-404 status (5xx, 403, etc.) -- also not FPL's normal empty result, but not the
+  // specific rate-limit case either.
+  //
+  // Count and event list are tracked separately on purpose, NOT derived from
+  // events.length -- the event list is capped (see MAX_STORED_FAILURE_EVENTS below) so
+  // a worst-case outage can't blow up the DynamoDB item, but the count must stay
+  // accurate even past that cap. (First attempt at this used a `.overflow` property
+  // hung directly off the array instead of a real counter -- DynamoDB's marshaling
+  // only walks an Array's numeric indices, so that property would've silently
+  // vanished on write. Caught before it ever got deployed.)
   let rateLimitedCount = 0;
   let unexpectedStatusCount = 0;
+  const rateLimitedEvents = [];
+  const unexpectedStatusEvents = [];
+  // DynamoDB items cap out at 400KB. Under normal operation these arrays are empty or
+  // tiny (this is meant to catch anomalies, not routine data), but a total FPL outage
+  // could in principle fail every manager -- cap what actually gets WRITTEN so a
+  // worst-case run can't blow up the item. rateLimitedCount/unexpectedStatusCount
+  // above are never capped, only these sample lists of which ones.
+  // Env-overridable (same pattern as league-validation.mjs's MAX_LEAGUE_ENTRIES) --
+  // mainly so a test can exercise the cap-and-keep-counting-accurately path without
+  // needing 25+ real managers to do it.
+  const MAX_STORED_FAILURE_EVENTS = Number(process.env.MAX_STORED_FAILURE_EVENTS) || 25;
   // Declared outside the try block so the catch handler can still report which
   // season a failed run was for, if it got far enough to resolve one.
   let season;
@@ -401,11 +423,15 @@ export async function handler(event) {
           // speed up instead of backing off. Longest pause on a still-failing 429.
           if (status === 429) {
             rateLimitedCount += 1;
-            logger.error('Still rate limited after retry', { manager: manager.team_nickname, entry_id: manager.entry_id, gw: gw.id });
+            const evt = { entry_id: manager.entry_id, manager: manager.team_nickname, gw: gw.id, timestamp: new Date().toISOString() };
+            if (rateLimitedEvents.length < MAX_STORED_FAILURE_EVENTS) rateLimitedEvents.push(evt);
+            logger.error('Still rate limited after retry', evt);
             await new Promise(resolve => setTimeout(resolve, 5000));
           } else if (status !== 404 && status !== null) {
             unexpectedStatusCount += 1;
-            logger.error(`Unexpected status ${status} fetching picks`, { manager: manager.team_nickname, entry_id: manager.entry_id, gw: gw.id });
+            const evt = { entry_id: manager.entry_id, manager: manager.team_nickname, gw: gw.id, status, timestamp: new Date().toISOString() };
+            if (unexpectedStatusEvents.length < MAX_STORED_FAILURE_EVENTS) unexpectedStatusEvents.push(evt);
+            logger.error(`Unexpected status ${status} fetching picks`, evt);
             await new Promise(resolve => setTimeout(resolve, 1000));
           } else {
             logger.info(`No data for GW ${gw.id}`, { manager: manager.team_nickname, status });
@@ -560,11 +586,18 @@ logger.info('Standings calculated and stored', { count: standingsCount });
         managers: managers.length,
         gameweeks: gwsToFetch.length,
         standings: standingsCount,
-        // Both default to 0 on every run (not omitted when zero) so a glance at
-        // ingestion_runs never has to distinguish "never checked" from "checked,
-        // zero hits" -- see the ingester rate-limit-visibility notes in DATA_MODEL.md.
+        // Counts default to 0 on every run (not omitted when zero) so a glance at
+        // ingestion_runs never has to distinguish "never checked" from "checked, zero
+        // hits". Event lists carry entry_id/manager/gw/timestamp (and status, for
+        // unexpected ones) so a single ingestion_runs row is enough on its own to
+        // answer "when did this happen and which manager/gameweek caused it" --
+        // without a CloudWatch Logs search. Capped at MAX_STORED_FAILURE_EVENTS (25);
+        // the counts above are the uncapped source of truth if a run somehow exceeds
+        // that. See the ingester rate-limit-visibility notes in DATA_MODEL.md.
         rate_limited_count: rateLimitedCount,
-        unexpected_status_count: unexpectedStatusCount
+        rate_limited_events: rateLimitedEvents,
+        unexpected_status_count: unexpectedStatusCount,
+        unexpected_status_events: unexpectedStatusEvents
       }
     });
 
