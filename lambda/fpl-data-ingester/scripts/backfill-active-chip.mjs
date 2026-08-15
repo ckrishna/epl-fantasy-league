@@ -101,7 +101,7 @@ async function main() {
       if (activeChip) {
         chipsFound += 1;
         if (chipsSample.length < 15) {
-          chipsSample.push(`${row.manager_name} GW${row.gameweek}: ${activeChip}`);
+          chipsSample.push(`${row.team_nickname} GW${row.gameweek}: ${activeChip}`);
         }
       }
 
@@ -122,7 +122,7 @@ async function main() {
       }
     } catch (err) {
       errors += 1;
-      console.error(`Failed for ${row.manager_name} GW${row.gameweek} (entry_id=${row.entry_id}): ${err.message}`);
+      console.error(`Failed for ${row.team_nickname} GW${row.gameweek} (entry_id=${row.entry_id}): ${err.message}`);
     }
 
     // Be polite to FPL's API -- same rate-limit pattern already used elsewhere in this

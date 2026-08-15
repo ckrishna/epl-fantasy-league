@@ -34,13 +34,12 @@
 // DELIBERATELY NOT CAPTURED (decided with the league owner before writing this):
 //   - Seasons before 2019/20 (see above).
 //   - A team nickname per manager -- the source file only has each manager's real
-//     name. `manager_name` (the field every OTHER page treats as the team nickname,
-//     see the getLeagueManagers() naming-inversion note elsewhere in this repo) is
-//     left null for every row this script writes; `team_name` (treated as the real
-//     name everywhere) gets the source file's name. Frontend (Standings.jsx,
-//     GWWinners.jsx) already skips rendering the second, muted name line when
-//     manager_name is null, so this shows as a single name instead of a name +
-//     redundant/blank second line.
+//     name. `team_nickname` (renamed 2026-08-14 from the old, misleadingly-named
+//     `manager_name` -- see DATA_MODEL.md's identity redesign notes) is left null for
+//     every row this script writes; `real_name` (renamed from `team_name`) gets the
+//     source file's name. Frontend (Standings.jsx, GWWinners.jsx) already skips
+//     rendering the second, muted name line when team_nickname is null, so this shows
+//     as a single name instead of a name + redundant/blank second line.
 //
 // entry_id: the source file has no real FPL entry ID, only names -- these managers'
 // real FPL accounts may not even exist anymore. A stable, deterministic *negative*
@@ -188,8 +187,8 @@ async function importSeason(season, rowsForSeason) {
       gameweek,
       entry_id: entryId,
       season,
-      manager_name: null, // no historical team nickname -- see header comment
-      team_name: name,
+      team_nickname: null, // no historical team nickname -- see header comment
+      real_name: name,
       points_this_week: toNumber(r.GP),
       points_gross: toNumber(r.GP),
       transfer_cost: toNumber(r.TC),
@@ -226,8 +225,8 @@ async function importSeason(season, rowsForSeason) {
       gameweek,
       winners: winners.map((w) => ({
         entry_id: w.entry_id,
-        manager_name: null, // no historical nickname -- match fpl_entry_gameweek/fpl_league_standings, not a duplicate of team_name
-        team_name: w.team_name,
+        team_nickname: null, // no historical nickname -- match fpl_entry_gameweek/fpl_league_standings, not a duplicate of real_name
+        real_name: w.real_name,
         net_points: w.points_this_week - w.transfer_cost,
         gross_points: w.points_this_week,
         transfer_cost: w.transfer_cost
@@ -251,8 +250,8 @@ async function importSeason(season, rowsForSeason) {
   const standingsItems = [...latestByEntry.values()].map((row) => ({
     season_event: `${season}#${finalGw}`,
     manager_id: row.entry_id,
-    manager_name: row.manager_name,
-    team_name: row.team_name,
+    real_name: row.real_name,
+    team_nickname: row.team_nickname,
     total_points: row.points_total,
     points_this_week: row.points_this_week,
     transfer_cost: row.transfer_cost,

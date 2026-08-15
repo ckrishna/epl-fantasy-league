@@ -65,8 +65,10 @@ def build_standings_items(entry_gw_items, season=SEASON, gameweek=TARGET_GW, syn
         standings.append({
             'season_event': f'{season}#{gameweek}',
             'manager_id': item['entry_id'],
-            'manager_name': item.get('manager_name', 'Unknown'),
-            'team_name': item.get('team_name', 'Unknown'),
+            # Renamed 2026-08-14 from manager_name/team_name -- see DATA_MODEL.md's
+            # identity redesign notes.
+            'real_name': item.get('real_name', 'Unknown'),
+            'team_nickname': item.get('team_nickname', 'Unknown'),
             'total_points': int(item.get('points_total', 0)),
             'points_this_week': int(item.get('points_this_week', 0)),
             'transfer_cost': int(item.get('transfer_cost', 0)),
@@ -82,8 +84,8 @@ def to_dynamo_item(standings_item):
     return {
         'season_event': {'S': standings_item['season_event']},
         'manager_id': {'N': str(standings_item['manager_id'])},
-        'manager_name': {'S': standings_item['manager_name']},
-        'team_name': {'S': standings_item['team_name']},
+        'real_name': {'S': standings_item['real_name']},
+        'team_nickname': {'S': standings_item['team_nickname']},
         'total_points': {'N': str(standings_item['total_points'])},
         'points_this_week': {'N': str(standings_item['points_this_week'])},
         'transfer_cost': {'N': str(standings_item['transfer_cost'])},
@@ -116,7 +118,7 @@ def main():
     standings_items = build_standings_items(entry_gw_items)
 
     for s in standings_items:
-        print(f"  {s['manager_name']} (id={s['manager_id']}): "
+        print(f"  {s['real_name']} (id={s['manager_id']}): "
               f"total_points={s['total_points']}, points_this_week={s['points_this_week']}, "
               f"transfer_cost={s['transfer_cost']}")
 

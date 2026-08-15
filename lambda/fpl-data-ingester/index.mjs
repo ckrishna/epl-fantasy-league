@@ -106,8 +106,13 @@ async function getLeagueManagers(leagueId) {
 
     const managers = results.map(m => ({
       entry_id: m.entry,
-      manager_name: m.entry_name,
-      team_name: source === 'new_entries' ? `${m.player_first_name} ${m.player_last_name}`.trim() : m.player_name
+      // real_name/team_nickname (renamed 2026-08-14 from team_name/manager_name --
+      // see DATA_MODEL.md's identity redesign notes on the naming-inversion fix).
+      // FPL's own `entry_name` field is the squad NICKNAME; player_name (or
+      // player_first_name + player_last_name on the new_entries shape) is the
+      // manager's REAL name.
+      team_nickname: m.entry_name,
+      real_name: source === 'new_entries' ? `${m.player_first_name} ${m.player_last_name}`.trim() : m.player_name
     }));
 
     logger.info('Fetched league managers', { count: managers.length, source, duration_ms: Date.now() - startTime });
@@ -196,8 +201,8 @@ async function storeGameweekSummary(manager, picksData, gw, season) {
     gameweek: gw.id,
     entry_id: manager.entry_id,
     season,
-    manager_name: manager.manager_name,
-    team_name: manager.team_name,
+    real_name: manager.real_name,
+    team_nickname: manager.team_nickname,
     points_this_week: entryHistory.points || 0,
     points_gross: entryHistory.points || 0,
     transfer_cost: entryHistory.event_transfers_cost || 0,
@@ -354,14 +359,14 @@ export async function handler(event) {
 
     // Process each manager
     for (const manager of managers) {
-      logger.info(`Starting manager: ${manager.manager_name}`);
+      logger.info(`Starting manager: ${manager.team_nickname}`);
 
       for (const gw of gwsToFetch) {
         const picksData = await getManagerPicksForGW(manager.entry_id, gw.id);
         apiCallCount += 1;
 
         if (!picksData || !picksData.entry_history) {
-          logger.info(`No data for GW ${gw.id}`, { manager: manager.manager_name });
+          logger.info(`No data for GW ${gw.id}`, { manager: manager.team_nickname });
           continue;
         }
 
@@ -411,8 +416,8 @@ export async function handler(event) {
           league_id: leagueId,
           winners: winners.map(w => ({
             entry_id: w.entry_id,
-            manager_name: w.manager_name,
-            team_name: w.team_name,
+            real_name: w.real_name,
+            team_nickname: w.team_nickname,
             net_points: w.points_this_week - w.transfer_cost,
             gross_points: w.points_this_week,
             transfer_cost: w.transfer_cost
@@ -458,8 +463,8 @@ for (const manager of managers) {
       Item: {
         season_event: `${season}#${activeGW}`,
         manager_id: manager.entry_id,
-        manager_name: manager.manager_name,
-        team_name: manager.team_name,
+        real_name: manager.real_name,
+        team_nickname: manager.team_nickname,
         // See the matching comment on gw-winners-cache above -- same additive,
         // no-key-change addition, same reasoning.
         league_id: leagueId,
@@ -473,7 +478,7 @@ for (const manager of managers) {
     standingsCount += 1;
     dbWriteCount += 1;
   } catch (err) {
-    logger.error(`Failed to calculate standings for ${manager.manager_name}`, err);
+    logger.error(`Failed to calculate standings for ${manager.team_nickname}`, err);
   }
 }
 

@@ -86,16 +86,15 @@ async function main() {
       continue;
     }
     if (!vault) {
-      mismatchDetails.push(`GW${gw}: we have a winner (${ours.map(w => w.team_name).join(', ')}) but VAR Vault has none -- source only covers GW1-${source.max_gameweek}.`);
+      mismatchDetails.push(`GW${gw}: we have a winner (${ours.map(w => w.real_name).join(', ')}) but VAR Vault has none -- source only covers GW1-${source.max_gameweek}.`);
       continue;
     }
 
-    // IMPORTANT: our schema names these fields backwards from what they sound like.
-    // fpl_entry_gameweek.manager_name is actually the FPL TEAM name (e.g. "Da
-    // Movement"); .team_name is actually the real PERSON name (e.g. "Michael Kojo
-    // Brown") -- see getLeagueManagers() in index.mjs. VAR Vault's "name" field is the
-    // real person name, so it matches our .team_name, not .manager_name.
-    const ourNames = new Set(ours.map(w => w.team_name));
+    // Renamed 2026-08-14: real_name/team_nickname replace the old, misleadingly-named
+    // team_name/manager_name (team_name used to hold the real person name, manager_name
+    // the FPL squad nickname -- backwards from what they sounded like). VAR Vault's
+    // "name" field is the real person name, so it matches our .real_name.
+    const ourNames = new Set(ours.map(w => w.real_name));
     const vaultNames = new Set(vault.map(v => v.name));
     const namesMatch = ourNames.size === vaultNames.size && [...ourNames].every(n => vaultNames.has(n));
 
@@ -128,9 +127,9 @@ async function main() {
 
   const ourTotalByName = new Map();
   for (const row of gwRows) {
-    // Same backwards-field-name note as above: .team_name holds the real person name,
-    // which is what VAR Vault's players[].name matches against.
-    const name = row.team_name;
+    // Same rename note as above: .real_name holds the real person name, which is what
+    // VAR Vault's players[].name matches against.
+    const name = row.real_name;
     if (!name) continue;
     const total = Number(row.points_total || 0);
     if (!ourTotalByName.has(name) || total > ourTotalByName.get(name)) {

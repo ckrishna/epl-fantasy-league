@@ -85,7 +85,7 @@ test('[current bug] brand-new league: falls back to new_entries when standings.r
       `written to fpl_league_standings, got ${standingsPuts.length}. If this is 0, getLeagueManagers() is ` +
       `still only reading standings.results and ignoring new_entries.`);
 
-    const names = standingsPuts.map((p) => p.item.manager_name).sort();
+    const names = standingsPuts.map((p) => p.item.team_nickname).sort();
     assert.deepStrictEqual(names, ['COYS', 'Da Movement', 'Self-Goal', 'Suberon']);
   } finally {
     fetchMock.restore();
@@ -116,7 +116,7 @@ test('[regression] once FPL populates standings.results, that takes priority ove
     const standingsPuts = dynamoMock.puts.filter((p) => p.table === 'fpl_league_standings');
     assert.strictEqual(standingsPuts.length, 1, 'Expected only the one manager from standings.results, ' +
       'not the stale new_entries manager -- once FPL merges someone into standings, that should win.');
-    assert.strictEqual(standingsPuts[0].item.manager_name, 'COYS');
+    assert.strictEqual(standingsPuts[0].item.team_nickname, 'COYS');
   } finally {
     fetchMock.restore();
     dynamoMock.restore();

@@ -100,12 +100,12 @@ def main():
         entry_gw_items,
         manager_key='season_entry',
         gameweek_key='gameweek',
-        manager_label_key='manager_name'
+        manager_label_key='team_nickname'  # renamed 2026-08-14 from manager_name -- see DATA_MODEL.md
     )
 
     standings_items = load_items(standings_path)
     # season_event looks like "2025/26#25" -- that's the GAMEWEEK key here, not the manager.
-    # The manager here is manager_id (with manager_name as a friendly label), and gameweek
+    # The manager here is manager_id (with team_nickname as a friendly label), and gameweek
     # has to be parsed out of season_event's suffix.
     for item in standings_items:
         se = item.get('season_event', '')
@@ -116,7 +116,7 @@ def main():
         standings_items,
         manager_key='manager_id',
         gameweek_key='_gw_from_season_event',
-        manager_label_key='manager_name'
+        manager_label_key='team_nickname'  # renamed 2026-08-14 from manager_name -- see DATA_MODEL.md
     )
 
 

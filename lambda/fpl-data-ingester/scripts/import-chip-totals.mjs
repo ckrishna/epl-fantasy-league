@@ -15,9 +15,11 @@
 //
 // Where it's written: onto the LATEST existing fpl_entry_gameweek row per manager for
 // the target season (same "last row is the season snapshot" convention
-// storeLeagueStandings already uses), matched by manager_name (exact string match
-// against the source file's "name" field -- confirmed to match our stored manager_name
-// values for all 11 managers before writing this script).
+// storeLeagueStandings already uses), matched by team_nickname (renamed 2026-08-14
+// from the old, misleadingly-named manager_name -- see DATA_MODEL.md's identity
+// redesign notes) -- exact string match against the source file's "name" field,
+// confirmed to match our stored team_nickname values for all 11 managers before
+// writing this script.
 //
 // Usage: node scripts/import-chip-totals.mjs [path-to-json] [season]
 //   node scripts/import-chip-totals.mjs
@@ -71,9 +73,9 @@ async function main() {
 
   const latestRowByName = new Map();
   for (const row of rows) {
-    const existing = latestRowByName.get(row.manager_name);
+    const existing = latestRowByName.get(row.team_nickname);
     if (!existing || Number(row.gameweek) > Number(existing.gameweek)) {
-      latestRowByName.set(row.manager_name, row);
+      latestRowByName.set(row.team_nickname, row);
     }
   }
 
@@ -84,7 +86,7 @@ async function main() {
     const row = latestRowByName.get(player.name);
     if (!row) {
       unmatched += 1;
-      console.error(`No fpl_entry_gameweek row found for "${player.name}" (team "${player.team_name}") -- skipped. Check for a manager_name mismatch.`);
+      console.error(`No fpl_entry_gameweek row found for "${player.name}" (team "${player.team_name}") -- skipped. Check for a team_nickname mismatch.`);
       continue;
     }
 
