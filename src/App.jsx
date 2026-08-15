@@ -145,43 +145,62 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="app-header-inner">
-          <h1 className="app-title">
-            <button
-              type="button"
-              className="app-title-link"
-              onClick={() => {
-                // Set state directly rather than relying on navigate() to trigger the
-                // URL-resolution effect -- if the URL is already at the current league
-                // (e.g. the dropdown was just used to view a no-league_id historical
-                // season, which doesn't change the URL -- see its onChange below),
-                // navigate() to that same URL is a no-op and the leagueId param never
-                // actually changes, so that effect would never re-fire. Confirmed live
-                // 2026-08-14: this exact sequence left the title button doing nothing.
-                setSelectedSeason(null);
-                if (currentSeasonRow?.league_id != null) {
-                  navigate(`/${currentSeasonRow.league_id}`);
-                }
-                setActiveTab('standings');
-                setStandingsResetKey((k) => k + 1);
-              }}
-              aria-label="Go to current season standings"
-              title="Go to current season standings"
-            >
-              ⚽ EPL Fantasy League
-            </button>
-            <button
-              type="button"
-              className={`app-help-link ${activeTab === 'help' ? 'active' : ''}`}
-              onClick={() => setActiveTab('help')}
-              aria-label="Help"
-              title="Help"
-            >
-              ?
-            </button>
-          </h1>
+          <div className="app-header-row app-header-row-top">
+            <h1 className="app-title">
+              <button
+                type="button"
+                className="app-title-link"
+                onClick={() => {
+                  // Set state directly rather than relying on navigate() to trigger the
+                  // URL-resolution effect -- if the URL is already at the current league
+                  // (e.g. the dropdown was just used to view a no-league_id historical
+                  // season, which doesn't change the URL -- see its onChange below),
+                  // navigate() to that same URL is a no-op and the leagueId param never
+                  // actually changes, so that effect would never re-fire. Confirmed live
+                  // 2026-08-14: this exact sequence left the title button doing nothing.
+                  setSelectedSeason(null);
+                  if (currentSeasonRow?.league_id != null) {
+                    navigate(`/${currentSeasonRow.league_id}`);
+                  }
+                  setActiveTab('standings');
+                  setStandingsResetKey((k) => k + 1);
+                }}
+                aria-label="Go to current season standings"
+                title="Go to current season standings"
+              >
+                ⚽ EPL Fantasy League
+              </button>
+            </h1>
 
-          <div className="app-header-controls">
-            {seasons.length > 0 && (
+            <div className="app-header-top-right">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={theme === 'dark'}
+                className="theme-toggle"
+                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              >
+                <span className="theme-toggle-icon theme-toggle-icon-sun"><SunIcon /></span>
+                <span className="theme-toggle-icon theme-toggle-icon-moon"><MoonIcon /></span>
+                <span className="theme-toggle-thumb" />
+              </button>
+
+              <button
+                type="button"
+                className={`app-help-link ${activeTab === 'help' ? 'active' : ''}`}
+                onClick={() => setActiveTab('help')}
+                aria-label="Help"
+                title="Help"
+              >
+                ?
+              </button>
+            </div>
+          </div>
+
+          {seasons.length > 0 && (
+            <div className="app-header-row app-header-row-bottom">
               <select
                 className={`league-picker ${viewingHistory ? 'viewing-history' : ''}`}
                 value={selectedSeason ?? currentSeason ?? ''}
@@ -214,22 +233,8 @@ export default function App() {
                   </option>
                 ))}
               </select>
-            )}
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={theme === 'dark'}
-              className="theme-toggle"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              <span className="theme-toggle-icon theme-toggle-icon-sun"><SunIcon /></span>
-              <span className="theme-toggle-icon theme-toggle-icon-moon"><MoonIcon /></span>
-              <span className="theme-toggle-thumb" />
-            </button>
-          </div>
+            </div>
+          )}
         </div>
       </header>
 

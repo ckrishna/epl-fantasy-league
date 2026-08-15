@@ -195,21 +195,41 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* Two explicit rows rather than one flex-wrap row -- previously a single wrapping row
+   put the title+help on line 1 and the league picker+toggle crammed together on line 2
+   whenever the viewport was too narrow for one line, which read as cramped and grouped
+   controls (picker, toggle) that have nothing to do with each other. Now it's always
+   two deliberate rows, at every width: title + (toggle, help) on top, league/season
+   picker alone underneath, right-aligned. Confirmed via mobile screenshot feedback
+   (2026-08-15) that the single-row wrap felt compressed. */
 .app-header-inner {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.65rem 1rem;
+  flex-direction: column;
+  gap: 0.6rem;
   max-width: 1400px;
   margin: 0 auto;
   padding: 0.85rem clamp(0.75rem, 3vw, 1.5rem);
 }
 
-.app-header-controls {
+.app-header-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+}
+
+.app-header-row-top {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.app-header-row-bottom {
+  justify-content: flex-end;
+}
+
+.app-header-top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   flex-shrink: 0;
 }
 
@@ -323,18 +343,18 @@ body {
 }
 
 /* Help moved out of the main tab row (2026-08-12) -- at 5 tabs on a narrow phone,
-   labels ran together with nothing to mark where one ended and the next began; moving
-   Help up next to the title drops the row to 4, and Help itself doesn't really belong
-   as a peer of the season-scoped data tabs anyway. Small circular "?" icon, not text,
-   so it doesn't compete with the title for attention -- title still reads as the
-   primary heading. */
+   labels ran together with nothing to mark where one ended and the next began; Help
+   itself doesn't really belong as a peer of the season-scoped data tabs anyway. Small
+   circular "?" icon, not text, so it doesn't compete with the title for attention.
+   Repositioned (2026-08-15) from inline-after-title into .app-header-top-right,
+   alongside the theme toggle -- spacing now comes from that flex row's own gap, not a
+   margin here. */
 .app-help-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
-  margin-left: 0.5rem;
   border-radius: 50%;
   border: 1px solid var(--gray-300);
   background: none;
