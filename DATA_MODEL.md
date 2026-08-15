@@ -319,7 +319,7 @@ aws dynamodb create-table \
   --region us-west-2
 ```
 
-**Status:** `utils/groups.mjs` and `scripts/seed-default-group.mjs` built and unit-tested (`tests/groups.test.mjs`, 6 tests — slugify formatting, season dedup/sort, known-vs-unknown league_id attachment, blank-season skipping, group_id propagation). Tables not yet created and the seed script not yet run — next step is `aws dynamodb create-table` for both, then `npm run seed-default-group -- --name "Carpe Diem" --dry-run` to preview before writing. Rewiring Trends/standings to resolve identity through `people`/`group_seasons` (task #126) has not started.
+**Status:** live. Tables created, `seed-default-group.mjs` run for real 2026-08-14 (`--name "Carpe Diem"`) — wrote 1 `groups` row (`group_id: carpe-diem`) and 8 `group_seasons` rows, one per season we have data for: `2019/20`-`2024/25` with `league_id: null` (pre-dates real FPL league membership, reconstructed from the historical CSV import), `2025/26` with `league_id: 212889`, `2026/27` (current) with `league_id: 438107`. Rewiring Trends/standings to resolve identity through `people`/`group_seasons` (task #126) has not started.
 
 ---
 
