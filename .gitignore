@@ -26,6 +26,10 @@ npm-debug.log*
 response.json
 *-output.json
 
+# Raw table dumps from migrate-composite-standings-key.mjs's export mode -- real
+# production data (names, league membership), local-only, never committed.
+lambda/fpl-data-ingester/scripts/data/*-backup-*.json
+
 *.swp
 .idea/dd
 __pycache__/
