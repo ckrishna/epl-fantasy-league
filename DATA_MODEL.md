@@ -268,8 +268,8 @@ The targeted fix above treats `league_id`/`league_group_id` as primary and durab
 
 The redesign makes the durable concepts primary and the FPL-issued ids secondary/season-scoped:
 - **`people`** — a durable person, independent of any league or season.
-- **`groups`** (planned, not yet built) — a durable recurring group of managers (e.g. "Carpe Diem"), independent of any one season's `league_id`. Replaces `league_group_id`'s role as the thing a URL/UI actually navigates to.
-- **`group_seasons`** (planned, not yet built) — replaces `leagues` as the per-season join: `group_id` + `season_string`, with `league_id` nullable, since some historical seasons have no real FPL league_id at all (today's `leagues` table can't represent that, since `league_id` is its required partition key).
+- **`groups`** — a durable recurring group of managers (e.g. "Carpe Diem"), independent of any one season's `league_id`. Replaces `league_group_id`'s role as the thing a URL/UI actually navigates to.
+- **`group_seasons`** — replaces `leagues` as the per-season join: `group_id` + `season_string`, with `league_id` nullable, since some historical seasons have no real FPL league_id at all (today's `leagues` table can't represent that, since `league_id` is its required partition key).
 
 **Migration safety (explicit user requirement, since this touches live production data):** DynamoDB backups taken before any of this work started (confirmed done, 2026-08-14). New tables are purely additive — zero writes/mutations to any existing table (`fpl_entry_gameweek`, `fpl_entry_picks`, `fpl_league_standings`, `gw-winners-cache`, `leagues`, `seasons`). Work proceeds step by step with the existing test suite re-run and extended at each step, not all at once.
 
@@ -290,7 +290,36 @@ aws dynamodb create-table \
   --region us-west-2
 ```
 
-**Status:** `utils/people.mjs` and `scripts/backfill-people.mjs` built and unit-tested (`tests/people.test.mjs`, 7 tests — id stability, whitespace insensitivity, distinctness, id format, dedup+sort, blank-name skipping, custom nameField). `groups`, `group_seasons`, and rewiring Trends/standings to resolve identity through this layer are not yet built.
+**Status:** live. Table created, `backfill-people.mjs` run for real 2026-08-14 — wrote all 14 distinct managers seen across `fpl_entry_gameweek`'s full history (current league members plus historical-only names like Sunil Mathew and Vish Vass from the CSV import). `utils/people.mjs` has no callers yet outside its own script — `groups`/`group_seasons`/Trends rewiring (below) are the next steps that will actually read from it.
+
+#### `groups` and `group_seasons` (new, 2026-08-14)
+
+`groups` — partition key `group_id` (S). Fields: `name` (S, human-supplied display name), `source` (S), `created_at` (ISO, `if_not_exists`-protected).
+
+`group_seasons` — partition key `group_id` (S), sort key `season_string` (S). Fields: `league_id` (N, nullable), `source` (S), `added_at` (ISO, `if_not_exists`-protected).
+
+Written by `scripts/seed-default-group.mjs` (read-only scan of `fpl_entry_gameweek` for every distinct `season` it has real data for, plus a read-only scan of `seasons` for whichever seasons have a known `league_id`; writes only to `groups`/`group_seasons`). `utils/groups.mjs` holds the two pure, DB-free helpers the script uses: `slugify(name)` and `deriveGroupSeasons({groupId, seasonStrings, leagueIdBySeasonString})`.
+
+**`group_id` is a slug of a human-supplied name, unlike `person_id`.** A person's identity reduces cleanly to "their real name" — but a group's canonical display name (which of possibly several names a manager would recognize this league by) is a judgment call, not something safe to auto-derive from existing data. `seed-default-group.mjs` requires `--name` explicitly rather than guessing or defaulting silently; for our own league, that name is `"Carpe Diem"` (confirmed real — see the `fpl_entry_gameweek` "Partial recovery" note above, where the VAR Vault export for `league_id: 212889` is described as "our 'Carpe Diem' league").
+
+**Table creation** (run once, before `seed-default-group.mjs`):
+```
+aws dynamodb create-table \
+  --table-name groups \
+  --attribute-definitions AttributeName=group_id,AttributeType=S \
+  --key-schema AttributeName=group_id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-west-2
+
+aws dynamodb create-table \
+  --table-name group_seasons \
+  --attribute-definitions AttributeName=group_id,AttributeType=S AttributeName=season_string,AttributeType=S \
+  --key-schema AttributeName=group_id,KeyType=HASH AttributeName=season_string,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-west-2
+```
+
+**Status:** `utils/groups.mjs` and `scripts/seed-default-group.mjs` built and unit-tested (`tests/groups.test.mjs`, 6 tests — slugify formatting, season dedup/sort, known-vs-unknown league_id attachment, blank-season skipping, group_id propagation). Tables not yet created and the seed script not yet run — next step is `aws dynamodb create-table` for both, then `npm run seed-default-group -- --name "Carpe Diem" --dry-run` to preview before writing. Rewiring Trends/standings to resolve identity through `people`/`group_seasons` (task #126) has not started.
 
 ---
 
