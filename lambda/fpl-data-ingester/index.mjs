@@ -123,6 +123,33 @@ async function getLeagueManagers(leagueId) {
   }
 }
 
+// Resolves every league this ingestion run needs to cover (task #48) -- not just the
+// season's single primary league_id. primaryLeagueId (Carpe Diem, from the `seasons`
+// table) is always included even though it was never "registered" via
+// scripts/add-league.mjs -- it's the original, implicit default this whole schema was
+// built around, not a second-class citizen among registered leagues. Anything else
+// comes from the `leagues` table (see league-validation.mjs/add-league.mjs in
+// stats-api), scoped to this season and status 'active'.
+//
+// Falls back to just [primaryLeagueId] on any failure reading `leagues` -- a
+// registration-table hiccup should degrade to "ingest what we always ingested", not
+// take down the whole run.
+async function getRegisteredLeagueIds(season, primaryLeagueId) {
+  try {
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'leagues',
+      FilterExpression: 'season_string = :s AND #st = :active',
+      ExpressionAttributeNames: { '#st': 'status' },
+      ExpressionAttributeValues: { ':s': season, ':active': 'active' }
+    }));
+    const registered = (result.Items || []).map((item) => item.league_id);
+    return Array.from(new Set([primaryLeagueId, ...registered]));
+  } catch (err) {
+    logger.error('Failed to fetch registered leagues, falling back to primary league only', err);
+    return [primaryLeagueId];
+  }
+}
+
 async function getBootstrapStatic() {
   const startTime = Date.now();
   try {
@@ -399,11 +426,33 @@ export async function handler(event) {
       apiCallCount += 1;
     }
 
-    // Fetch managers
-    const managers = await getLeagueManagers(leagueId);
-    apiCallCount += 1;
+    // Fetch managers from every registered league for this season (task #48) -- the
+    // season's own primary league_id is always included; any additional leagues come
+    // from the `leagues` table. A manager can belong to more than one league (e.g. a
+    // manager in both Carpe Diem and a second league this season) -- entry_id is the
+    // same FPL account either way, so their gameweek/picks data below is fetched
+    // exactly ONCE regardless of how many leagues they're in (see the shared-tables
+    // reasoning in DATA_MODEL.md's "Multi-league targeted fix"). leagueIdsByEntryId
+    // tracks which league(s) each manager belongs to -- needed below to write one
+    // fpl_league_standings/gw-winners-cache row PER LEAGUE a manager is in, not just
+    // one row total.
+    const leagueIds = await getRegisteredLeagueIds(season, leagueId);
+    logger.info('Resolved registered leagues for this season', { leagueIds });
 
-    logger.info('Processing managers', { count: managers.length });
+    const managersByEntryId = new Map();
+    const leagueIdsByEntryId = new Map();
+    for (const lid of leagueIds) {
+      const leagueManagers = await getLeagueManagers(lid);
+      apiCallCount += 1;
+      for (const m of leagueManagers) {
+        if (!managersByEntryId.has(m.entry_id)) managersByEntryId.set(m.entry_id, m);
+        if (!leagueIdsByEntryId.has(m.entry_id)) leagueIdsByEntryId.set(m.entry_id, new Set());
+        leagueIdsByEntryId.get(m.entry_id).add(lid);
+      }
+    }
+    const managers = Array.from(managersByEntryId.values());
+
+    logger.info('Processing managers', { count: managers.length, leagues: leagueIds.length });
 
     // Process each manager
     for (const manager of managers) {
@@ -468,38 +517,48 @@ export async function handler(event) {
       gwsWithData[item.gameweek].push(item);
     }
     
+    // Winners are computed PER LEAGUE (task #48/#146), not once across every manager
+    // ingested for the season -- the "winner" of a gameweek depends on which roster
+    // you're comparing within, and two leagues can legitimately have different winners
+    // for the same gameweek. gwsWithData[gw] already holds every manager regardless of
+    // league (fpl_entry_gameweek is deliberately unscoped -- see the "Multi-league
+    // targeted fix" reasoning), so each league's subset is filtered from it via
+    // leagueIdsByEntryId rather than a second fetch. gameweek_league is the new
+    // composite sort key (see migrate-composite-standings-key.mjs) -- gameweek/
+    // league_id stay as ordinary flat attributes too, unchanged for any reader.
     let winnersCount = 0;
     for (const [gw, managersList] of Object.entries(gwsWithData)) {
-      const maxNetPoints = Math.max(...managersList.map(m => m.points_this_week - m.transfer_cost));
-      const winners = managersList.filter(m => m.points_this_week - m.transfer_cost === maxNetPoints);
-      
-      await dynamodb.send(new PutCommand({
-        TableName: 'gw-winners-cache',
-        Item: {
-          season,
-          gameweek: parseInt(gw),
-          // Added 2026-08-14 (multi-league foundation): additive only, no key change.
-          // Lets a read scoped to a specific league exclude another league's rows once
-          // more than one exists for the same season -- see queryLeagueStandings/
-          // getGWWinners in stats-api/utils/dynamodb.mjs, which treat a missing
-          // league_id (every row written before this) as "no ambiguity, keep it".
-          league_id: leagueId,
-          winners: winners.map(w => ({
-            entry_id: w.entry_id,
-            real_name: w.real_name,
-            team_nickname: w.team_nickname,
-            net_points: w.points_this_week - w.transfer_cost,
-            gross_points: w.points_this_week,
-            transfer_cost: w.transfer_cost
-          })),
-          is_current: false,
-          last_synced: new Date().toISOString()
-        }
-      }));
-      winnersCount += 1;
-      dbWriteCount += 1;
+      for (const lid of leagueIds) {
+        const leagueManagersList = managersList.filter((m) => leagueIdsByEntryId.get(m.entry_id)?.has(lid));
+        if (leagueManagersList.length === 0) continue;
+
+        const maxNetPoints = Math.max(...leagueManagersList.map(m => m.points_this_week - m.transfer_cost));
+        const winners = leagueManagersList.filter(m => m.points_this_week - m.transfer_cost === maxNetPoints);
+
+        await dynamodb.send(new PutCommand({
+          TableName: 'gw-winners-cache',
+          Item: {
+            season,
+            gameweek: parseInt(gw),
+            gameweek_league: `${gw}#${lid}`,
+            league_id: lid,
+            winners: winners.map(w => ({
+              entry_id: w.entry_id,
+              real_name: w.real_name,
+              team_nickname: w.team_nickname,
+              net_points: w.points_this_week - w.transfer_cost,
+              gross_points: w.points_this_week,
+              transfer_cost: w.transfer_cost
+            })),
+            is_current: false,
+            last_synced: new Date().toISOString()
+          }
+        }));
+        winnersCount += 1;
+        dbWriteCount += 1;
+      }
     }
-    
+
     logger.info('Winners cached', { gameweeks: winnersCount });
 
     // Calculate and store cumulative standings
@@ -508,7 +567,9 @@ let standingsCount = 0;
 
 for (const manager of managers) {
   try {
-    // Query all gameweek records for this manager
+    // Query all gameweek records for this manager -- done ONCE per manager regardless
+    // of how many leagues they're in (task #48), since the underlying fact (their
+    // latest total_points) doesn't depend on which league is asking.
     const result = await dynamodb.send(new ScanCommand({
       TableName: 'fpl_entry_gameweek',
       FilterExpression: 'season_entry = :se',
@@ -523,30 +584,37 @@ for (const manager of managers) {
         return bGW - aGW;
       })[0];
 
-    const totalPoints = latestRecord 
+    const totalPoints = latestRecord
       ? parseInt(latestRecord.points_total?.N || latestRecord.points_total || 0)
       : 0;
 
-    // Store in standings
-    await dynamodb.send(new PutCommand({
-      TableName: 'fpl_league_standings',
-      Item: {
-        season_event: `${season}#${activeGW}`,
-        manager_id: manager.entry_id,
-        real_name: manager.real_name,
-        team_nickname: manager.team_nickname,
-        // See the matching comment on gw-winners-cache above -- same additive,
-        // no-key-change addition, same reasoning.
-        league_id: leagueId,
-        total_points: totalPoints,
-        points_this_week: latestRecord ? parseInt(latestRecord.points_this_week || 0) : 0,  // ← ADD
-        transfer_cost: latestRecord ? parseInt(latestRecord.transfer_cost || 0) : 0,       // ← ADD
-        last_synced: new Date().toISOString()
-      }
-    }));
+    // One row PER LEAGUE this manager belongs to (task #48/#145) -- league_manager is
+    // the new composite sort key ({league_id}#{entry_id}, see
+    // migrate-composite-standings-key.mjs), so a manager in two leagues gets two rows
+    // instead of one row whose league_id got overwritten by whichever league synced
+    // last. manager_id/league_id stay as ordinary flat attributes too, unchanged for
+    // any reader (queryLeagueStandings never conditions on the sort key value itself).
+    const managerLeagueIds = leagueIdsByEntryId.get(manager.entry_id) || new Set([leagueId]);
+    for (const lid of managerLeagueIds) {
+      await dynamodb.send(new PutCommand({
+        TableName: 'fpl_league_standings',
+        Item: {
+          season_event: `${season}#${activeGW}`,
+          league_manager: `${lid}#${manager.entry_id}`,
+          manager_id: manager.entry_id,
+          real_name: manager.real_name,
+          team_nickname: manager.team_nickname,
+          league_id: lid,
+          total_points: totalPoints,
+          points_this_week: latestRecord ? parseInt(latestRecord.points_this_week || 0) : 0,
+          transfer_cost: latestRecord ? parseInt(latestRecord.transfer_cost || 0) : 0,
+          last_synced: new Date().toISOString()
+        }
+      }));
 
-    standingsCount += 1;
-    dbWriteCount += 1;
+      standingsCount += 1;
+      dbWriteCount += 1;
+    }
   } catch (err) {
     logger.error(`Failed to calculate standings for ${manager.team_nickname}`, err);
   }
@@ -562,6 +630,7 @@ logger.info('Standings calculated and stored', { count: standingsCount });
       api_calls: apiCallCount,
       db_writes: dbWriteCount,
       managers: managers.length,
+      leagues_processed: leagueIds.length,
       gameweeks: gwsToFetch.length,
   standings: standingsCount,  // ← Add this
       rate_limited: rateLimitedCount,
@@ -584,6 +653,7 @@ logger.info('Standings calculated and stored', { count: standingsCount });
         api_calls: apiCallCount,
         db_writes: dbWriteCount,
         managers: managers.length,
+        leagues_processed: leagueIds.length,
         gameweeks: gwsToFetch.length,
         standings: standingsCount,
         // Counts default to 0 on every run (not omitted when zero) so a glance at
