@@ -6,6 +6,7 @@ import {
   getAllSeasons,
   getLatestStoredGameweek,
   queryLeagueStandings,
+  getLeagueRoster,
   dynamodb,
   FPL_API,
   FPL_FETCH_HEADERS
@@ -149,14 +150,21 @@ async function getSeasonTotalsForPlayers(seasonId) {
   }
 }
 
-async function getOurLeaguePicks(gw) {
+// rosterEntryIds (added 2026-08-15, task #141): an optional Set of entry_ids (as
+// strings -- see getLeagueRoster) to scope this to one specific league now that
+// fpl_entry_picks can hold more than one league's rows for the same season/gameweek.
+// null (the default) means "no scoping", the exact pre-existing behavior -- every
+// caller that hasn't been updated, or any season with no resolvable league_id, keeps
+// working unfiltered.
+async function getOurLeaguePicks(gw, rosterEntryIds = null) {
   try {
     const result = await dynamodb.send(new ScanCommand({
       TableName: 'fpl_entry_picks',
       FilterExpression: 'gameweek = :gw',
       ExpressionAttributeValues: { ':gw': gw }
     }));
-    return result.Items || [];
+    const items = result.Items || [];
+    return rosterEntryIds ? items.filter((row) => rosterEntryIds.has(String(row.entry_id))) : items;
   } catch (err) {
     console.error('Error fetching our picks:', err);
     return [];
@@ -182,7 +190,9 @@ async function getOurLeaguePicks(gw) {
 // the nickname, present on live rows and null on historical imports. Gating on the
 // nickname alone (the old behavior, before the 2026-08-14 rename) meant no historical
 // gameweek could ever resolve a name here at all.
-async function getManagerNamesForGW(gw, season) {
+// rosterEntryIds: see getOurLeaguePicks's comment -- same optional scoping, same
+// null-means-unfiltered default.
+async function getManagerNamesForGW(gw, season, rosterEntryIds = null) {
   try {
     const result = await dynamodb.send(new ScanCommand({
       TableName: 'fpl_entry_gameweek',
@@ -191,6 +201,7 @@ async function getManagerNamesForGW(gw, season) {
     }));
     const nameByEntryId = new Map();
     for (const row of result.Items || []) {
+      if (rosterEntryIds && !rosterEntryIds.has(String(row.entry_id))) continue;
       if (row.entry_id != null && row.real_name) {
         nameByEntryId.set(row.entry_id, formatManagerDisplay(row.real_name, row.team_nickname));
       }
@@ -215,7 +226,11 @@ async function getManagerNamesForGW(gw, season) {
 // transfers_made/transfer_cost per gameweek, not player-level transfer history, so
 // "who made the most transfers" is answerable but "who made the BEST transfers" still
 // isn't -- that would need a real transfer-log table (out of scope, not what exists).
-async function getManagerSeasonAggregates(season) {
+// rosterEntryIds: see getOurLeaguePicks's comment -- same optional scoping, same
+// null-means-unfiltered default. Applied to both source scans before any aggregation,
+// so a second league's managers never enter the season_total_points/chips/etc math at
+// all, not just get filtered out of the final display.
+async function getManagerSeasonAggregates(season, rosterEntryIds = null) {
   try {
     const [gwResult, picksResult] = await Promise.all([
       dynamodb.send(new ScanCommand({
@@ -230,8 +245,12 @@ async function getManagerSeasonAggregates(season) {
       }))
     ]);
 
-    const gwRows = gwResult.Items || [];
-    const pickRows = picksResult.Items || [];
+    const gwRows = rosterEntryIds
+      ? (gwResult.Items || []).filter((row) => rosterEntryIds.has(String(row.entry_id)))
+      : (gwResult.Items || []);
+    const pickRows = rosterEntryIds
+      ? (picksResult.Items || []).filter((row) => rosterEntryIds.has(String(row.entry_id)))
+      : (picksResult.Items || []);
 
     // Keyed by real_name (the real-name field, populated on every row -- see
     // formatManagerDisplay's comment), NOT team_nickname. Keying by the nickname (the
@@ -336,7 +355,10 @@ async function getManagerSeasonAggregates(season) {
 // "best captain PICKS" literally asks for -- confirmed live: a manager leading on
 // captain_points_season this season may simply have played more gameweeks, not
 // necessarily made the sharpest individual calls.
-async function getTopCaptainPicks(season, limit = 10) {
+// rosterEntryIds: see getOurLeaguePicks's comment -- same optional scoping, same
+// null-means-unfiltered default. Applied to both the name-join scan and the picks scan,
+// so a second league's captain picks never enter the best/worst ranking at all.
+async function getTopCaptainPicks(season, limit = 10, rosterEntryIds = null) {
   try {
     const [gwResult, picksResult] = await Promise.all([
       dynamodb.send(new ScanCommand({
@@ -356,12 +378,16 @@ async function getTopCaptainPicks(season, limit = 10) {
     // could never resolve a name here (null on every historical row).
     const nameByEntryId = new Map();
     for (const row of gwResult.Items || []) {
+      if (rosterEntryIds && !rosterEntryIds.has(String(row.entry_id))) continue;
       if (row.entry_id != null && row.real_name) {
         nameByEntryId.set(row.entry_id, formatManagerDisplay(row.real_name, row.team_nickname));
       }
     }
 
-    const picks = (picksResult.Items || [])
+    const picksSource = rosterEntryIds
+      ? (picksResult.Items || []).filter((row) => rosterEntryIds.has(String(row.entry_id)))
+      : (picksResult.Items || []);
+    const picks = picksSource
       .filter((row) => row.is_captain)
       .map((row) => {
         // Raw per-player score -- same field storePicks writes for every pick, not
@@ -603,13 +629,16 @@ function computeOwnershipAggregates(picks, nameByEntryId) {
 // player_event_stats/fpl_entry_gameweek (e.g. the GW26 outage in DATA_MODEL.md), so the
 // gameweek genbi.mjs already resolved for player data isn't guaranteed to have a
 // standings row.
-async function getCurrentStandings(gw, season) {
+// leagueId (added 2026-08-15, task #142): queryLeagueStandings already supports this
+// filter (used by handleStandings for the dashboard's own Standings page) -- GenBI just
+// never passed one before. null keeps the pre-existing unfiltered behavior.
+async function getCurrentStandings(gw, season, leagueId = null) {
   try {
     let targetGw = gw;
-    let standings = await queryLeagueStandings(targetGw, season);
+    let standings = await queryLeagueStandings(targetGw, season, leagueId);
     while ((!standings || standings.length === 0) && targetGw > 1) {
       targetGw -= 1;
-      standings = await queryLeagueStandings(targetGw, season);
+      standings = await queryLeagueStandings(targetGw, season, leagueId);
     }
     return (standings || [])
       .slice()
@@ -638,6 +667,13 @@ async function resolveSeasonContext(requestedSeason) {
   const isHistorical = targetSeason !== currentSeason;
 
   let seasonId;
+  // seasonLeagueId (added 2026-08-15, task #140): the season's own primary league_id,
+  // read straight off its `seasons` row -- the default GenBI scopes to whenever the
+  // request doesn't explicitly ask for a different one. null for any season that
+  // predates the 2026-07-30 league_id field (or a historical season that never had a
+  // real FPL league, per DATA_MODEL.md's group_seasons notes) -- exactly the same "no
+  // scoping" case getLeagueRoster already handles.
+  let seasonLeagueId = null;
   if (isHistorical) {
     const allSeasons = await getAllSeasons();
     const match = allSeasons.find((s) => s.season_string === targetSeason);
@@ -645,15 +681,16 @@ async function resolveSeasonContext(requestedSeason) {
       throw new Error(`Unknown season: ${targetSeason}`);
     }
     seasonId = match.season_id;
+    seasonLeagueId = match.league_id ?? null;
   } else {
-    ({ seasonId } = await getCurrentSeasonInfo());
+    ({ seasonId, leagueId: seasonLeagueId } = await getCurrentSeasonInfo());
   }
 
   const gw = isHistorical
     ? await getLatestStoredGameweek(targetSeason)
     : await getActiveGameweek();
 
-  return { season: targetSeason, seasonId, gw, isHistorical };
+  return { season: targetSeason, seasonId, gw, isHistorical, seasonLeagueId };
 }
 
 /**
@@ -661,8 +698,8 @@ async function resolveSeasonContext(requestedSeason) {
  * Resolves mid-season transfers and calculates recent form logic.
  */
 export async function handleGenBI(body, corsHeaders) {
-  const { question, season: requestedSeason } = body;
-  
+  const { question, season: requestedSeason, league_id: requestedLeagueId } = body;
+
   if (!question) {
     return {
       statusCode: 400,
@@ -691,7 +728,16 @@ export async function handleGenBI(body, corsHeaders) {
       };
     }
 
-    const { season, seasonId, gw, isHistorical } = await resolveSeasonContext(requestedSeason);
+    const { season, seasonId, gw, isHistorical, seasonLeagueId } = await resolveSeasonContext(requestedSeason);
+
+    // Multi-league scoping (added 2026-08-15, task #140/#48): an explicit league_id on
+    // the request wins (the frontend threads through whichever league is currently on
+    // screen -- see Stats.jsx); otherwise default to the season's own primary
+    // league_id, so every EXISTING caller that never sends one keeps scoping to exactly
+    // the league it always implicitly meant. null (no league_id resolvable at all --
+    // true for any season that predates the 2026-07-30 league_id field) falls back to
+    // today's totally-unscoped behavior, unchanged.
+    const leagueId = requestedLeagueId ?? seasonLeagueId ?? null;
 
     // Deterministic (non-model) router: decides which of the 6 context fields this
     // question actually needs, so we don't fetch/send all of them on every question
@@ -711,6 +757,18 @@ export async function handleGenBI(body, corsHeaders) {
     // over, where "next gameweek" has no meaning (mirrors manager-squad.mjs's identical
     // current-season-only restriction on its own fixtures/form view).
     const needsNextGwProjections = fields.nextGwStrategy && !isHistorical;
+    // Roster scoping only matters for the four functions that read fpl_entry_gameweek/
+    // fpl_entry_picks season-wide (neither table carries its own league_id -- see
+    // getLeagueRoster's comment) -- no point scanning fpl_league_standings for a roster
+    // nothing downstream will use it for.
+    const needsRoster = leagueId != null && (fields.managerStats || fields.managerPicks || fields.ownership || fields.topCaptainPicks);
+
+    // Fetched ahead of the main Promise.all below (not inside it) since several of
+    // those fetches need the resolved roster Set as an input, not just another
+    // independent parallel fetch -- one extra small Scan, cheap relative to what it
+    // protects (see getLeagueRoster's own comment for why an empty result means "don't
+    // scope" rather than "exclude everyone").
+    const leagueRoster = needsRoster ? await getLeagueRoster(leagueId, season) : null;
 
     // Check for authoritative (FPL-sourced) season totals first -- cheap lookup. Only
     // fall back to the expensive full-season player_event_stats scan (below) if nothing
@@ -720,17 +778,17 @@ export async function handleGenBI(body, corsHeaders) {
 
     // 1. Fetch only what the router decided is relevant, in parallel
     const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks, nextGwProjections] = await Promise.all([
-      needsGwWinners ? getGWWinners(season) : Promise.resolve([]),
+      needsGwWinners ? getGWWinners(season, leagueId) : Promise.resolve([]),
       fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
-      (fields.managerPicks || fields.ownership) ? getOurLeaguePicks(gw) : Promise.resolve([]),
+      (fields.managerPicks || fields.ownership) ? getOurLeaguePicks(gw, leagueRoster) : Promise.resolve([]),
       needsTeamMap ? getAllTeamsForSeason(seasonId) : Promise.resolve({}),
       fields.seasonTotals
         ? (authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId))
         : Promise.resolve([]),
-      fields.standings ? getCurrentStandings(gw, season) : Promise.resolve([]),
-      fields.managerStats ? getManagerSeasonAggregates(season) : Promise.resolve([]),
-      needsManagerNames ? getManagerNamesForGW(gw, season) : Promise.resolve(new Map()),
-      fields.topCaptainPicks ? getTopCaptainPicks(season) : Promise.resolve({ best: [], worst: [] }),
+      fields.standings ? getCurrentStandings(gw, season, leagueId) : Promise.resolve([]),
+      fields.managerStats ? getManagerSeasonAggregates(season, leagueRoster) : Promise.resolve([]),
+      needsManagerNames ? getManagerNamesForGW(gw, season, leagueRoster) : Promise.resolve(new Map()),
+      fields.topCaptainPicks ? getTopCaptainPicks(season, 10, leagueRoster) : Promise.resolve({ best: [], worst: [] }),
       needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null)
     ]);
 

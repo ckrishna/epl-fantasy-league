@@ -37,7 +37,10 @@ export async function getCurrentSeasonInfo() {
 
   if (result.Items && result.Items.length > 0) {
     const item = result.Items[0];
-    return { season: item.season_string, seasonId: item.season_id };
+    // leagueId added 2026-08-15 so callers (GenBI's multi-league scoping) can resolve
+    // "which league is this season's default" without a second scan -- additive, every
+    // existing caller destructures only { season, seasonId } and ignores the rest.
+    return { season: item.season_string, seasonId: item.season_id, leagueId: item.league_id ?? null };
   }
   throw new Error('No current season found in seasons table');
 }
@@ -73,6 +76,51 @@ export async function getGWWinners(season, leagueId = null) {
     ExpressionAttributeValues: { ':s': currentSeason }
   }));
   return filterByLeagueId(result.Items || [], leagueId);
+}
+
+// Resolves the set of entry_ids belonging to a given league_id for a season -- the join
+// key GenBI's season-wide aggregate functions need now that a second league (added
+// 2026-08-15, task #48/#139) can share the same season's fpl_entry_gameweek/
+// fpl_entry_picks data. Those two tables deliberately never got their own league_id
+// column (see DATA_MODEL.md's "Multi-league targeted fix" -- a manager's raw GW score is
+// the same fact regardless of which league is asking), so there's no way to filter them
+// directly; fpl_league_standings is the one table that already carries league_id, and
+// its sort key `manager_id` is written straight from `manager.entry_id` by the ingester
+// (see index.mjs's storeStandings) -- same underlying FPL id, different attribute name
+// on this one table.
+//
+// Scans the whole season (every stored gameweek), not a single gameweek's Query like
+// queryLeagueStandings -- membership shouldn't depend on which gameweek happened to be
+// picked, and collecting the union across every stored gameweek is the safer read if a
+// manager's row is ever missing from one particular gameweek.
+//
+// Deliberately does NOT reuse filterByLeagueId's "keep if league_id is null" passthrough
+// -- that's the right call for DISPLAYING an ambiguous pre-multi-league row (nothing to
+// exclude it for), but the wrong call here: a roster is being used to positively include
+// managers in one specific league's aggregates, and an ambiguous row has no business
+// being confidently attributed to any one league. In practice this only matters for
+// seasons predating the 2026-08-14 league_id stamping -- 2026/27 onward, every row
+// already carries a real league_id.
+//
+// Returns null (meaning "no scoping, keep today's full-table behavior") when leagueId is
+// null/undefined, or when nothing was found at all for that league+season -- an empty
+// roster almost certainly means the data isn't there yet (a league registered but not
+// yet backfilled, or a genuinely empty pre-season standings table), not that zero people
+// should see any data. Silently excluding every manager from GenBI would be a much worse
+// failure mode than briefly falling back to unscoped behavior.
+export async function getLeagueRoster(leagueId, season) {
+  if (leagueId == null) return null;
+  const currentSeason = season || await getCurrentSeason();
+  const result = await dynamodb.send(new ScanCommand({
+    TableName: 'fpl_league_standings',
+    FilterExpression: 'begins_with(season_event, :prefix)',
+    ExpressionAttributeValues: { ':prefix': `${currentSeason}#` }
+  }));
+  const matching = (result.Items || []).filter(
+    (row) => row.league_id != null && String(row.league_id) === String(leagueId)
+  );
+  const entryIds = new Set(matching.map((row) => String(row.manager_id)));
+  return entryIds.size > 0 ? entryIds : null;
 }
 
 // Returns every row in the `seasons` table (not just the current one), newest first.
