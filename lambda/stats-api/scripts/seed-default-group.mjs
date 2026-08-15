@@ -51,7 +51,7 @@ async function main() {
 
   console.log('Scanning fpl_entry_gameweek for distinct seasons (read-only)...');
   const gwRows = await scanAll('fpl_entry_gameweek');
-  const seasonStrings = gwRows.map((r) => r.season).filter(Boolean);
+  const gwSeasonStrings = gwRows.map((r) => r.season).filter(Boolean);
 
   console.log('Scanning seasons for known league_ids (read-only)...');
   const seasonRows = await scanAll('seasons');
@@ -61,6 +61,12 @@ async function main() {
       leagueIdBySeasonString[row.season_string] = row.league_id;
     }
   }
+  // Union with fpl_entry_gameweek's seasons, not just a league_id lookup: the CURRENT
+  // season can have a real league_id in `seasons` before its first gameweek has been
+  // ingested (e.g. pre-season / GW1 not yet complete), and that season should still show
+  // up in group_seasons rather than silently waiting for its first row to exist.
+  const seasonRowStrings = seasonRows.map((r) => r.season_string).filter(Boolean);
+  const seasonStrings = [...gwSeasonStrings, ...seasonRowStrings];
 
   const groupId = slugify(name);
   const groupSeasons = deriveGroupSeasons({ groupId, seasonStrings, leagueIdBySeasonString });
