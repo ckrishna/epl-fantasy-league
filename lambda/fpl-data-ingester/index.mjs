@@ -146,18 +146,37 @@ const response = await fetch(`${FPL_API}/bootstrap-static/`, {
   }
 }
 
-async function getManagerPicksForGW(entryId, gw) {
+// Returns { data, status } instead of just the parsed body -- a bare `null` used to
+// mean both "FPL says this manager genuinely has no picks yet" (a normal 404, e.g. a
+// manager who joined mid-season) AND "FPL is rejecting/erroring on this request" (429
+// rate-limited, or a 5xx), with zero way for the caller to tell them apart. That
+// silently swallowed real rate-limit hits as if they were routine empty results (see
+// DATA_MODEL.md's ingester rate-limit-visibility notes, 2026-08-15).
+//
+// Retries ONCE on a 429 after a short backoff -- a single manager getting rate-limited
+// shouldn't have to wait for the next scheduled run to recover. Nothing else is
+// retried: a 404 is FPL's normal, expected "nothing here yet" response, and retrying a
+// persistent 5xx would just burn time without fixing anything.
+async function getManagerPicksForGW(entryId, gw, { retryOn429 = true } = {}) {
   try {
-const response = await fetch(`${FPL_API}/entry/${entryId}/event/${gw}/picks/`, {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-  }
-});
-    if (!response.ok) return null;
-    return await response.json();
+    const response = await fetch(`${FPL_API}/entry/${entryId}/event/${gw}/picks/`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (response.status === 429 && retryOn429) {
+      logger.error('Rate limited fetching picks, retrying once', { entry_id: entryId, gw });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return getManagerPicksForGW(entryId, gw, { retryOn429: false });
+    }
+
+    if (!response.ok) return { data: null, status: response.status };
+    const data = await response.json();
+    return { data, status: response.status };
   } catch (err) {
     logger.error(`Failed to fetch picks for entry ${entryId} GW ${gw}`, err);
-    return null;
+    return { data: null, status: null };
   }
 }
 
@@ -295,6 +314,13 @@ export async function handler(event) {
   const startedAt = new Date(runStartTime).toISOString();
   let apiCallCount = 0;
   let dbWriteCount = 0;
+  // Counted separately from the normal "no data" case so a rate-limit episode shows up
+  // as a glance-able number in ingestion_runs instead of requiring a CloudWatch Logs
+  // search. rateLimitedCount is still-429-after-retry; unexpectedStatusCount is any
+  // other non-ok, non-404 status (5xx, 403, etc.) -- also not FPL's normal empty
+  // result, but not the specific rate-limit case either.
+  let rateLimitedCount = 0;
+  let unexpectedStatusCount = 0;
   // Declared outside the try block so the catch handler can still report which
   // season a failed run was for, if it got far enough to resolve one.
   let season;
@@ -362,11 +388,29 @@ export async function handler(event) {
       logger.info(`Starting manager: ${manager.team_nickname}`);
 
       for (const gw of gwsToFetch) {
-        const picksData = await getManagerPicksForGW(manager.entry_id, gw.id);
+        const { data: picksData, status } = await getManagerPicksForGW(manager.entry_id, gw.id);
         apiCallCount += 1;
 
         if (!picksData || !picksData.entry_history) {
-          logger.info(`No data for GW ${gw.id}`, { manager: manager.team_nickname });
+          // Three distinct cases, previously all logged identically as "no data":
+          // still-429-after-retry (a real rate-limit hit), some other unexpected
+          // non-ok status (5xx/403/etc.), or FPL's normal 404 "nothing here yet".
+          // The pause below now ALWAYS runs regardless of which branch this takes --
+          // it used to be skipped entirely on any failure (this `continue` used to
+          // come before the throttle delay), which meant a rate-limited run would
+          // speed up instead of backing off. Longest pause on a still-failing 429.
+          if (status === 429) {
+            rateLimitedCount += 1;
+            logger.error('Still rate limited after retry', { manager: manager.team_nickname, entry_id: manager.entry_id, gw: gw.id });
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } else if (status !== 404 && status !== null) {
+            unexpectedStatusCount += 1;
+            logger.error(`Unexpected status ${status} fetching picks`, { manager: manager.team_nickname, entry_id: manager.entry_id, gw: gw.id });
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } else {
+            logger.info(`No data for GW ${gw.id}`, { manager: manager.team_nickname, status });
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
           continue;
         }
 
@@ -493,12 +537,17 @@ logger.info('Standings calculated and stored', { count: standingsCount });
       db_writes: dbWriteCount,
       managers: managers.length,
       gameweeks: gwsToFetch.length,
-  standings: standingsCount  // ← Add this
+  standings: standingsCount,  // ← Add this
+      rate_limited: rateLimitedCount,
+      unexpected_status: unexpectedStatusCount
     });
-    
+
     logger.metric('ingestion_duration', totalDuration, 'ms');
     logger.metric('api_calls_total', apiCallCount, 'requests');
     logger.metric('db_writes_total', dbWriteCount, 'items');
+    if (rateLimitedCount > 0) {
+      logger.metric('rate_limited_total', rateLimitedCount, 'requests');
+    }
 
     await recordIngestionRun({
       event,
@@ -510,7 +559,12 @@ logger.info('Standings calculated and stored', { count: standingsCount });
         db_writes: dbWriteCount,
         managers: managers.length,
         gameweeks: gwsToFetch.length,
-        standings: standingsCount
+        standings: standingsCount,
+        // Both default to 0 on every run (not omitted when zero) so a glance at
+        // ingestion_runs never has to distinguish "never checked" from "checked,
+        // zero hits" -- see the ingester rate-limit-visibility notes in DATA_MODEL.md.
+        rate_limited_count: rateLimitedCount,
+        unexpected_status_count: unexpectedStatusCount
       }
     });
 
