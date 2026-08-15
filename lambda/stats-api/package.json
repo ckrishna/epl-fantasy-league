@@ -8,7 +8,8 @@
     "eval:genbi": "node scripts/eval-genbi-live.mjs",
     "add-league": "node scripts/add-league.mjs",
     "backfill-people": "node scripts/backfill-people.mjs",
-    "seed-default-group": "node scripts/seed-default-group.mjs"
+    "seed-default-group": "node scripts/seed-default-group.mjs",
+    "migrate-identity-field-names": "node scripts/migrate-identity-field-names.mjs"
   },
   "keywords": [],
   "author": "",
