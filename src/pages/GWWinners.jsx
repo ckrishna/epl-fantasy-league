@@ -44,8 +44,8 @@ function GWDetail({ gameweek, season, leagueId }) {
         <thead>
           <tr>
             <th>Rank</th>
-            <th className="desktop-only">Team</th>
-            <th>Manager</th>
+            <th className="desktop-only">Manager</th>
+            <th>Team</th>
             <th className="desktop-only">Gross Points</th>
             <th className="desktop-only">Transfer Cost</th>
             <th>Net Total</th>
@@ -190,8 +190,8 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
           <thead>
             <tr>
               <th>GW</th>
-              <th className="desktop-only">Team</th>
-              <th>Manager</th>
+              <th className="desktop-only">Manager</th>
+              <th>Team</th>
               <th className="desktop-only">Gross Points</th>
               <th className="desktop-only">Transfer Cost</th>
               <th>Net Total</th>
