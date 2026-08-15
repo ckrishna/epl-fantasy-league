@@ -18,7 +18,7 @@ const SEASON_CURRENT = '2025/26';
 // handleTrendsManagers sources the current roster the exact same way handleStandings()
 // does: getActiveGameweek() (a live bootstrap-static fetch, mocked here) +
 // queryLeagueStandings() against fpl_league_standings, which the ingester populates
-// from the live FPL roster on every run. `names` becomes each row's `team_name` --
+// from the live FPL roster on every run. `names` becomes each row's `real_name` --
 // the field the ingester actually writes (see index.mjs's fpl_league_standings
 // PutCommand), at the gameweek reported as current.
 function mockActiveGwFetch(gw = 6) {
@@ -30,18 +30,18 @@ function mockActiveGwFetch(gw = 6) {
   });
 }
 
-function standingsRow(team_name, { gw = 6, manager_name = null } = {}) {
-  return { season_event: `${SEASON_CURRENT}#${gw}`, team_name, manager_name, total_points: 0, points_this_week: 0, transfer_cost: 0 };
+function standingsRow(real_name, { gw = 6, team_nickname = null } = {}) {
+  return { season_event: `${SEASON_CURRENT}#${gw}`, real_name, team_nickname, total_points: 0, points_this_week: 0, transfer_cost: 0 };
 }
 
-function gwRow({ season, entry_id, gameweek, points_total, team_name, manager_name = null }) {
+function gwRow({ season, entry_id, gameweek, points_total, real_name, team_nickname = null }) {
   return {
     season_entry: `${season}#${entry_id}`,
     gameweek,
     entry_id,
     season,
-    team_name,
-    manager_name,
+    real_name,
+    team_nickname,
     points_total,
     points_this_week: 50,
     transfer_cost: 0
@@ -58,12 +58,12 @@ function gwRow({ season, entry_id, gameweek, points_total, team_name, manager_na
 function buildFixtureRows() {
   const rows = [];
   for (let gw = 1; gw <= 12; gw++) {
-    rows.push(gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: gw, points_total: gw * 50, team_name: 'Alice Smith' }));
-    rows.push(gwRow({ season: SEASON_PAST, entry_id: 2, gameweek: gw, points_total: gw * 40, team_name: 'Bob Jones' }));
+    rows.push(gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: gw, points_total: gw * 50, real_name: 'Alice Smith' }));
+    rows.push(gwRow({ season: SEASON_PAST, entry_id: 2, gameweek: gw, points_total: gw * 40, real_name: 'Bob Jones' }));
   }
   for (let gw = 1; gw <= 6; gw++) {
-    rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: gw, points_total: gw * 60, team_name: 'Alice Smith', manager_name: "Alice's Aces" }));
-    rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 3, gameweek: gw, points_total: gw * 45, team_name: 'Carol White', manager_name: "Carol's Crew" }));
+    rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: gw, points_total: gw * 60, real_name: 'Alice Smith', team_nickname: "Alice's Aces" }));
+    rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 3, gameweek: gw, points_total: gw * 45, real_name: 'Carol White', team_nickname: "Carol's Crew" }));
   }
   return rows;
 }
@@ -108,8 +108,8 @@ function mockScan(rows, standingsAtGw = new Map(), groupSeasonRows = []) {
 
 test('handleTrendsManagers dedupes by real name and fills in a nickname when one exists', async () => {
   const dynamoMock = mockScan(buildFixtureRows(), new Map([[6, [
-    standingsRow('Alice Smith', { manager_name: "Alice's Aces" }),
-    standingsRow('Carol White', { manager_name: "Carol's Crew" })
+    standingsRow('Alice Smith', { team_nickname: "Alice's Aces" }),
+    standingsRow('Carol White', { team_nickname: "Carol's Crew" })
   ]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
@@ -120,8 +120,8 @@ test('handleTrendsManagers dedupes by real name and fills in a nickname when one
     // only ever played the past season and never rejoined, so he's excluded (see next
     // test).
     assert.strictEqual(body.managers.length, 2);
-    const alice = body.managers.find((m) => m.team_name === 'Alice Smith');
-    assert.strictEqual(alice.manager_name, "Alice's Aces");
+    const alice = body.managers.find((m) => m.real_name === 'Alice Smith');
+    assert.strictEqual(alice.team_nickname, "Alice's Aces");
   } finally {
     dynamoMock.restore();
     fetchMock.restore();
@@ -139,7 +139,7 @@ test('handleTrendsManagers excludes a manager not in the current fpl_league_stan
   try {
     const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
-    const bob = body.managers.find((m) => m.team_name === 'Bob Jones');
+    const bob = body.managers.find((m) => m.real_name === 'Bob Jones');
     assert.strictEqual(bob, undefined);
   } finally {
     dynamoMock.restore();
@@ -156,18 +156,18 @@ test('handleTrendsManagers includes a manager who is on the roster but has zero 
   // that scan to begin with. The fix builds the list directly from fpl_league_standings
   // instead, which has no such dependency.
   const dynamoMock = mockScan(buildFixtureRows(), new Map([[6, [
-    standingsRow('Alice Smith', { manager_name: "Alice's Aces" }),
-    standingsRow('Carol White', { manager_name: "Carol's Crew" }),
-    standingsRow('Dana Newcomer', { manager_name: 'Fresh Start FC' })
+    standingsRow('Alice Smith', { team_nickname: "Alice's Aces" }),
+    standingsRow('Carol White', { team_nickname: "Carol's Crew" }),
+    standingsRow('Dana Newcomer', { team_nickname: 'Fresh Start FC' })
   ]]]));
   const fetchMock = mockActiveGwFetch(6);
   try {
     const result = await handleTrendsManagers({}, {});
     const body = JSON.parse(result.body);
     assert.strictEqual(body.managers.length, 3);
-    const dana = body.managers.find((m) => m.team_name === 'Dana Newcomer');
+    const dana = body.managers.find((m) => m.real_name === 'Dana Newcomer');
     assert.ok(dana, 'Expected a brand-new roster member with no gameweek history to still appear in the picker');
-    assert.strictEqual(dana.manager_name, 'Fresh Start FC');
+    assert.strictEqual(dana.team_nickname, 'Fresh Start FC');
   } finally {
     dynamoMock.restore();
     fetchMock.restore();
@@ -188,8 +188,8 @@ test('handleTrendsManagers walks back a gameweek if fpl_league_standings has a g
     const body = JSON.parse(result.body);
     assert.strictEqual(result.statusCode, 200);
     assert.strictEqual(body.managers.length, 2);
-    assert.ok(body.managers.some((m) => m.team_name === 'Alice Smith'));
-    assert.ok(body.managers.some((m) => m.team_name === 'Carol White'));
+    assert.ok(body.managers.some((m) => m.real_name === 'Alice Smith'));
+    assert.ok(body.managers.some((m) => m.real_name === 'Carol White'));
   } finally {
     dynamoMock.restore();
     fetchMock.restore();
@@ -198,9 +198,9 @@ test('handleTrendsManagers walks back a gameweek if fpl_league_standings has a g
 
 test('handleTrendsManagers collapses whitespace variants of the same name', async () => {
   const rows = [
-    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 1, points_total: 50, team_name: 'Chetan Bk' }),
-    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 2, points_total: 100, team_name: 'Chetan Bk' }),
-    gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: 1, points_total: 60, team_name: 'Chetan Bk' })
+    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 1, points_total: 50, real_name: 'Chetan Bk' }),
+    gwRow({ season: SEASON_PAST, entry_id: 1, gameweek: 2, points_total: 100, real_name: 'Chetan Bk' }),
+    gwRow({ season: SEASON_CURRENT, entry_id: 1, gameweek: 1, points_total: 60, real_name: 'Chetan Bk' })
   ];
   const dynamoMock = mockScan(rows, new Map([[6, [standingsRow('Chetan Bk')]]]));
   const fetchMock = mockActiveGwFetch(6);
@@ -358,8 +358,8 @@ test('handleTrends builds the "vs the field" worm-graph data for the current sea
     // so he must not show up as a third line.
     assert.strictEqual(body.field.length, 2);
 
-    const alice = body.field.find((m) => m.team_name === 'Alice Smith');
-    const carol = body.field.find((m) => m.team_name === 'Carol White');
+    const alice = body.field.find((m) => m.real_name === 'Alice Smith');
+    const carol = body.field.find((m) => m.real_name === 'Carol White');
 
     // Alice out-scores Carol every week, so she's actually the leader too -- but
     // is_leader is deliberately suppressed on your OWN entry (only is_you is set),
@@ -386,8 +386,8 @@ test('handleTrends marks the field leader correctly when the requested manager i
     const result = await handleTrends({ manager: 'Carol White' }, {});
     const body = JSON.parse(result.body);
 
-    const alice = body.field.find((m) => m.team_name === 'Alice Smith');
-    const carol = body.field.find((m) => m.team_name === 'Carol White');
+    const alice = body.field.find((m) => m.real_name === 'Alice Smith');
+    const carol = body.field.find((m) => m.real_name === 'Carol White');
 
     assert.strictEqual(carol.is_you, true);
     assert.strictEqual(carol.is_leader, false);

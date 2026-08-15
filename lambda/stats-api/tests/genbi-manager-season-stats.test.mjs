@@ -20,9 +20,9 @@ import { installDynamoMock } from './helpers/mock-dynamo.mjs';
 import { installBedrockMock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
-// `name` becomes team_name -- the real-name field genbi.mjs now keys manager identity
+// `name` becomes real_name -- the real-name field genbi.mjs now keys manager identity
 // off of (populated on every row, historical and live; see formatManagerDisplay's
-// comment in genbi.mjs). `nickname` is optional and becomes manager_name (the FPL
+// comment in genbi.mjs). `nickname` is optional and becomes team_nickname (the FPL
 // squad nickname, only ever present on live rows) -- most fixtures below omit it, so
 // `m.manager` resolves to exactly `name` with no parenthetical, keeping existing
 // assertions unchanged; the nickname-specific test further down sets it explicitly.
@@ -30,8 +30,8 @@ function entryGwRow({ entryId, name, nickname, gw, ptsThisWeek, ptsTotal, transf
   const row = {
     entry_id: entryId,
     season: '2025/26',
-    team_name: name,
-    manager_name: nickname || null,
+    real_name: name,
+    team_nickname: nickname || null,
     gameweek: gw,
     points_this_week: ptsThisWeek,
     points_total: ptsTotal,
@@ -265,9 +265,9 @@ test('[current bug] win streaks reset when a manager stops winning, not just acc
     // Movement's streak should reset to 1 at GW3, not read as a 2-week streak.
     gwWinners: () => ({
       Items: [
-        { season: '2025/26', gameweek: 1, winners: [{ team_name: 'Da Movement' }] },
-        { season: '2025/26', gameweek: 2, winners: [{ team_name: 'Suberox' }] },
-        { season: '2025/26', gameweek: 3, winners: [{ team_name: 'Da Movement' }] }
+        { season: '2025/26', gameweek: 1, winners: [{ real_name: 'Da Movement' }] },
+        { season: '2025/26', gameweek: 2, winners: [{ real_name: 'Suberox' }] },
+        { season: '2025/26', gameweek: 3, winners: [{ real_name: 'Da Movement' }] }
       ]
     })
   }));
@@ -296,8 +296,8 @@ test('[current bug] manager_season_stats leads with the real name, nickname seco
   // Live bug (2026-08-12): GenBI answers referred to managers only by their FPL squad
   // nickname (e.g. "Biosfear", "Suberox") with no real name anywhere -- backwards from
   // Standings/Trends, which both lead with the real name and show the nickname
-  // secondary ("Yash Thakker (VARsenal)"). manager_name is the nickname field, populated
-  // only on live rows; team_name is the real name, populated on every row.
+  // secondary ("Yash Thakker (VARsenal)"). team_nickname is the nickname field, populated
+  // only on live rows; real_name is the real name, populated on every row.
   const dynamoMock = installDynamoMock(baseDynamoRouter({
     entryGw: () => ({
       Items: [
@@ -315,11 +315,11 @@ test('[current bug] manager_season_stats leads with the real name, nickname seco
 
     assert.strictEqual(stats.length, 1);
     assert.strictEqual(stats[0].manager, 'aditya shringarpure (Biosfear)', 'Expected real name first, nickname secondary in parentheses');
-    // The raw join fields (team_name/manager_name) were only needed internally to
+    // The raw join fields (real_name/team_nickname) were only needed internally to
     // build the combined string -- Claude should see one unambiguous "manager" field,
     // not two overlapping name fields inviting it to pick the wrong one.
-    assert.strictEqual(stats[0].team_name, undefined);
-    assert.strictEqual(stats[0].manager_name, undefined);
+    assert.strictEqual(stats[0].real_name, undefined);
+    assert.strictEqual(stats[0].team_nickname, undefined);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

@@ -37,10 +37,10 @@ test('[current bug] default view (no gw param) shows the true final gameweek onc
       // GW25 and GW38 both do.
       if (key === '2025/26#26') return { Items: [] };
       if (key === '2025/26#25') {
-        return { Items: [{ season_event: '2025/26#25', manager_name: 'Da Movement', total_points: 1537, points_this_week: 39, transfer_cost: 0 }] };
+        return { Items: [{ season_event: '2025/26#25', real_name: 'Da Movement', total_points: 1537, points_this_week: 39, transfer_cost: 0 }] };
       }
       if (key === '2025/26#38') {
-        return { Items: [{ season_event: '2025/26#38', manager_name: 'Da Movement', total_points: 2378, points_this_week: 69, transfer_cost: 0 }] };
+        return { Items: [{ season_event: '2025/26#38', real_name: 'Da Movement', total_points: 2378, points_this_week: 69, transfer_cost: 0 }] };
       }
       return { Items: [] };
     }
@@ -75,7 +75,7 @@ test('[regression] mid-season: still walks back gracefully over a genuine same-w
     if (table === 'fpl_league_standings' && command.constructor.name === 'QueryCommand') {
       const key = command.input.ExpressionAttributeValues[':se'];
       if (key === '2025/26#20') return { Items: [] }; // this week's data hasn't landed yet
-      if (key === '2025/26#19') return { Items: [{ season_event: '2025/26#19', manager_name: 'Da Movement', total_points: 1200 }] };
+      if (key === '2025/26#19') return { Items: [{ season_event: '2025/26#19', real_name: 'Da Movement', total_points: 1200 }] };
       return { Items: [] };
     }
     return undefined;
@@ -144,9 +144,9 @@ test('league_id param keeps legacy rows (no league_id) and rows matching it, exc
       if (key === '2025/26#38') {
         return {
           Items: [
-            { season_event: '2025/26#38', manager_name: 'Legacy Manager', total_points: 100 }, // no league_id at all
-            { season_event: '2025/26#38', manager_name: 'Our Manager', total_points: 200, league_id: 438107 },
-            { season_event: '2025/26#38', manager_name: 'Other League Manager', total_points: 300, league_id: 999999 }
+            { season_event: '2025/26#38', real_name: 'Legacy Manager', total_points: 100 }, // no league_id at all
+            { season_event: '2025/26#38', real_name: 'Our Manager', total_points: 200, league_id: 438107 },
+            { season_event: '2025/26#38', real_name: 'Other League Manager', total_points: 300, league_id: 999999 }
           ]
         };
       }
@@ -158,7 +158,7 @@ test('league_id param keeps legacy rows (no league_id) and rows matching it, exc
   try {
     const response = await handleStandings({ league_id: '438107' }, CORS);
     const body = JSON.parse(response.body);
-    const names = body.standings.map((s) => s.manager_name).sort();
+    const names = body.standings.map((s) => s.real_name).sort();
     assert.deepStrictEqual(names, ['Legacy Manager', 'Our Manager']);
   } finally {
     fetchMock.restore();

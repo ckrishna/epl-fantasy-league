@@ -52,8 +52,8 @@ test('[current bug] current_standings reaches the Bedrock context, sorted by poi
   const dynamoMock = installDynamoMock(baseDynamoRouter({
     standings: () => ({
       Items: [
-        { season_event: '2025/26#10', manager_id: 1, manager_name: 'Suberox', team_name: 'Suberox FC', total_points: 480, points_this_week: 55 },
-        { season_event: '2025/26#10', manager_id: 2, manager_name: 'Da Movement', team_name: 'Da Movement FC', total_points: 512, points_this_week: 60 }
+        { season_event: '2025/26#10', manager_id: 1, team_nickname: 'Suberox', real_name: 'Suberox FC', total_points: 480, points_this_week: 55 },
+        { season_event: '2025/26#10', manager_id: 2, team_nickname: 'Da Movement', real_name: 'Da Movement FC', total_points: 512, points_this_week: 60 }
       ]
     })
   }));
@@ -68,7 +68,7 @@ test('[current bug] current_standings reaches the Bedrock context, sorted by poi
     const standings = JSON.parse(contextBlock.match(/<current_standings>(.*?)<\/current_standings>/)[1]);
 
     assert.strictEqual(standings.length, 2);
-    // manager is "real name (nickname)" -- team_name is the real name, manager_name the
+    // manager is "real name (nickname)" -- real_name is the real name, team_nickname the
     // FPL squad nickname (see formatManagerDisplay's comment in genbi.mjs).
     assert.strictEqual(standings[0].manager, 'Da Movement FC (Da Movement)', 'Expected standings sorted by total_points descending');
     assert.strictEqual(standings[0].rank, 1);
@@ -91,7 +91,7 @@ test('[current bug] walks back a gameweek if fpl_league_standings has a gap at t
       const gw = command.input.ExpressionAttributeValues[':se'];
       if (gw.endsWith('#10')) return { Items: [] }; // gap at gw 10
       if (gw.endsWith('#9')) {
-        return { Items: [{ season_event: '2025/26#9', manager_id: 1, manager_name: 'Suberox', team_name: 'Suberox FC', total_points: 425, points_this_week: 40 }] };
+        return { Items: [{ season_event: '2025/26#9', manager_id: 1, team_nickname: 'Suberox', real_name: 'Suberox FC', total_points: 425, points_this_week: 40 }] };
       }
       return { Items: [] };
     }

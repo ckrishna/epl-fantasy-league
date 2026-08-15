@@ -1,12 +1,12 @@
-// EVAL: our_league_picks manager_name bugfix + #39 Phase 2 ownership aggregates
+// EVAL: our_league_picks team_nickname bugfix + #39 Phase 2 ownership aggregates
 // (handlers/genbi.mjs's getManagerNamesForGW / computeOwnershipAggregates, wired into
 // our_league_picks and ownership_aggregates).
 //
-// Background: fpl_entry_picks rows never carry a manager_name field (confirmed against
+// Background: fpl_entry_picks rows never carry a team_nickname field (confirmed against
 // fpl-data-ingester's storePicks() write -- only entry_id). The pre-existing
-// our_league_picks mapping read `pick.manager_name` directly, which was always
+// our_league_picks mapping read `pick.team_nickname` directly, which was always
 // undefined. This file proves the fix (join via fpl_entry_gameweek's entry_id ->
-// manager_name) and covers the new ownership_aggregates field built on the same join.
+// team_nickname) and covers the new ownership_aggregates field built on the same join.
 //
 // Run BEFORE the fix: expect FAIL on tests marked "current bug".
 // Run AFTER the fix: expect PASS.
@@ -18,14 +18,14 @@ import { installBedrockMock } from './helpers/mock-bedrock.mjs';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
-// `name` becomes team_name -- see the identical comment in
+// `name` becomes real_name -- see the identical comment in
 // genbi-manager-season-stats.test.mjs for why (real-name field, always present;
-// manager_name is the nickname, only ever present on live rows).
+// team_nickname is the nickname, only ever present on live rows).
 function entryGwRow({ entryId, name, gw }) {
   return {
     entry_id: entryId,
     season: '2025/26',
-    team_name: name,
+    real_name: name,
     gameweek: gw,
     points_this_week: 0,
     points_total: 0,
@@ -86,7 +86,7 @@ function baseDynamoRouter({ entryGwByGw, picksByGw } = {}) {
   };
 }
 
-test('[current bug] our_league_picks resolves manager names via the entry_id join, not the nonexistent pick.manager_name field', async () => {
+test('[current bug] our_league_picks resolves manager names via the entry_id join, not the nonexistent pick.team_nickname field', async () => {
   const dynamoMock = installDynamoMock(baseDynamoRouter({
     entryGwByGw: [
       entryGwRow({ entryId: 101, name: 'Da Movement', gw: 1 }),

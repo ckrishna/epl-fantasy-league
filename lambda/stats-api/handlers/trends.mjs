@@ -23,7 +23,7 @@ const MID_SEASON_GAMEWEEK = 10;
 // built by walking fpl_entry_gameweek and merely checking roster membership. Caught
 // live: a new 2026/27 joiner was correctly excluded from `currentNames` filtering logic
 // but never made it into the output at all, since nothing ever created a Map entry for
-// them. fpl_league_standings already carries both team_name and manager_name directly
+// them. fpl_league_standings already carries both real_name and team_nickname directly
 // (the ingester writes both), so it's a sufficient source on its own -- no join needed.
 export async function handleTrendsManagers(queryParams, corsHeaders) {
   const currentSeason = await getCurrentSeason();
@@ -38,16 +38,16 @@ export async function handleTrendsManagers(queryParams, corsHeaders) {
 
   const managers = (standings || [])
     .map((s) => ({
-      team_name: normName(s.team_name),
-      manager_name: s.manager_name || null,
+      real_name: normName(s.real_name),
+      team_nickname: s.team_nickname || null,
       // Not consumed by the frontend yet (the picker still selects/persists by name --
       // see DATA_MODEL.md's identity redesign notes on why that's fine for now), but
       // exposed here so a future caller can key off the durable id without a second
       // round trip.
-      person_id: s.team_name ? stablePersonId(s.team_name) : null
+      person_id: s.real_name ? stablePersonId(s.real_name) : null
     }))
-    .filter((m) => m.team_name)
-    .sort((a, b) => a.team_name.localeCompare(b.team_name));
+    .filter((m) => m.real_name)
+    .sort((a, b) => a.real_name.localeCompare(b.real_name));
 
   return {
     statusCode: 200,
@@ -66,7 +66,7 @@ function rankAt(bySeasonGw, requestedPersonId, season, gameweek) {
   const rows = bySeasonGw.get(season)?.get(gameweek);
   if (!rows || rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => (b.points_total || 0) - (a.points_total || 0));
-  const idx = sorted.findIndex((r) => stablePersonId(r.team_name) === requestedPersonId);
+  const idx = sorted.findIndex((r) => stablePersonId(r.real_name) === requestedPersonId);
   return idx === -1 ? null : idx + 1;
 }
 
@@ -105,7 +105,7 @@ export async function handleTrends(queryParams, corsHeaders) {
   const allowedSeasons = await getAllowedSeasonsForLeague(leagueId);
   const allRows = allowedSeasons ? allRowsRaw.filter((r) => allowedSeasons.has(r.season)) : allRowsRaw;
 
-  const managerRows = allRows.filter((r) => stablePersonId(r.team_name) === requestedPersonId);
+  const managerRows = allRows.filter((r) => stablePersonId(r.real_name) === requestedPersonId);
   if (managerRows.length === 0) {
     return {
       statusCode: 404,
@@ -114,7 +114,7 @@ export async function handleTrends(queryParams, corsHeaders) {
     };
   }
 
-  const managerName = managerRows.find((r) => r.manager_name)?.manager_name || null;
+  const teamNickname = managerRows.find((r) => r.team_nickname)?.team_nickname || null;
 
   // Index EVERY manager's rows by season -> gameweek, so rankAt() can compare this
   // manager against their peers at any point in any season.
@@ -223,15 +223,15 @@ export async function handleTrends(queryParams, corsHeaders) {
   const field = [];
   const currentSeasonAllRows = bySeasonGw.get(currentSeason);
   if (currentSeasonAllRows) {
-    const byManager = new Map(); // person_id -> { team_name (display name), manager_name, points: Map(gw -> points_total) }
+    const byManager = new Map(); // person_id -> { real_name (display name), team_nickname, points: Map(gw -> points_total) }
     for (const [gw, rowsAtGw] of currentSeasonAllRows) {
       for (const row of rowsAtGw) {
-        const key = stablePersonId(row.team_name);
+        const key = stablePersonId(row.real_name);
         if (!byManager.has(key)) {
-          byManager.set(key, { team_name: normName(row.team_name), manager_name: row.manager_name || null, points: new Map() });
+          byManager.set(key, { real_name: normName(row.real_name), team_nickname: row.team_nickname || null, points: new Map() });
         }
         const entry = byManager.get(key);
-        if (!entry.manager_name && row.manager_name) entry.manager_name = row.manager_name;
+        if (!entry.team_nickname && row.team_nickname) entry.team_nickname = row.team_nickname;
         entry.points.set(gw, row.points_total);
       }
     }
@@ -253,8 +253,8 @@ export async function handleTrends(queryParams, corsHeaders) {
 
     for (const [key, entry] of byManager) {
       field.push({
-        team_name: entry.team_name,
-        manager_name: entry.manager_name,
+        real_name: entry.real_name,
+        team_nickname: entry.team_nickname,
         is_you: key === requestedPersonId,
         // If the requested manager IS the leader, only is_you should read true -- the
         // frontend highlights on is_you OR is_leader, and a manager only needs one
@@ -271,7 +271,7 @@ export async function handleTrends(queryParams, corsHeaders) {
     statusCode: 200,
     headers: corsHeaders,
     body: JSON.stringify({
-      manager: { team_name: requestedName, manager_name: managerName },
+      manager: { real_name: requestedName, team_nickname: teamNickname },
       current_season: currentSeason,
       current_gameweek: currentGameweek,
       pace: {

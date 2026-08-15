@@ -28,10 +28,10 @@ test('person_id is a short, readable, prefixed string, not a raw hash', () => {
 
 test('derivePeopleFromRows dedupes by normalized name and sorts by canonical_name', () => {
   const rows = [
-    { team_name: 'Michael Kojo Brown', season: '2025/26' },
-    { team_name: 'Chetan Bk', season: '2025/26' },
-    { team_name: 'Chetan  Bk', season: '2026/27' }, // same person, different whitespace
-    { team_name: 'Michael Kojo Brown', season: '2026/27' }
+    { real_name: 'Michael Kojo Brown', season: '2025/26' },
+    { real_name: 'Chetan Bk', season: '2025/26' },
+    { real_name: 'Chetan  Bk', season: '2026/27' }, // same person, different whitespace
+    { real_name: 'Michael Kojo Brown', season: '2026/27' }
   ];
 
   const people = derivePeopleFromRows(rows);
@@ -43,9 +43,9 @@ test('derivePeopleFromRows dedupes by normalized name and sorts by canonical_nam
 
 test('derivePeopleFromRows skips rows with a blank/missing name', () => {
   const rows = [
-    { team_name: 'Chetan Bk' },
-    { team_name: '' },
-    { team_name: null },
+    { real_name: 'Chetan Bk' },
+    { real_name: '' },
+    { real_name: null },
     {}
   ];
 

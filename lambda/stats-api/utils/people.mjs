@@ -27,11 +27,12 @@ export function stablePersonId(rawName) {
   return `person_${hash.slice(0, 12)}`;
 }
 
-// Pure, DynamoDB-free: takes any array of objects with a team_name-shaped field and
+// Pure, DynamoDB-free: takes any array of objects with a real_name-shaped field and
 // returns one deduped {person_id, canonical_name} per distinct normalized name. Used by
 // scripts/backfill-people.mjs (fed real fpl_entry_gameweek rows) and directly unit
-// testable without any mock DynamoDB at all.
-export function derivePeopleFromRows(rows, { nameField = 'team_name' } = {}) {
+// testable without any mock DynamoDB at all. Default renamed 2026-08-14 from team_name
+// to real_name -- see DATA_MODEL.md's identity redesign notes.
+export function derivePeopleFromRows(rows, { nameField = 'real_name' } = {}) {
   const byId = new Map();
   for (const row of rows) {
     const raw = row[nameField];

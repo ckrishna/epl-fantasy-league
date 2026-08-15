@@ -21,11 +21,11 @@ const CORS = { 'Access-Control-Allow-Origin': '*' };
 function mixedSeasonWinnerItems() {
   const items = [];
   for (let gw = 1; gw <= 38; gw++) {
-    items.push({ season: '2025/26', gameweek: gw, winners: [{ manager_name: 'Da Movement' }], last_synced: '2026-07-23T00:00:00Z' });
+    items.push({ season: '2025/26', gameweek: gw, winners: [{ real_name: 'Da Movement' }], last_synced: '2026-07-23T00:00:00Z' });
   }
   // The new season has already kicked off and started writing into the same table.
   for (let gw = 1; gw <= 2; gw++) {
-    items.push({ season: '2026/27', gameweek: gw, winners: [{ manager_name: 'Someone New' }], last_synced: '2026-08-15T00:00:00Z' });
+    items.push({ season: '2026/27', gameweek: gw, winners: [{ real_name: 'Someone New' }], last_synced: '2026-08-15T00:00:00Z' });
   }
   return items;
 }

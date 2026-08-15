@@ -49,7 +49,7 @@ test('[current bug] browsing a past season via ?season= does not consult live FP
     if (table === 'fpl_league_standings' && name === 'QueryCommand') {
       const key = command.input.ExpressionAttributeValues[':se'];
       if (key === '2025/26#38') {
-        return { Items: [{ season_event: '2025/26#38', manager_name: 'Da Movement', total_points: 2378 }] };
+        return { Items: [{ season_event: '2025/26#38', real_name: 'Da Movement', total_points: 2378 }] };
       }
       return { Items: [] };
     }
@@ -73,8 +73,8 @@ test('[current bug] browsing a past season via ?season= does not consult live FP
 
 test('[current bug] handleWinners scopes results to the requested season via query param', async () => {
   const allItems = [
-    { season: '2025/26', gameweek: 38, winners: [{ manager_name: 'Da Movement' }], last_synced: '2026-05-20T00:00:00Z' },
-    { season: '2026/27', gameweek: 1, winners: [{ manager_name: 'COYS' }], last_synced: '2026-08-22T00:00:00Z' }
+    { season: '2025/26', gameweek: 38, winners: [{ real_name: 'Da Movement' }], last_synced: '2026-05-20T00:00:00Z' },
+    { season: '2026/27', gameweek: 1, winners: [{ real_name: 'COYS' }], last_synced: '2026-08-22T00:00:00Z' }
   ];
 
   const dynamoMock = installDynamoMock((command) => {
@@ -139,7 +139,7 @@ test('[regression] handleStandings/handleWinners still default to the current se
     }
     if (table === 'fpl_league_standings' && name === 'QueryCommand') {
       const key = command.input.ExpressionAttributeValues[':se'];
-      if (key === '2026/27#10') return { Items: [{ season_event: '2026/27#10', manager_name: 'COYS', total_points: 100 }] };
+      if (key === '2026/27#10') return { Items: [{ season_event: '2026/27#10', real_name: 'COYS', total_points: 100 }] };
       return { Items: [] };
     }
     return undefined;
