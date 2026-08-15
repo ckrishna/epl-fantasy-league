@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test",
     "eval:genbi": "node scripts/eval-genbi-live.mjs",
-    "add-league": "node scripts/add-league.mjs"
+    "add-league": "node scripts/add-league.mjs",
+    "backfill-people": "node scripts/backfill-people.mjs"
   },
   "keywords": [],
   "author": "",

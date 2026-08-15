@@ -262,6 +262,36 @@ Deliberately scoped narrower than a full repartition, after establishing which t
 
 **Known gap, honestly not solved here:** this protects against an unrelated league's *season* leaking into your cross-season walk. It does **not** disambiguate two different leagues that share the exact same `season_string` (both leagues' rows in `fpl_entry_gameweek`/`fpl_league_standings` for that season would need a per-manager roster join — "was entry_id X actually a member of league_id Y this season" — which nothing here builds). That scenario doesn't exist in production yet (no second league's data has ever been backfilled into these tables — the mid-season backfill pipeline for a newly-onboarded league isn't built either, see `add-league.mjs`'s own printed next-step), so this was judged not worth the added complexity until it's real. If/when it is, `fpl_league_standings`' new `league_id` field is the natural join key for that roster check.
 
+### Identity redesign (in progress, started 2026-08-14): `people`, `groups`, `group_seasons`
+
+The targeted fix above treats `league_id`/`league_group_id` as primary and durable. That's backwards: **FPL recycles both `league_id` and `entry_id` every season** (confirmed live — our own league went 212889 → 438107; confirmed with our own historical data that a real person, Michael Kojo Brown, held entry_id 6409595 in 2025/26 and a completely different entry_id 1836232 in 2026/27). No FPL-issued numeric id is stable across seasons. The only durable, cross-season signal available is the person's real name (stored, per the app's existing naming-inversion convention, in `team_name`).
+
+The redesign makes the durable concepts primary and the FPL-issued ids secondary/season-scoped:
+- **`people`** — a durable person, independent of any league or season.
+- **`groups`** (planned, not yet built) — a durable recurring group of managers (e.g. "Carpe Diem"), independent of any one season's `league_id`. Replaces `league_group_id`'s role as the thing a URL/UI actually navigates to.
+- **`group_seasons`** (planned, not yet built) — replaces `leagues` as the per-season join: `group_id` + `season_string`, with `league_id` nullable, since some historical seasons have no real FPL league_id at all (today's `leagues` table can't represent that, since `league_id` is its required partition key).
+
+**Migration safety (explicit user requirement, since this touches live production data):** DynamoDB backups taken before any of this work started (confirmed done, 2026-08-14). New tables are purely additive — zero writes/mutations to any existing table (`fpl_entry_gameweek`, `fpl_entry_picks`, `fpl_league_standings`, `gw-winners-cache`, `leagues`, `seasons`). Work proceeds step by step with the existing test suite re-run and extended at each step, not all at once.
+
+#### `people` (new, 2026-08-14)
+Partition key `person_id` (S). Written by `scripts/backfill-people.mjs` (read-only scan of `fpl_entry_gameweek`, writes only to `people`); read by `utils/people.mjs`'s callers (none yet — `groups`/`group_seasons`/Trends rewiring are still pending).
+
+Fields: `canonical_name` (S, normalized display name), `source` (S, e.g. `'backfill-2026-08-14'`), `created_at` (ISO string, set once via `if_not_exists` — re-running the backfill never clobbers when a person was first seen).
+
+**`person_id` is a pure function of the normalized name** (`utils/people.mjs`'s `stablePersonId`: `person_` + first 12 hex chars of `sha256(normName(name))`), not derived from any FPL-issued id, and computable with zero DynamoDB dependency — any handler can call `stablePersonId(name)` directly rather than requiring a live lookup. This is deliberate: it means resolving "which person does this historical row belong to" never needs a migration or backfill onto `fpl_entry_gameweek`/`fpl_entry_picks` themselves — their rows can have a person_id computed on read, forever. The `people` table itself exists as a registry (enumeration, canonical display names, a future home for name-variant aliases), not as a required join for basic identity resolution.
+
+**Table creation** (run once, before `backfill-people.mjs`):
+```
+aws dynamodb create-table \
+  --table-name people \
+  --attribute-definitions AttributeName=person_id,AttributeType=S \
+  --key-schema AttributeName=person_id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-west-2
+```
+
+**Status:** `utils/people.mjs` and `scripts/backfill-people.mjs` built and unit-tested (`tests/people.test.mjs`, 7 tests — id stability, whitespace insensitivity, distinctness, id format, dedup+sort, blank-name skipping, custom nameField). `groups`, `group_seasons`, and rewiring Trends/standings to resolve identity through this layer are not yet built.
+
 ---
 
 ## `ingestion_runs` (new, 2026-08-08)
