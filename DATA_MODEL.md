@@ -323,6 +323,62 @@ aws dynamodb create-table \
 
 **Status:** live. Tables created, `seed-default-group.mjs` run for real 2026-08-14 (`--name "Carpe Diem"`) — wrote 1 `groups` row (`group_id: carpe-diem`) and 8 `group_seasons` rows, one per season we have data for: `2019/20`-`2024/25` with `league_id: null` (pre-dates real FPL league membership, reconstructed from the historical CSV import), `2025/26` with `league_id: 212889`, `2026/27` (current) with `league_id: 438107`.
 
+#### Runbook: onboarding a new season (2026-08-15)
+
+Three steps, strictly in this order — each one depends on the previous one actually having real data behind it, not just having been attempted.
+
+**1. Manually create the new season's row in `seasons`.** Nothing in any of the four Lambdas creates this row — `fpl-bootstrap` only ever scans for `current: true` and throws if it finds nothing (confirmed by reading its `getCurrentSeasonId`). This has always been a manual step; it isn't new to the `group_seasons` design.
+
+```
+# Retire the outgoing season
+aws dynamodb update-item \
+  --table-name seasons \
+  --key '{"season_id":{"N":"2"}}' \
+  --update-expression "SET current = :f" \
+  --expression-attribute-values '{":f":{"BOOL":false}}' \
+  --region us-west-2
+
+# Create the new one -- league_id may not be known yet if FPL hasn't opened
+# registration for the new classic league; add it via a second update-item once it is
+# (fpl-data-ingester throws without it, so this can happen any time before the first
+# real ingestion run, not necessarily on day one).
+aws dynamodb put-item \
+  --table-name seasons \
+  --item '{
+    "season_id": {"N": "3"},
+    "season_string": {"S": "2027/28"},
+    "current": {"BOOL": true},
+    "status": {"S": "active"},
+    "total_gameweeks": {"N": "38"},
+    "created_at": {"S": "2027-07-01T00:00:00.000Z"},
+    "updated_at": {"S": "2027-07-01T00:00:00.000Z"}
+  }' \
+  --region us-west-2
+```
+
+**2. Let (or trigger) `fpl-data-ingester` run at least once for the new season.** `seed-default-group.mjs` below only picks up seasons it finds real rows for in a live `fpl_entry_gameweek` scan -- running it before the ingester has ever written anything for the new season is a no-op, not an error, so it's easy to mistake for having worked. Confirm real data exists first:
+
+```
+aws dynamodb scan \
+  --table-name fpl_entry_gameweek \
+  --filter-expression "season = :s" \
+  --expression-attribute-values '{":s":{"S":"2027/28"}}' \
+  --select COUNT \
+  --region us-west-2
+```
+
+(A plain `--select COUNT` scan is fine here purely as a one-off sanity check on a table this size -- not the pattern to reach for routinely, same caveat as the `people`/`groups`/`group_seasons` scans above.)
+
+**3. Re-run `seed-default-group.mjs` with the exact same `--name` as every prior run.** This is the step that actually matters to get right: `group_id` is `slugify(name)` (`utils/groups.mjs`), so passing a different name here -- even one that seems more accurate, like matching a renamed FPL league -- creates a brand-new, disconnected `group_id` instead of extending the existing one. FPL renaming the league on their own side is irrelevant and doesn't require any action here; `groups.name` was chosen by us once and isn't synced from FPL at all.
+
+```
+cd lambda/stats-api
+node scripts/seed-default-group.mjs --name "Carpe Diem" --dry-run   # confirm first
+node scripts/seed-default-group.mjs --name "Carpe Diem"             # then for real
+```
+
+The script is idempotent (`if_not_exists` on `created_at`/`added_at`), so re-running it for a season that's already seeded just refreshes `league_id` if it changed, without duplicating rows or touching when a row was first seen. Verify with the `group_seasons` scan command documented above (see "commands to inspect `people`/`groups`/`group_seasons`").
+
 #### Trends rewired onto `people`/`group_seasons` (2026-08-14, task #126)
 
 `handlers/trends.mjs` now sources season-scoping and identity matching from the new tables instead of the old `leagues`/`league_group_id` design:
