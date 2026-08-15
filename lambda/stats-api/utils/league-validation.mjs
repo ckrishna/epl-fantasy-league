@@ -24,16 +24,19 @@
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { dynamodb, FPL_API, FPL_FETCH_HEADERS, getCurrentSeason } from './dynamodb.mjs';
 
-// Default safety cap on league size. Reasoning: the largest realistic private/office
-// league is a few dozen people (our own league has 8 as of 2026-08-14); 100 leaves
-// generous headroom for that while still blocking an accidental paste of a large public
-// league (FPL's own "Overall" league, id 314, has 11M+ entries). The cap matters beyond
-// good taste -- mid-season backfill for a newly-added league pulls one picks/ call per
-// manager per gameweek already played, sequentially (FPL has no bulk endpoint). A league
-// added at GW10 with N managers means N * 9 sequential calls in one Lambda invocation,
-// bounded by the 15-minute Lambda timeout. 100 managers * 9 GWs = 900 calls -- comfortable
-// headroom. Raise with care -- this constant is the only place that needs to change.
-export const MAX_LEAGUE_ENTRIES = Number(process.env.LEAGUE_MAX_ENTRIES) || 100;
+// Default safety cap on league size. Lowered 100 -> 25 (2026-08-15): the real risk isn't
+// validation-time cost -- countLeagueEntries above already paginates correctly -- it's
+// that fpl-data-ingester's getLeagueManagers() does NOT paginate FPL's league-standings
+// response (see task #50/#137), so any league larger than one FPL results page silently
+// loses members during actual ingestion, with no error. FPL's real per-page size hasn't
+// been confirmed live yet (blocked on real 2026/27 data, see DATA_MODEL.md), so 25 is a
+// deliberately conservative margin below any plausible page size until #50 ships and
+// ingestion itself is safe for larger leagues. Once #50 is fixed, this can go back up
+// toward the original 100 (a few dozen people is still the realistic ceiling for a
+// private/office league; FPL's own "Overall" league, id 314, has 11M+ entries -- the cap
+// is there to block that kind of accidental paste, not to be a tight budget). Raise with
+// care -- this constant is the only place that needs to change.
+export const MAX_LEAGUE_ENTRIES = Number(process.env.LEAGUE_MAX_ENTRIES) || 25;
 
 // Fetches one page of a league's standings/new_entries. Returns null for a 404 (no such
 // league at all) so callers can distinguish "doesn't exist" from a real network error.
