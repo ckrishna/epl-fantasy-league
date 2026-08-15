@@ -115,17 +115,17 @@ useEffect(() => {
                 <button
                   type="button"
                   className="card-team card-team-link"
-                  onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
+                  onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.real_name, managerName: manager.team_nickname })}
                 >
-                  {manager.team_name}
+                  {manager.real_name}
                 </button>
               ) : (
-                <p className="card-team">{manager.team_name}</p>
+                <p className="card-team">{manager.real_name}</p>
               )}
               {/* Historical (pre-2025/26) seasons only have a manager's real name on
-                  record, no separate team nickname -- manager_name is null for those
+                  record, no separate team nickname -- team_nickname is null for those
                   rows rather than a blank/duplicate line. */}
-              {manager.manager_name && <p className="card-manager">{manager.manager_name}</p>}
+              {manager.team_nickname && <p className="card-manager">{manager.team_nickname}</p>}
             </div>
             <div className="card-stats">
               <div className="stat">
@@ -158,14 +158,14 @@ useEffect(() => {
                   <button
                     type="button"
                     className="team-name team-name-link"
-                    onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.team_name, managerName: manager.manager_name })}
+                    onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.real_name, managerName: manager.team_nickname })}
                   >
-                    {manager.team_name}
+                    {manager.real_name}
                   </button>
                 ) : (
-                  <div className="team-name">{manager.team_name}</div>
+                  <div className="team-name">{manager.real_name}</div>
                 )}
-                {manager.manager_name && <div className="manager-name">{manager.manager_name}</div>}
+                {manager.team_nickname && <div className="manager-name">{manager.team_nickname}</div>}
               </td>
               <td className="week-points col-divider">{manager.points_this_week}</td>
               <td className="points col-divider">{manager.total_points}</td>

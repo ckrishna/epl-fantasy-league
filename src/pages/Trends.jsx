@@ -141,8 +141,8 @@ export default function Trends({ leagueId = null } = {}) {
       setManagers(list);
       setManagersLoading(false);
       setSelected((prev) => {
-        if (prev && list.some((m) => m.team_name === prev)) return prev;
-        return list[0]?.team_name || '';
+        if (prev && list.some((m) => m.real_name === prev)) return prev;
+        return list[0]?.real_name || '';
       });
     });
   }, [leagueId]);
@@ -199,7 +199,7 @@ export default function Trends({ leagueId = null } = {}) {
     }
     const leader = withLatest[0];
     const gap = leader.latest - you.latest;
-    return `GW${data.current_gameweek}: you're ${ordinal(rank)}, ${gap} pt${gap === 1 ? '' : 's'} behind ${leader.manager_name || leader.team_name}.`;
+    return `GW${data.current_gameweek}: you're ${ordinal(rank)}, ${gap} pt${gap === 1 ? '' : 's'} behind ${leader.team_nickname || leader.real_name}.`;
   }, [data]);
 
   return (
@@ -216,8 +216,8 @@ export default function Trends({ leagueId = null } = {}) {
           disabled={managersLoading || managers.length === 0}
         >
           {managers.map((m) => (
-            <option key={m.team_name} value={m.team_name}>
-              {m.manager_name ? `${m.team_name} (${m.manager_name})` : m.team_name}
+            <option key={m.real_name} value={m.real_name}>
+              {m.team_nickname ? `${m.real_name} (${m.team_nickname})` : m.real_name}
             </option>
           ))}
         </select>

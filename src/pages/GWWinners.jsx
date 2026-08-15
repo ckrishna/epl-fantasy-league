@@ -55,8 +55,8 @@ function GWDetail({ gameweek, season, leagueId }) {
           {rows.map((m) => (
             <tr key={m.manager_id} className={m.rank === 1 ? 'top-1' : ''}>
               <td className="gw-cell">{m.rank}</td>
-              <td className="team-cell desktop-only">{m.team_name}</td>
-              <td className="manager-cell">{m.manager_name || m.team_name}</td>
+              <td className="team-cell desktop-only">{m.real_name}</td>
+              <td className="manager-cell">{m.team_nickname || m.real_name}</td>
               <td className="gross-points desktop-only">{m.points_this_week}</td>
               <td className="transfer-cost desktop-only">
                 {m.transfer_cost > 0 ? `-${m.transfer_cost}` : '—'}
@@ -111,8 +111,8 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
           flatWinners.push({
             gameweek: gwData.gameweek,
             entry_id: winner.entry_id,
-            manager_name: winner.manager_name,
-            team_name: winner.team_name,
+            team_nickname: winner.team_nickname,
+            real_name: winner.real_name,
             gross_points: winner.gross_points,
             transfer_cost: winner.transfer_cost,
             net_points: winner.net_points
@@ -147,8 +147,8 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
     if (!managerStats[w.entry_id]) {
       managerStats[w.entry_id] = {
         entry_id: w.entry_id,
-        manager_name: w.manager_name,
-        team_name: w.team_name,
+        team_nickname: w.team_nickname,
+        real_name: w.real_name,
         wins: 0,
         total_points: 0
       };
@@ -171,10 +171,10 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
           {sortedStats.slice(0, 5).map((stat, idx) => (
             <div key={stat.entry_id} className={`stat-card ${idx === 0 ? 'top-1' : ''}`}>
               <div className="stat-rank">#{idx + 1}</div>
-              <div className="stat-team">{stat.team_name}</div>
+              <div className="stat-team">{stat.real_name}</div>
               {/* Historical seasons only have a real name on record, no team
-                  nickname -- manager_name is null for those rows. */}
-              {stat.manager_name && <div className="stat-manager">{stat.manager_name}</div>}
+                  nickname -- team_nickname is null for those rows. */}
+              {stat.team_nickname && <div className="stat-manager">{stat.team_nickname}</div>}
               <div className="stat-wins">{stat.wins} <span>wins</span></div>
             </div>
           ))}
@@ -206,8 +206,8 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
                 title={`View full GW${w.gameweek} standings`}
               >
                 <td className="gw-cell">{w.gameweek}</td>
-                <td className="team-cell desktop-only">{w.team_name}</td>
-                <td className="manager-cell">{w.manager_name || w.team_name}</td>
+                <td className="team-cell desktop-only">{w.real_name}</td>
+                <td className="manager-cell">{w.team_nickname || w.real_name}</td>
                 <td className="gross-points desktop-only">{w.gross_points}</td>
                 <td className="transfer-cost desktop-only">
                   {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}

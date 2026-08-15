@@ -75,7 +75,7 @@ export async function getTrendsManagers(leagueId = null) {
 }
 
 // Pace-vs-history and season-by-season data for one manager, keyed by their real name
-// (team_name -- see the naming-inversion note in DATA_MODEL.md). Returns null on
+// (real_name -- see the naming-inversion note in DATA_MODEL.md). Returns null on
 // failure so the page can show a friendly empty state instead of throwing.
 export async function getTrends(managerTeamName, leagueId = null) {
   try {
