@@ -72,12 +72,12 @@ function buildFixtureRows() {
 // queryLeagueStandings() (i.e. only exercised by handleTrendsManagers). Tests that
 // don't touch the manager picker can omit it entirely.
 //
-// `leagueRows` backs the `leagues` registry table (utils/league-groups.mjs) -- only
+// `groupSeasonRows` backs the `group_seasons` table (utils/group-seasons.mjs) -- only
 // consulted at all when a test passes a `league_id` query param through handleTrends;
 // every pre-existing test omits it entirely, and getAllowedSeasonsForLeague() returns
 // null (no scoping) without ever touching DynamoDB when leagueId is null, so this is a
 // pure addition that changes nothing for tests that don't opt in.
-function mockScan(rows, standingsAtGw = new Map(), leagueRows = []) {
+function mockScan(rows, standingsAtGw = new Map(), groupSeasonRows = []) {
   return installDynamoMock((command) => {
     if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'fpl_entry_gameweek') {
       return { Items: rows };
@@ -92,13 +92,15 @@ function mockScan(rows, standingsAtGw = new Map(), leagueRows = []) {
       }
       return { Items: [] };
     }
-    if (command.constructor.name === 'QueryCommand' && command.input.TableName === 'leagues') {
+    // getGroupIdForLeagueId's reverse lookup (Scan, filtered by league_id).
+    if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'group_seasons') {
       const lid = command.input.ExpressionAttributeValues[':lid'];
-      return { Items: leagueRows.filter((r) => r.league_id === lid) };
+      return { Items: groupSeasonRows.filter((r) => r.league_id === lid) };
     }
-    if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'leagues') {
+    // getAllowedSeasonsForLeague's follow-up (Query, by the resolved group_id).
+    if (command.constructor.name === 'QueryCommand' && command.input.TableName === 'group_seasons') {
       const groupId = command.input.ExpressionAttributeValues[':g'];
-      return { Items: leagueRows.filter((r) => r.league_group_id === groupId) };
+      return { Items: groupSeasonRows.filter((r) => r.group_id === groupId) };
     }
     return undefined;
   });
@@ -232,11 +234,13 @@ test('handleTrends returns 404 for a manager with no rows', async () => {
   }
 });
 
-// Multi-league foundation (2026-08-14): league_group_id scoping.
-test('a league_id with no leagues-table registration behaves exactly like today (no scoping)', async () => {
-  // No leagueRows given -- the leagues table has nothing for id 438107, matching the
-  // real state for most of this app's life so far (registration is a separate, manual,
-  // opt-in step).
+// Multi-league foundation (2026-08-14, rewired 2026-08-14 onto group_seasons):
+// group-based season scoping.
+test('a league_id with no group_seasons registration behaves exactly like today (no scoping)', async () => {
+  // No groupSeasonRows given -- group_seasons has nothing for league_id 438107, e.g. a
+  // league that's real but hasn't been seeded/onboarded into a group yet (registration
+  // is a separate, manual, opt-in step -- see scripts/seed-default-group.mjs /
+  // scripts/add-league.mjs).
   const mock = mockScan(buildFixtureRows());
   try {
     const result = await handleTrends({ manager: 'Alice Smith', league_id: '438107' }, {});
@@ -250,18 +254,18 @@ test('a league_id with no leagues-table registration behaves exactly like today 
   }
 });
 
-test('a registered league_id with a league_group_id excludes seasons outside that group', async () => {
-  // Alice's league_group_id only covers the CURRENT season -- the historical season
-  // (2024/25) belongs to a different, unrelated group in this scenario (e.g. it could
-  // be a totally different friend group's data that happens to share this shared
-  // fpl_entry_gameweek table once a second league's backfill exists -- see
-  // league-groups.mjs's header comment for why that's the actual risk this protects
+test('a league_id registered in group_seasons excludes seasons outside that group', async () => {
+  // Alice's group ('carpe-diem') only has a group_seasons row for the CURRENT season --
+  // the historical season (2024/25) belongs to a different, unrelated group in this
+  // scenario (e.g. it could be a totally different friend group's data that happens to
+  // share this shared fpl_entry_gameweek table once a second league's backfill exists --
+  // see group-seasons.mjs's header comment for why that's the actual risk this protects
   // against). Once scoped, only the current season should survive the walk.
-  const leagueRows = [
-    { league_id: 438107, season_string: SEASON_CURRENT, league_group_id: 'carpe-diem' }
+  const groupSeasonRows = [
+    { group_id: 'carpe-diem', season_string: SEASON_CURRENT, league_id: 438107 }
     // Deliberately no row for SEASON_PAST under 'carpe-diem' -- it's outside the group.
   ];
-  const mock = mockScan(buildFixtureRows(), new Map(), leagueRows);
+  const mock = mockScan(buildFixtureRows(), new Map(), groupSeasonRows);
   try {
     const result = await handleTrends({ manager: 'Alice Smith', league_id: '438107' }, {});
     const body = JSON.parse(result.body);

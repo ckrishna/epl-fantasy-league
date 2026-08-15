@@ -1,6 +1,7 @@
 import { getAllGwRows, normName } from '../utils/trends-data.mjs';
 import { getCurrentSeason, getActiveGameweek, queryLeagueStandings } from '../utils/dynamodb.mjs';
-import { getAllowedSeasonsForLeague } from '../utils/league-groups.mjs';
+import { getAllowedSeasonsForLeague } from '../utils/group-seasons.mjs';
+import { stablePersonId } from '../utils/people.mjs';
 
 // Reference gameweek for the "hot start vs strong finish" comparison -- arbitrary but
 // consistent, chosen because GW10 is far enough in that early-season noise has settled
@@ -36,7 +37,15 @@ export async function handleTrendsManagers(queryParams, corsHeaders) {
   }
 
   const managers = (standings || [])
-    .map((s) => ({ team_name: normName(s.team_name), manager_name: s.manager_name || null }))
+    .map((s) => ({
+      team_name: normName(s.team_name),
+      manager_name: s.manager_name || null,
+      // Not consumed by the frontend yet (the picker still selects/persists by name --
+      // see DATA_MODEL.md's identity redesign notes on why that's fine for now), but
+      // exposed here so a future caller can key off the durable id without a second
+      // round trip.
+      person_id: s.team_name ? stablePersonId(s.team_name) : null
+    }))
     .filter((m) => m.team_name)
     .sort((a, b) => a.team_name.localeCompare(b.team_name));
 
@@ -47,14 +56,17 @@ export async function handleTrendsManagers(queryParams, corsHeaders) {
   };
 }
 
-// Ranks `requestedName` among everyone who has a row at that exact (season, gameweek),
-// by points_total (cumulative net points-to-date) descending. Returns null rather than
-// guessing if either the gameweek or the manager isn't present in it.
-function rankAt(bySeasonGw, requestedName, season, gameweek) {
+// Ranks `requestedPersonId` among everyone who has a row at that exact (season,
+// gameweek), by points_total (cumulative net points-to-date) descending. Returns null
+// rather than guessing if either the gameweek or the manager isn't present in it.
+// Identity is resolved via stablePersonId (utils/people.mjs) rather than a raw
+// normName comparison, so this stays correct if identity resolution ever grows beyond
+// a pure name function (e.g. merged aliases -- see task #129).
+function rankAt(bySeasonGw, requestedPersonId, season, gameweek) {
   const rows = bySeasonGw.get(season)?.get(gameweek);
   if (!rows || rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => (b.points_total || 0) - (a.points_total || 0));
-  const idx = sorted.findIndex((r) => normName(r.team_name) === requestedName);
+  const idx = sorted.findIndex((r) => stablePersonId(r.team_name) === requestedPersonId);
   return idx === -1 ? null : idx + 1;
 }
 
@@ -78,17 +90,22 @@ export async function handleTrends(queryParams, corsHeaders) {
     };
   }
 
+  // The durable identity key -- see utils/people.mjs. Every row-to-manager comparison
+  // below goes through this rather than a raw normName check, so identity resolution
+  // has one source of truth across this handler.
+  const requestedPersonId = stablePersonId(requestedName);
+
   const [allRowsRaw, currentSeason] = await Promise.all([getAllGwRows(), getCurrentSeason()]);
 
   // Scope the cross-season walk to the current league's own group before anything else
-  // reads allRows -- see league-groups.mjs for the full reasoning. allowedSeasons is
+  // reads allRows -- see group-seasons.mjs for the full reasoning. allowedSeasons is
   // null (no filtering, today's behavior) unless the caller passed a league_id AND
-  // that league is registered with a league_group_id.
+  // that league_id is registered in a group via group_seasons.
   const leagueId = queryParams.league_id || null;
   const allowedSeasons = await getAllowedSeasonsForLeague(leagueId);
   const allRows = allowedSeasons ? allRowsRaw.filter((r) => allowedSeasons.has(r.season)) : allRowsRaw;
 
-  const managerRows = allRows.filter((r) => normName(r.team_name) === requestedName);
+  const managerRows = allRows.filter((r) => stablePersonId(r.team_name) === requestedPersonId);
   if (managerRows.length === 0) {
     return {
       statusCode: 404,
@@ -131,9 +148,9 @@ export async function handleTrends(queryParams, corsHeaders) {
         is_current: season === currentSeason,
         final_gameweek: finalRow.gameweek,
         final_points: finalRow.points_total,
-        final_rank: rankAt(bySeasonGw, requestedName, season, finalRow.gameweek),
+        final_rank: rankAt(bySeasonGw, requestedPersonId, season, finalRow.gameweek),
         mid_gameweek: MID_SEASON_GAMEWEEK,
-        mid_rank: midRow ? rankAt(bySeasonGw, requestedName, season, MID_SEASON_GAMEWEEK) : null,
+        mid_rank: midRow ? rankAt(bySeasonGw, requestedPersonId, season, MID_SEASON_GAMEWEEK) : null,
         // Rounded to 1 decimal -- final_points is already net (gross minus hits), so
         // this reads as "average net points per gameweek" matching every other net
         // figure this app shows, not a second gross-based average.
@@ -206,12 +223,12 @@ export async function handleTrends(queryParams, corsHeaders) {
   const field = [];
   const currentSeasonAllRows = bySeasonGw.get(currentSeason);
   if (currentSeasonAllRows) {
-    const byManager = new Map(); // normalized name -> { team_name, manager_name, points: Map(gw -> points_total) }
+    const byManager = new Map(); // person_id -> { team_name (display name), manager_name, points: Map(gw -> points_total) }
     for (const [gw, rowsAtGw] of currentSeasonAllRows) {
       for (const row of rowsAtGw) {
-        const key = normName(row.team_name);
+        const key = stablePersonId(row.team_name);
         if (!byManager.has(key)) {
-          byManager.set(key, { team_name: key, manager_name: row.manager_name || null, points: new Map() });
+          byManager.set(key, { team_name: normName(row.team_name), manager_name: row.manager_name || null, points: new Map() });
         }
         const entry = byManager.get(key);
         if (!entry.manager_name && row.manager_name) entry.manager_name = row.manager_name;
@@ -238,11 +255,11 @@ export async function handleTrends(queryParams, corsHeaders) {
       field.push({
         team_name: entry.team_name,
         manager_name: entry.manager_name,
-        is_you: key === requestedName,
+        is_you: key === requestedPersonId,
         // If the requested manager IS the leader, only is_you should read true -- the
         // frontend highlights on is_you OR is_leader, and a manager only needs one
         // highlighted line even when both are true.
-        is_leader: key !== requestedName && key === leaderKey,
+        is_leader: key !== requestedPersonId && key === leaderKey,
         points: [...entry.points.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([gameweek, points]) => ({ gameweek, points }))
