@@ -213,24 +213,22 @@ async function getManagerNamesForGW(gw, season, rosterEntryIds = null) {
   }
 }
 
-// #39 Phase 1: manager-level season aggregates. Single scan of each table per request
-// (not per-manager queries) -- both fpl_entry_gameweek and fpl_entry_picks carry a
-// plain `season` attribute alongside their composite keys, so a season-scoped
-// FilterExpression works the same way getLatestStoredGameweek already relies on.
+// Shared by getManagerSeasonAggregates and getTopCaptainPicks below -- both used to
+// independently Scan the exact same two tables (fpl_entry_gameweek, fpl_entry_picks),
+// filtered to the exact same season, whenever a question needed both (the common case:
+// router.mjs sets both managerStats and topCaptainPicks together for a season-scoped
+// captain question -- see CAPTAIN_KEYWORDS' comment). Confirmed live 2026-08-16 while
+// investigating GenBI latency after the Sonnet 4.6 switch -- a Scan is already the more
+// expensive DynamoDB read pattern (reads every row in the table, not an indexed lookup);
+// running the same pair of full-table Scans twice in one request compounded that for no
+// reason. Both functions below are now pure over already-fetched rows; this is the only
+// place either table gets Scanned.
 //
-// fpl_entry_picks has no nickname field of its own (only entry_id), so identity is
-// joined via a name map built from fpl_entry_gameweek's rows -- avoids a third query.
-//
-// Explicitly NOT covered here (and the prompt says so): WHICH players were transferred
-// in/out, and their subsequent performance. fpl_entry_gameweek only has aggregate
-// transfers_made/transfer_cost per gameweek, not player-level transfer history, so
-// "who made the most transfers" is answerable but "who made the BEST transfers" still
-// isn't -- that would need a real transfer-log table (out of scope, not what exists).
 // rosterEntryIds: see getOurLeaguePicks's comment -- same optional scoping, same
-// null-means-unfiltered default. Applied to both source scans before any aggregation,
-// so a second league's managers never enter the season_total_points/chips/etc math at
-// all, not just get filtered out of the final display.
-async function getManagerSeasonAggregates(season, rosterEntryIds = null) {
+// null-means-unfiltered default. Applied to both source scans before either caller sees
+// the rows, so a second league's managers never enter either function's math at all, not
+// just get filtered out of the final display.
+async function fetchSeasonEntryData(season, rosterEntryIds = null) {
   try {
     const [gwResult, picksResult] = await Promise.all([
       dynamodb.send(new ScanCommand({
@@ -252,6 +250,27 @@ async function getManagerSeasonAggregates(season, rosterEntryIds = null) {
       ? (picksResult.Items || []).filter((row) => rosterEntryIds.has(String(row.entry_id)))
       : (picksResult.Items || []);
 
+    return { gwRows, pickRows };
+  } catch (err) {
+    console.error('Error fetching season entry data (fpl_entry_gameweek/fpl_entry_picks):', err);
+    return { gwRows: [], pickRows: [] };
+  }
+}
+
+// #39 Phase 1: manager-level season aggregates. Takes already-fetched, already-roster-
+// scoped rows from fetchSeasonEntryData above (see that function's comment for why this
+// no longer Scans directly) -- pure aggregation from here down.
+//
+// fpl_entry_picks has no nickname field of its own (only entry_id), so identity is
+// joined via a name map built from fpl_entry_gameweek's rows.
+//
+// Explicitly NOT covered here (and the prompt says so): WHICH players were transferred
+// in/out, and their subsequent performance. fpl_entry_gameweek only has aggregate
+// transfers_made/transfer_cost per gameweek, not player-level transfer history, so
+// "who made the most transfers" is answerable but "who made the BEST transfers" still
+// isn't -- that would need a real transfer-log table (out of scope, not what exists).
+function getManagerSeasonAggregates(gwRows, pickRows) {
+  try {
     // Keyed by real_name (the real-name field, populated on every row -- see
     // formatManagerDisplay's comment), NOT team_nickname. Keying by the nickname (the
     // old behavior, before the 2026-08-14 rename) meant this whole aggregate silently
@@ -355,39 +374,23 @@ async function getManagerSeasonAggregates(season, rosterEntryIds = null) {
 // "best captain PICKS" literally asks for -- confirmed live: a manager leading on
 // captain_points_season this season may simply have played more gameweeks, not
 // necessarily made the sharpest individual calls.
-// rosterEntryIds: see getOurLeaguePicks's comment -- same optional scoping, same
-// null-means-unfiltered default. Applied to both the name-join scan and the picks scan,
-// so a second league's captain picks never enter the best/worst ranking at all.
-async function getTopCaptainPicks(season, limit = 10, rosterEntryIds = null) {
+// gwRows/pickRows: already-fetched, already-roster-scoped rows from
+// fetchSeasonEntryData above (see that function's comment for why this no longer Scans
+// directly -- both tables were being Scanned a second time here whenever a question also
+// needed getManagerSeasonAggregates, which reads the exact same two tables).
+function getTopCaptainPicks(gwRows, pickRows, limit = 10) {
   try {
-    const [gwResult, picksResult] = await Promise.all([
-      dynamodb.send(new ScanCommand({
-        TableName: 'fpl_entry_gameweek',
-        FilterExpression: 'season = :s',
-        ExpressionAttributeValues: { ':s': season }
-      })),
-      dynamodb.send(new ScanCommand({
-        TableName: 'fpl_entry_picks',
-        FilterExpression: 'season = :s',
-        ExpressionAttributeValues: { ':s': season }
-      }))
-    ]);
-
     // Same real_name-gated join as getManagerNamesForGW -- gating on the nickname alone
     // (the old behavior, before the 2026-08-14 rename) meant historical captain picks
     // could never resolve a name here (null on every historical row).
     const nameByEntryId = new Map();
-    for (const row of gwResult.Items || []) {
-      if (rosterEntryIds && !rosterEntryIds.has(String(row.entry_id))) continue;
+    for (const row of gwRows) {
       if (row.entry_id != null && row.real_name) {
         nameByEntryId.set(row.entry_id, formatManagerDisplay(row.real_name, row.team_nickname));
       }
     }
 
-    const picksSource = rosterEntryIds
-      ? (picksResult.Items || []).filter((row) => rosterEntryIds.has(String(row.entry_id)))
-      : (picksResult.Items || []);
-    const picks = picksSource
+    const picks = pickRows
       .filter((row) => row.is_captain)
       .map((row) => {
         // Raw per-player score -- same field storePicks writes for every pick, not
@@ -485,6 +488,41 @@ async function getFixturesForGW(seasonId, gw) {
   }
 }
 
+// Shared by getNextGwProjections and getFixtureRun below -- both used to independently
+// `fetch(bootstrap-static)` and independently find the `is_next` event, meaning any
+// question that needed both (the common case: router.mjs forces nextGwStrategy on
+// whenever fixtureRun matches, see its own comment) made the exact same external HTTP
+// call to FPL's API twice in the same request, back to back, for identical data.
+// Confirmed live 2026-08-16 while investigating GenBI latency after the Sonnet 4.6
+// switch -- not the biggest single contributor, but a free, zero-risk win: one fetch,
+// shared by whichever of the two functions below actually need it.
+//
+// Returns { data, nextEvent } -- data is the parsed bootstrap-static payload (or null on
+// any failure), nextEvent is whichever event has is_next: true (or null if none does).
+// Logs exactly the same two failure cases each function used to log independently (a
+// non-2xx response, or no is_next event at all) -- the existing tests only assert on a
+// status-code/phrase substring being present in the log, not which function logged it,
+// so consolidating the log call here doesn't change what's observable.
+async function fetchBootstrapAndNextEvent() {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
+    if (!response.ok) {
+      console.error(`GenBI bootstrap-static fetch failed (needed for next_gw_projections/fixture_run): ${response.status} ${response.statusText}`);
+      return { data: null, nextEvent: null };
+    }
+    const data = await response.json();
+    const nextEvent = (data.events || []).find((e) => e.is_next);
+    if (!nextEvent) {
+      console.warn('GenBI bootstrap-static: no event flagged is_next (season concluded, or FPL data mid-transition) -- next_gw_projections/fixture_run will be null');
+      return { data, nextEvent: null };
+    }
+    return { data, nextEvent };
+  } catch (err) {
+    console.error('Error fetching bootstrap-static for GenBI next_gw_projections/fixture_run:', err);
+    return { data: null, nextEvent: null };
+  }
+}
+
 // Forward-looking captain/strategy signal for the NEXT gameweek -- the one thing every
 // other context field in this file cannot provide, since they're all built from points
 // already scored (meaningless before a gameweek has been played, and entirely empty
@@ -520,29 +558,16 @@ async function getFixturesForGW(seasonId, gw) {
 // player as a "good pick", and the model has no other signal to weigh that against.
 // Sliced to the top 30 by projected points after filtering, same bounding-for-token-cost
 // pattern as players_gw_data/season_totals elsewhere in this file.
-async function getNextGwProjections(seasonId) {
+// bootstrap: the shared { data, nextEvent } already fetched by fetchBootstrapAndNextEvent
+// (see that function's comment for why this used to be an independent fetch here --
+// deduped 2026-08-16 as part of a GenBI latency investigation). Both failure branches
+// (non-2xx response, no is_next event) are now logged once, upstream, by that shared
+// fetch -- this function just returns null when nextEvent is missing, same observable
+// behavior as before.
+async function getNextGwProjections(seasonId, bootstrap) {
   try {
-    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
-    // Both early returns below used to be completely silent -- confirmed live 2026-08-16:
-    // a captain question declined with "no projection data available", CloudWatch showed
-    // the invocation ran clean (no thrown error, so the catch block below never fired),
-    // and bootstrap-static's own `is_next` flag was in fact set on GW1 at the time,
-    // ruling out the "no event flagged next" explanation this function's comment used to
-    // assume was the only real-world cause. That left a non-2xx response (rate limiting,
-    // a transient block on Lambda's outbound IP, a genuine FPL outage) as the likely
-    // culprit -- and there was no log line anywhere to confirm it. Logging both branches
-    // now so the next time this happens, CloudWatch actually says why instead of nothing.
-    if (!response.ok) {
-      console.error(`next-gameweek projections: bootstrap-static returned ${response.status} ${response.statusText}`);
-      return null;
-    }
-    const data = await response.json();
-
-    const nextEvent = (data.events || []).find((e) => e.is_next);
-    if (!nextEvent) {
-      console.warn('next-gameweek projections: no event in bootstrap-static is flagged is_next (season concluded, or FPL data mid-transition)');
-      return null;
-    }
+    const { data, nextEvent } = bootstrap;
+    if (!nextEvent) return null;
     const nextGw = nextEvent.id;
 
     const teamNameById = new Map((data.teams || []).map((t) => [t.id, t.name]));
@@ -614,20 +639,13 @@ async function getNextGwProjections(seasonId) {
 // conditions getNextGwProjections does (no next gameweek exists -- season concluded),
 // logged the same way (2026-08-16 fix -- see that function's own history for why silent
 // failure here was a real, previously-undiagnosable problem).
-async function getFixtureRun(seasonId, numGws = 5) {
+// bootstrap: see getNextGwProjections' comment just above -- same shared, pre-fetched
+// { data, nextEvent }, deduped so a question needing both fields (the common case) only
+// hits FPL's bootstrap-static endpoint once, not twice.
+async function getFixtureRun(seasonId, bootstrap, numGws = 5) {
   try {
-    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
-    if (!response.ok) {
-      console.error(`fixture run: bootstrap-static returned ${response.status} ${response.statusText}`);
-      return null;
-    }
-    const data = await response.json();
-
-    const nextEvent = (data.events || []).find((e) => e.is_next);
-    if (!nextEvent) {
-      console.warn('fixture run: no event in bootstrap-static is flagged is_next (season concluded, or FPL data mid-transition)');
-      return null;
-    }
+    const { data, nextEvent } = bootstrap;
+    if (!nextEvent) return null;
     const fromGw = nextEvent.id;
     const toGw = fromGw + numGws - 1;
 
@@ -901,6 +919,21 @@ export async function handleGenBI(body, corsHeaders) {
     // about season-long player totals at all.
     const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
+    // Shared bootstrap-static fetch for next_gw_projections/fixture_run -- see
+    // fetchBootstrapAndNextEvent's comment. A single promise, awaited by whichever of
+    // the two below actually needs it, so a question needing both (the common case)
+    // only hits FPL's API once instead of twice.
+    const needsBootstrap = needsNextGwProjections || needsFixtureRun;
+    const bootstrapPromise = needsBootstrap ? fetchBootstrapAndNextEvent() : Promise.resolve(null);
+
+    // Shared fpl_entry_gameweek/fpl_entry_picks Scan pair for managerStats/topCaptainPicks
+    // -- see fetchSeasonEntryData's comment. Same sharing pattern as bootstrapPromise
+    // above: one promise, one pair of Scans, consumed by whichever of the two needs it.
+    const needsSeasonEntryData = fields.managerStats || fields.topCaptainPicks;
+    const seasonEntryDataPromise = needsSeasonEntryData
+      ? fetchSeasonEntryData(season, leagueRoster)
+      : Promise.resolve({ gwRows: [], pickRows: [] });
+
     // 1. Fetch only what the router decided is relevant, in parallel
     const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks, nextGwProjections, fixtureRun] = await Promise.all([
       needsGwWinners ? getGWWinners(season, leagueId) : Promise.resolve([]),
@@ -911,11 +944,15 @@ export async function handleGenBI(body, corsHeaders) {
         ? (authoritativeSeasonTotals.length > 0 ? Promise.resolve([]) : getSeasonTotalsForPlayers(seasonId))
         : Promise.resolve([]),
       fields.standings ? getCurrentStandings(gw, season, leagueId) : Promise.resolve([]),
-      fields.managerStats ? getManagerSeasonAggregates(season, leagueRoster) : Promise.resolve([]),
+      fields.managerStats
+        ? seasonEntryDataPromise.then(({ gwRows, pickRows }) => getManagerSeasonAggregates(gwRows, pickRows))
+        : Promise.resolve([]),
       needsManagerNames ? getManagerNamesForGW(gw, season, leagueRoster) : Promise.resolve(new Map()),
-      fields.topCaptainPicks ? getTopCaptainPicks(season, 10, leagueRoster) : Promise.resolve({ best: [], worst: [] }),
-      needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null),
-      needsFixtureRun ? getFixtureRun(seasonId) : Promise.resolve(null)
+      fields.topCaptainPicks
+        ? seasonEntryDataPromise.then(({ gwRows, pickRows }) => getTopCaptainPicks(gwRows, pickRows, 10))
+        : Promise.resolve({ best: [], worst: [] }),
+      needsNextGwProjections ? bootstrapPromise.then((b) => getNextGwProjections(seasonId, b)) : Promise.resolve(null),
+      needsFixtureRun ? bootstrapPromise.then((b) => getFixtureRun(seasonId, b)) : Promise.resolve(null)
     ]);
 
     // Diagnostic (2026-08-16): a live check confirmed nextGwProjections reaches this

@@ -143,6 +143,80 @@ test('[current bug] a 0-point captain pick (blank gameweek) appears in worst[], 
   }
 });
 
+// Regression for the 2026-08-16 GenBI latency investigation: a season-scoped captain
+// question ("best captain picks this season") matches CAPTAIN_KEYWORDS in router.mjs,
+// which sets BOTH fields.managerStats and fields.topCaptainPicks -- so both
+// getManagerSeasonAggregates (season stats) and getTopCaptainPicks (this file) used to
+// run, and each independently Scanned fpl_entry_gameweek + fpl_entry_picks with the
+// same season filter, hitting DynamoDB with the same pair of full-table Scans twice in
+// one request. fetchSeasonEntryData in genbi.mjs now shares one Scan pair between them.
+//
+// Expects 2 fpl_entry_gameweek scans, not 1: this test deliberately passes an explicit
+// `season` (like the other tests in this file), which takes resolveSeasonContext's
+// historical-season path since it differs from baseDynamoRouter's mocked "current"
+// season -- that path's own getLatestStoredGameweek() does its own unconditional
+// season-wide fpl_entry_gameweek scan (a pre-existing, unrelated quirk, documented on
+// the "[regression] a gameweek-scoped..." test below). So the honest before/after here
+// is 3 scans -> 2, not 2 -> 1: fetchSeasonEntryData collapses the two-aggregate-
+// functions' own duplicate scan into one, but doesn't touch getLatestStoredGameweek's
+// separate one.
+test('a season-scoped captain question (managerStats + topCaptainPicks together) Scans fpl_entry_gameweek only twice, not three times', async () => {
+  // "Best captain picks this season?" also matches the managerPicks keyword group (via
+  // "captain"/"picks"), which legitimately triggers a SEPARATE, gameweek-scoped
+  // fpl_entry_picks scan (getOurLeaguePicks, for <manager_picks>/ownership) -- a real,
+  // necessary read, not a duplicate of the season-wide one this test is about. The base
+  // `picks` override doesn't distinguish the two (unlike `entryGw`'s isSeasonWide
+  // check), so this test uses its own router to count only the season-filtered scan.
+  let entryGwSeasonScans = 0;
+  let picksSeasonScans = 0;
+  const dynamoMock = installDynamoMock((command) => {
+    const table = command.input.TableName;
+    const type = command.constructor.name;
+    if (table === 'fpl_entry_gameweek' && type === 'ScanCommand') {
+      const isSeasonWide = !(command.input.FilterExpression || '').includes('gameweek');
+      if (isSeasonWide) {
+        entryGwSeasonScans += 1;
+        return { Items: [entryGwRow({ entryId: 101, name: 'Da Movement', gw: 9 })] };
+      }
+      return { Items: [] };
+    }
+    if (table === 'fpl_entry_picks' && type === 'ScanCommand') {
+      const isSeasonWide = (command.input.FilterExpression || '').includes('season') && !(command.input.FilterExpression || '').includes('gameweek');
+      if (isSeasonWide) {
+        picksSeasonScans += 1;
+        return { Items: [pickRow({ entryId: 101, gw: 9, player: 'Haaland', points: 13, multiplier: 2 })] };
+      }
+      return { Items: [] }; // getOurLeaguePicks' gameweek-scoped scan -- legitimately separate
+    }
+    return baseDynamoRouter()(command);
+  });
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'Best captain picks this season?', season: '2025/26' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+
+    // Confirms both fields really were populated (not just one), otherwise a single
+    // Scan wouldn't prove dedup, just that only one field was requested.
+    assert.match(contextBlock, /<manager_season_stats>/);
+    const managerStats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
+    assert.ok(managerStats.length > 0, 'Expected manager_season_stats to be populated');
+    const topPicks = JSON.parse(contextBlock.match(/<top_captain_picks>(.*?)<\/top_captain_picks>/)[1]);
+    assert.ok(topPicks.best.length > 0, 'Expected top_captain_picks to be populated');
+
+    assert.strictEqual(entryGwSeasonScans, 2,
+      `Expected exactly 2 season-wide fpl_entry_gameweek scans (getLatestStoredGameweek's own, ` +
+      `unrelated one, plus the single shared fetchSeasonEntryData scan -- down from 3 before this ` +
+      `fix), got ${entryGwSeasonScans}`);
+    assert.strictEqual(picksSeasonScans, 1,
+      `Expected exactly one season-wide fpl_entry_picks scan, got ${picksSeasonScans}`);
+  } finally {
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
 test('[regression] a gameweek-scoped captain question does not fetch top_captain_picks (stays empty)', async () => {
   // A gameweek-scoped captain question still legitimately triggers
   // getManagerNamesForGW's fpl_entry_gameweek scan (season + gameweek filter, for

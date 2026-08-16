@@ -201,6 +201,55 @@ test('no event flagged is_next logs a warning and fixture_run stays null', async
   }
 });
 
+// Regression for the 2026-08-16 GenBI latency investigation: a "good fixtures coming
+// up" question matches fixtureRun, which router.mjs forces nextGwStrategy on for too
+// (see its own comment) -- so both getNextGwProjections and getFixtureRun used to run,
+// and each independently fetched bootstrap-static, hitting FPL's live API 3 times in
+// this one request (getActiveGameweek in dynamodb.mjs makes its own separate call to
+// resolve the current gameweek before the router even runs, PLUS the two genbi.mjs-local
+// calls this test targets). fetchBootstrapAndNextEvent in genbi.mjs now shares one fetch
+// between the latter two, bringing this down to 2 -- getActiveGameweek's own call is
+// shared infrastructure used by every other handler (standings, winners, trends...), not
+// just GenBI, so deduping THAT one is a separate, larger-blast-radius change, deliberately
+// left alone here (flagged as a further optimization opportunity, not fixed in this pass).
+test('a question needing both fixture_run and next_gw_projections fetches bootstrap-static only twice (not 3x)', async () => {
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      return jsonResponse(buildBootstrapStatic({
+        events: [buildEvent(1, { is_next: true })],
+        teams: [{ id: 1, name: 'Man City' }],
+        elements: []
+      }));
+    }
+    return null;
+  });
+  const dynamoMock = installDynamoMock(baseDynamoRouter({ fixtures: [] }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    const result = await handleGenBI({ question: 'Who has good fixtures coming up?' }, {});
+    assert.strictEqual(result.statusCode, 200);
+
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    // Confirms next_gw_projections really was fetched too (not just fixture_run) --
+    // otherwise a single bootstrap-static call wouldn't actually prove dedup, just that
+    // only one field was requested.
+    assert.match(contextBlock, /<next_gw_projections>/);
+    assert.match(contextBlock, /<fixture_run>/);
+
+    const bootstrapCalls = fetchMock.calls.filter((c) => c.url.includes('bootstrap-static'));
+    assert.strictEqual(bootstrapCalls.length, 2,
+      `Expected exactly two bootstrap-static fetches (getActiveGameweek's own call, plus one ` +
+      `shared call for next_gw_projections+fixture_run combined -- down from 3 before this fix), ` +
+      `got ${bootstrapCalls.length}`);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
 test('the system prompt covers fixture_run and distinguishes it from next_gw_projections', async () => {
   const fetchMock = installFetchMock((url) => {
     if (url.includes('bootstrap-static')) {
