@@ -105,38 +105,42 @@ useEffect(() => {
             </div>
           </div>
         </div>
-        {standings.map((manager) => (
-          <div key={manager.manager_id} className={`standings-card ${manager.rank === 1 ? 'top-1' : ''}`}>
-            <div className="card-rank">
-              <span className="rank-badge">{manager.rank}</span>
-            </div>
-            <div className="card-info">
-              {isCurrentSeason ? (
-                <button
-                  type="button"
-                  className="card-team card-team-link"
-                  onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.real_name, managerName: manager.team_nickname })}
-                >
-                  {manager.real_name}
-                </button>
-              ) : (
-                <p className="card-team">{manager.real_name}</p>
-              )}
-              {/* Historical (pre-2025/26) seasons only have a manager's real name on
-                  record, no separate team nickname -- team_nickname is null for those
-                  rows rather than a blank/duplicate line. */}
-              {manager.team_nickname && <p className="card-manager">{manager.team_nickname}</p>}
-            </div>
-            <div className="card-stats">
-              <div className="stat">
-                <span className="stat-value">{manager.points_this_week}</span>
+        {standings.map((manager) => {
+          const openSquad = () => setSelectedManager({ entryId: manager.manager_id, teamName: manager.real_name, managerName: manager.team_nickname });
+          return (
+            <div
+              key={manager.manager_id}
+              className={[
+                'standings-card',
+                manager.rank === 1 ? 'top-1' : '',
+                // Full-card click, same pattern as GWWinners' row-link (see GWWinners.css
+                // .winners-row-link) -- only wired up for the current season, since the
+                // squad view it opens has no meaning for a past season's picks.
+                isCurrentSeason ? 'standings-row-link' : ''
+              ].filter(Boolean).join(' ')}
+              onClick={isCurrentSeason ? openSquad : undefined}
+            >
+              <div className="card-rank">
+                <span className="rank-badge">{manager.rank}</span>
               </div>
-              <div className="stat">
-                <span className="stat-value">{manager.total_points}</span>
+              <div className="card-info">
+                <p className={`card-team ${isCurrentSeason ? 'card-team-link' : ''}`}>{manager.real_name}</p>
+                {/* Historical (pre-2025/26) seasons only have a manager's real name on
+                    record, no separate team nickname -- team_nickname is null for those
+                    rows rather than a blank/duplicate line. */}
+                {manager.team_nickname && <p className="card-manager">{manager.team_nickname}</p>}
+              </div>
+              <div className="card-stats">
+                <div className="stat">
+                  <span className="stat-value">{manager.points_this_week}</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-value">{manager.total_points}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Desktop Table View */}
@@ -150,29 +154,30 @@ useEffect(() => {
           </tr>
         </thead>
         <tbody>
-          {standings.map((manager) => (
-            <tr key={manager.manager_id} className={manager.rank === 1 ? 'top-1' : ''}>
-              <td className="rank">
-                <span className="rank-badge">{manager.rank}</span>
-              </td>
-              <td className="team-manager">
-                {isCurrentSeason ? (
-                  <button
-                    type="button"
-                    className="team-name team-name-link"
-                    onClick={() => setSelectedManager({ entryId: manager.manager_id, teamName: manager.real_name, managerName: manager.team_nickname })}
-                  >
-                    {manager.real_name}
-                  </button>
-                ) : (
-                  <div className="team-name">{manager.real_name}</div>
-                )}
-                {manager.team_nickname && <div className="manager-name">{manager.team_nickname}</div>}
-              </td>
-              <td className="week-points col-divider">{manager.points_this_week}</td>
-              <td className="points col-divider">{manager.total_points}</td>
-            </tr>
-          ))}
+          {standings.map((manager) => {
+            const openSquad = () => setSelectedManager({ entryId: manager.manager_id, teamName: manager.real_name, managerName: manager.team_nickname });
+            return (
+              <tr
+                key={manager.manager_id}
+                className={[
+                  manager.rank === 1 ? 'top-1' : '',
+                  isCurrentSeason ? 'standings-row-link' : ''
+                ].filter(Boolean).join(' ')}
+                onClick={isCurrentSeason ? openSquad : undefined}
+                title={isCurrentSeason ? `View ${manager.real_name}'s squad` : undefined}
+              >
+                <td className="rank">
+                  <span className="rank-badge">{manager.rank}</span>
+                </td>
+                <td className="team-manager">
+                  <div className={`team-name ${isCurrentSeason ? 'team-name-link' : ''}`}>{manager.real_name}</div>
+                  {manager.team_nickname && <div className="manager-name">{manager.team_nickname}</div>}
+                </td>
+                <td className="week-points col-divider">{manager.points_this_week}</td>
+                <td className="points col-divider">{manager.total_points}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

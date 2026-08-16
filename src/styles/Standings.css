@@ -30,6 +30,18 @@
   transition: all 0.2s ease;
 }
 
+/* Whole card opens the manager's squad, same pattern as GWWinners' row-link (see
+   .winners-row-link in GWWinners.css) -- only applied for the current season (see
+   isCurrentSeason in Standings.jsx), since a past season's squad view has no meaning. */
+.standings-card.standings-row-link {
+  cursor: pointer;
+}
+
+.standings-card.standings-row-link:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
 /* One label row above the card list instead of repeating "GW N"/"Net Total" on every
    card -- same horizontal padding as .standings-card so its labels land directly
    above the numbers in the cards below. */
@@ -199,6 +211,17 @@
 
 .standings-table tbody tr:hover {
   background: var(--bg-surface-alt);
+}
+
+/* Whole row opens the manager's squad -- matches GWWinners' .winners-row-link exactly
+   (cursor + accent-soft hover), only applied for the current season. Higher specificity
+   than the plain tr:hover above so it wins on rows that have both. */
+.standings-table tbody tr.standings-row-link {
+  cursor: pointer;
+}
+
+.standings-table tbody tr.standings-row-link:hover {
+  background: var(--accent-soft);
 }
 
 /* No row highlight (see the mobile .top-1 rule removed above) -- the circled,
