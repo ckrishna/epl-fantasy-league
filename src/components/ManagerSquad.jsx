@@ -99,24 +99,34 @@ const JERSEY_COLLAR_PATH = 'M38 1 Q50 10 62 1 L57 9 Q50 14 43 9 Z';
 // data") has no real backend yet. This is a look-and-feel preview only, using
 // hand-written placeholder suggestions so the design can be reviewed before any of the
 // actual projection/analysis logic is built. Swap this out for a real getSquadAdvice()
-// API call (mirroring getManagerSquad) once that backend exists -- nothing else in
-// AdvisorModal below should need to change shape-wise.
+// API call (mirroring getManagerSquad) once that backend exists -- moves is the one
+// array AdvisorModal below actually renders (already sorted highest-impact first, the
+// way a real backend response should arrive too -- the UI doesn't re-sort).
 const MOCK_ADVISOR = {
   headline: 'Illustrative preview -- 3 moves could gain an estimated +9.4 pts over the next 3 gameweeks',
-  transfer: {
-    out: { name: 'Struggling Def', code: 'EVE' },
-    in: { name: 'In-form Def', code: 'BOU' },
-    delta: '+4.2 pts',
-    reason: 'Two home fixtures in the next three gameweeks against sides averaging under 1 xG, and rising ownership among top managers.'
-  },
-  captain: {
-    name: 'Erling Haaland',
-    delta: '+3.1 pts vs your current armband',
-    reason: 'Home fixture against a defense that’s conceded in 5 of their last 6, and nailed-on penalty duty.'
-  },
-  fixtures: [
-    { code: 'ARS', run: 'GW7–9 average difficulty 2.0 (easy) — 3 of your players are Arsenal' },
-    { code: 'EVE', run: 'GW7–9 average difficulty 4.3 (hard) — worth watching your Everton defender' }
+  moves: [
+    {
+      kind: 'transfer',
+      title: 'Transfer',
+      delta: '+4.2 pts',
+      out: { name: 'Struggling Def' },
+      in: { name: 'In-form Def' },
+      reason: 'Two home fixtures in the next three gameweeks against sides averaging under 1 xG, and rising ownership among top managers.'
+    },
+    {
+      kind: 'captain',
+      title: 'Captain',
+      delta: '+3.1 pts',
+      name: 'Erling Haaland',
+      reason: 'Home fixture against a defense that’s conceded in 5 of their last 6, and nailed-on penalty duty -- vs your current armband.'
+    },
+    {
+      kind: 'fixture',
+      title: 'Fixture watch',
+      delta: null,
+      name: 'Arsenal-heavy squad',
+      reason: 'GW7-9 average difficulty 2.0 (easy) for Arsenal, and 3 of your players are Arsenal. Your Everton defender has the opposite run (4.3, hard) -- worth watching.'
+    }
   ]
 };
 
@@ -400,10 +410,41 @@ function SparkleIcon({ size = 20 }) {
   );
 }
 
+// One move's actual content -- kept separate from the stepper chrome below so adding a
+// new `kind` later (e.g. "chip") only means adding a case here, not touching navigation.
+function AdvisorMoveBody({ move }) {
+  if (move.kind === 'transfer') {
+    return (
+      <div className="squad-advisor-transfer">
+        <div className="squad-advisor-transfer-side squad-advisor-out">
+          <span className="squad-advisor-transfer-label">OUT</span>
+          <span className="squad-advisor-transfer-name">{move.out.name}</span>
+        </div>
+        <span className="squad-advisor-transfer-arrow" aria-hidden="true">&rarr;</span>
+        <div className="squad-advisor-transfer-side squad-advisor-in">
+          <span className="squad-advisor-transfer-label">IN</span>
+          <span className="squad-advisor-transfer-name">{move.in.name}</span>
+        </div>
+      </div>
+    );
+  }
+  return <p className="squad-advisor-transfer-name">{move.name}</p>;
+}
+
 // Preview panel for GH #44 -- see the MOCK_ADVISOR comment above for why every number
 // and name in here is hand-written, not computed. Deliberately labeled "preview" in two
 // places (subtitle + headline) so nobody mistakes placeholder content for real advice.
+//
+// Ranked move cards: one move at a time, highest-impact first, paged with prev/next
+// buttons + dots rather than a scrolling list of sections -- chosen over the earlier
+// all-at-once layout specifically so a manager sees "here's move #1" before anything
+// else, matching how the app owner wanted this reviewed. Buttons (not touch-swipe-only)
+// so paging works the same on desktop as on mobile.
 function AdvisorModal({ onClose }) {
+  const [index, setIndex] = useState(0);
+  const moves = MOCK_ADVISOR.moves;
+  const move = moves[index];
+
   return (
     <div className="squad-help-overlay" onClick={onClose}>
       <div className="squad-help-modal squad-advisor-modal" onClick={(e) => e.stopPropagation()}>
@@ -419,37 +460,49 @@ function AdvisorModal({ onClose }) {
 
         <p className="squad-advisor-headline">{MOCK_ADVISOR.headline}</p>
 
-        <div className="squad-advisor-section">
-          <p className="squad-advisor-section-title">Transfer</p>
-          <div className="squad-advisor-transfer">
-            <div className="squad-advisor-transfer-side squad-advisor-out">
-              <span className="squad-advisor-transfer-label">OUT</span>
-              <span className="squad-advisor-transfer-name">{MOCK_ADVISOR.transfer.out.name}</span>
-            </div>
-            <span className="squad-advisor-transfer-arrow" aria-hidden="true">&rarr;</span>
-            <div className="squad-advisor-transfer-side squad-advisor-in">
-              <span className="squad-advisor-transfer-label">IN</span>
-              <span className="squad-advisor-transfer-name">{MOCK_ADVISOR.transfer.in.name}</span>
-            </div>
-            <span className="squad-advisor-delta">{MOCK_ADVISOR.transfer.delta}</span>
+        <div className="squad-advisor-card">
+          <div className="squad-advisor-card-header">
+            <span className="squad-advisor-card-rank">Move {index + 1} of {moves.length}</span>
+            {move.delta && <span className="squad-advisor-delta">{move.delta}</span>}
           </div>
-          <p className="squad-advisor-reason">{MOCK_ADVISOR.transfer.reason}</p>
+          <p className="squad-advisor-section-title">{move.title}</p>
+          <AdvisorMoveBody move={move} />
+          <p className="squad-advisor-reason">{move.reason}</p>
         </div>
 
-        <div className="squad-advisor-section">
-          <p className="squad-advisor-section-title">Captain</p>
-          <div className="squad-advisor-captain-row">
-            <span className="squad-advisor-transfer-name">{MOCK_ADVISOR.captain.name}</span>
-            <span className="squad-advisor-delta">{MOCK_ADVISOR.captain.delta}</span>
-          </div>
-          <p className="squad-advisor-reason">{MOCK_ADVISOR.captain.reason}</p>
-        </div>
+        <div className="squad-advisor-nav">
+          <button
+            type="button"
+            className="squad-advisor-nav-btn"
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+            aria-label="Previous move"
+          >
+            &larr;
+          </button>
 
-        <div className="squad-advisor-section">
-          <p className="squad-advisor-section-title">Fixture outlook</p>
-          {MOCK_ADVISOR.fixtures.map((f) => (
-            <p className="squad-advisor-reason" key={f.code}><strong>{f.code}</strong> &mdash; {f.run}</p>
-          ))}
+          <div className="squad-advisor-dots">
+            {moves.map((m, i) => (
+              <button
+                key={m.kind}
+                type="button"
+                className={`squad-advisor-dot ${i === index ? 'active' : ''}`}
+                onClick={() => setIndex(i)}
+                aria-label={`Go to move ${i + 1}: ${m.title}`}
+                aria-current={i === index}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="squad-advisor-nav-btn"
+            onClick={() => setIndex((i) => Math.min(moves.length - 1, i + 1))}
+            disabled={index === moves.length - 1}
+            aria-label="Next move"
+          >
+            &rarr;
+          </button>
         </div>
       </div>
     </div>

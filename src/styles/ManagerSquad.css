@@ -360,21 +360,42 @@
   line-height: 1.4;
 }
 
-.squad-advisor-section {
-  margin-bottom: 16px;
+/* One move card at a time (see AdvisorModal's stepper state) -- a bordered surface
+   distinct from the headline strip above it, so it reads as "the thing you're paging
+   through" rather than blending into the rest of the modal's text. */
+.squad-advisor-card {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+  /* Fixed floor, not just enough-for-content -- without this, a short move (fixture
+     watch, no OUT/IN row) is visibly shorter than a transfer card, and the whole modal
+     bounces in height as you page through. Comfortably fits the tallest move's content
+     at this modal's max-width. */
+  min-height: 132px;
 }
 
-.squad-advisor-section:last-child {
-  margin-bottom: 0;
+.squad-advisor-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
-.squad-advisor-section-title {
-  margin: 0 0 6px;
+.squad-advisor-card-rank {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
+}
+
+.squad-advisor-section-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .squad-advisor-transfer {
@@ -412,24 +433,77 @@
 }
 
 .squad-advisor-delta {
-  margin-left: auto;
   font-size: 13px;
   font-weight: 700;
   color: var(--accent);
+  flex-shrink: 0;
 }
 
-.squad-advisor-captain-row {
+.squad-advisor-reason {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ---- Card stepper controls -- prev/next buttons + dots, same row, matching the
+   ranked-move-cards direction (one move at a time, paged, not a scrolling list). Button
+   based rather than swipe-only so paging works identically with a mouse on desktop. */
+.squad-advisor-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.squad-advisor-reason {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-secondary);
+.squad-advisor-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.squad-advisor-nav-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.squad-advisor-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.squad-advisor-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.squad-advisor-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.squad-advisor-dot:hover {
+  background: var(--text-muted);
+}
+
+.squad-advisor-dot.active {
+  background: var(--accent);
+  transform: scale(1.25);
 }
 
 .squad-help-modal-body {
