@@ -139,6 +139,25 @@ export function selectRelevantFields(question) {
     fields.topCaptainPicks = true;
   }
 
+  // Regression fix (2026-08-16): before fixtureRun existed, "who has good fixtures
+  // coming up" matched NOTHING in KEYWORD_GROUPS and fell all the way through to the
+  // ALL_TRUE safety fallback below -- which happened to include nextGwStrategy, so
+  // next_gw_projections was fetched and gave a genuinely good answer. The moment
+  // fixtureRun's own keywords started matching that same phrasing, the question
+  // stopped hitting ALL_TRUE and got ONLY fixture_run -- and confirmed live, when
+  // fixture_run came back null (getFixtureRun does its own independent bootstrap-
+  // static fetch + fpl_fixture_data scan, a newer and less-proven path than
+  // next_gw_projections), the answer degraded to a hard decline instead of the fallback
+  // it used to get for free. fixtureRun is a TEAM-level, multi-gameweek signal;
+  // next_gw_projections is PLAYER-level and single-gameweek -- different enough that
+  // Claude can still say something useful from next_gw_projections' next_fixture
+  // difficulty alone if fixture_run is unavailable. So: any question that matches
+  // fixtureRun also pulls nextGwStrategy, same "under-fetching is worse than
+  // over-fetching" principle as topCaptainPicks above.
+  if (fields.fixtureRun) {
+    fields.nextGwStrategy = true;
+  }
+
   const matchedAnything = Object.values(fields).some(Boolean);
   if (!matchedAnything) {
     return { ...ALL_TRUE };

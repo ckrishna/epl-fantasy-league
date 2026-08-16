@@ -140,6 +140,18 @@ test('a "fixture run" question selects fixtureRun', () => {
   assert.strictEqual(fields.fixtureRun, true);
 });
 
+// Regression fix (2026-08-16): before fixtureRun existed, this exact question fell
+// through to the ALL_TRUE safety fallback and got a genuinely good answer from
+// next_gw_projections. Once fixtureRun's keywords started matching it, it stopped
+// hitting ALL_TRUE and got ONLY fixture_run -- and confirmed live, when getFixtureRun
+// returned null in production, the answer degraded to a hard decline with no fallback.
+// fixtureRun must always imply nextGwStrategy too, so next_gw_projections stays
+// available as a fallback signal even if fixture_run itself fails.
+test('a fixtureRun-matching question also selects nextGwStrategy as a resilience fallback', () => {
+  const fields = selectRelevantFields('Who has good fixtures coming up?');
+  assert.strictEqual(fields.nextGwStrategy, true, 'fixture_run is a newer, more failure-prone live path -- next_gw_projections must stay available as a fallback');
+});
+
 test('a retrospective captain question does NOT select fixtureRun', () => {
   // Deliberately narrow: bare "fixture" shouldn't fire fixtureRun (a second live
   // bootstrap-static fetch + full-table scan) -- next_gw_projections already covers a
