@@ -62,6 +62,65 @@
      reads the same as before the bubble was trimmed, rather than the whole page
      just getting shorter. */
   gap: 20px;
+  /* Anchors .squad-advisor-btn's absolute centering below. */
+  position: relative;
+}
+
+/* ---- Advisor entry point (GH #44 preview -- see MOCK_ADVISOR in ManagerSquad.jsx) ----
+   Centered over the pitch rather than in the legend row, on purpose: this needs to read
+   as its own standalone thing worth tapping, not one more icon among several. Fixed
+   colors like the rest of this file (not theme tokens) -- it sits directly on the
+   always-dark-green pitch regardless of app theme. */
+.squad-advisor-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(circle at 35% 30%, rgba(0, 255, 135, 0.55), #0c2a1e 72%);
+  color: #00ff87;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.squad-advisor-btn svg {
+  position: relative;
+  z-index: 1;
+}
+
+/* Two rings, offset in time (.squad-advisor-btn-ring-delay below), so a new pulse is
+   always mid-expansion somewhere -- a single ring reads as a one-off blip between
+   cycles rather than a continuous "notice me" throb. */
+.squad-advisor-btn-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 255, 135, 0.6);
+  animation: squad-advisor-pulse 2s ease-out infinite;
+}
+
+.squad-advisor-btn-ring-delay {
+  animation-delay: 1s;
+}
+
+@keyframes squad-advisor-pulse {
+  0% { transform: scale(0.8); opacity: 0.9; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squad-advisor-btn-ring {
+    animation: none;
+    opacity: 0.5;
+  }
 }
 
 /* Grid, not flex -- per direct feedback ("I need the total points in the middle"),
@@ -254,6 +313,117 @@
 .squad-close-btn:hover {
   background: var(--bg-surface-alt);
   color: var(--text-primary);
+}
+
+/* ---- Advisor preview modal (GH #44 -- see MOCK_ADVISOR in ManagerSquad.jsx) ----
+   Reuses .squad-help-overlay/.squad-help-modal/.squad-help-modal-header/.squad-close-btn
+   for the shared overlay chrome; everything below is advisor-specific content, using
+   normal theme tokens like the rest of this modal (unlike the pitch, this sits on the
+   app's regular surface, not the fixed-color pitch). */
+.squad-advisor-modal {
+  max-width: 460px;
+}
+
+.squad-advisor-modal .squad-help-modal-header h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.squad-advisor-modal-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.squad-advisor-subtitle {
+  margin: -6px 0 14px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.squad-advisor-headline {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.squad-advisor-section {
+  margin-bottom: 16px;
+}
+
+.squad-advisor-section:last-child {
+  margin-bottom: 0;
+}
+
+.squad-advisor-section-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.squad-advisor-transfer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.squad-advisor-transfer-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.squad-advisor-transfer-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.squad-advisor-out .squad-advisor-transfer-label { color: var(--danger); }
+.squad-advisor-in .squad-advisor-transfer-label { color: var(--success); }
+
+.squad-advisor-transfer-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.squad-advisor-transfer-arrow {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.squad-advisor-delta {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.squad-advisor-captain-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.squad-advisor-reason {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .squad-help-modal-body {

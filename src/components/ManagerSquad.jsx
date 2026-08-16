@@ -95,6 +95,31 @@ const DEFAULT_KIT = { primary: '#4b5563', trim: '#ffffff' };
 const JERSEY_PATH = 'M22 8 L38 1 Q50 10 62 1 L78 8 L96 21 L82 35 L78 30 L78 85 Q50 93 22 85 L22 30 L18 35 L4 21 Z';
 const JERSEY_COLLAR_PATH = 'M38 1 Q50 10 62 1 L57 9 Q50 14 43 9 Z';
 
+// MOCK CONTENT -- GH #44 ("Advisor: suggest squad moves using league + global FPL
+// data") has no real backend yet. This is a look-and-feel preview only, using
+// hand-written placeholder suggestions so the design can be reviewed before any of the
+// actual projection/analysis logic is built. Swap this out for a real getSquadAdvice()
+// API call (mirroring getManagerSquad) once that backend exists -- nothing else in
+// AdvisorModal below should need to change shape-wise.
+const MOCK_ADVISOR = {
+  headline: 'Illustrative preview -- 3 moves could gain an estimated +9.4 pts over the next 3 gameweeks',
+  transfer: {
+    out: { name: 'Struggling Def', code: 'EVE' },
+    in: { name: 'In-form Def', code: 'BOU' },
+    delta: '+4.2 pts',
+    reason: 'Two home fixtures in the next three gameweeks against sides averaging under 1 xG, and rising ownership among top managers.'
+  },
+  captain: {
+    name: 'Erling Haaland',
+    delta: '+3.1 pts vs your current armband',
+    reason: 'Home fixture against a defense that’s conceded in 5 of their last 6, and nailed-on penalty duty.'
+  },
+  fixtures: [
+    { code: 'ARS', run: 'GW7–9 average difficulty 2.0 (easy) — 3 of your players are Arsenal' },
+    { code: 'EVE', run: 'GW7–9 average difficulty 4.3 (hard) — worth watching your Everton defender' }
+  ]
+};
+
 function difficultyTier(d) {
   if (d <= 2) return 'easy';
   if (d >= 4) return 'hard';
@@ -355,6 +380,75 @@ function PlayerCard({ player, onOpenFixture, onOpenAvailability }) {
         <div className="squad-fixture-list">
           {player.fixtures.map((f, i) => (
             <FixturePill key={i} fixture={f} onClick={(fx) => onOpenFixture(player, fx)} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Four-point sparkle + two accompanying dots -- the familiar "AI" shorthand glyph,
+// reused for both the pulsing pitch button and the modal header so the same icon shows
+// up in both places.
+function SparkleIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2c.9 3.3 1.8 5.7 2.8 6.7 1 1 3.4 1.9 6.7 2.8-3.3.9-5.7 1.8-6.7 2.8-1 1-1.9 3.4-2.8 6.7-.9-3.3-1.8-5.7-2.8-6.7-1-1-3.4-1.9-6.7-2.8 3.3-.9 5.7-1.8 6.7-2.8 1-1 1.9-3.4 2.8-6.7Z" />
+      <circle cx="19.5" cy="4.5" r="1.3" />
+      <circle cx="4.5" cy="19" r="1" />
+    </svg>
+  );
+}
+
+// Preview panel for GH #44 -- see the MOCK_ADVISOR comment above for why every number
+// and name in here is hand-written, not computed. Deliberately labeled "preview" in two
+// places (subtitle + headline) so nobody mistakes placeholder content for real advice.
+function AdvisorModal({ onClose }) {
+  return (
+    <div className="squad-help-overlay" onClick={onClose}>
+      <div className="squad-help-modal squad-advisor-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="squad-help-modal-header">
+          <h4>
+            <span className="squad-advisor-modal-icon"><SparkleIcon size={18} /></span>
+            Squad Advisor
+          </h4>
+          <button type="button" className="squad-close-btn" onClick={onClose} aria-label="Close">&times;</button>
+        </div>
+
+        <p className="squad-advisor-subtitle">Preview -- illustrative suggestions, not wired to real projections yet.</p>
+
+        <p className="squad-advisor-headline">{MOCK_ADVISOR.headline}</p>
+
+        <div className="squad-advisor-section">
+          <p className="squad-advisor-section-title">Transfer</p>
+          <div className="squad-advisor-transfer">
+            <div className="squad-advisor-transfer-side squad-advisor-out">
+              <span className="squad-advisor-transfer-label">OUT</span>
+              <span className="squad-advisor-transfer-name">{MOCK_ADVISOR.transfer.out.name}</span>
+            </div>
+            <span className="squad-advisor-transfer-arrow" aria-hidden="true">&rarr;</span>
+            <div className="squad-advisor-transfer-side squad-advisor-in">
+              <span className="squad-advisor-transfer-label">IN</span>
+              <span className="squad-advisor-transfer-name">{MOCK_ADVISOR.transfer.in.name}</span>
+            </div>
+            <span className="squad-advisor-delta">{MOCK_ADVISOR.transfer.delta}</span>
+          </div>
+          <p className="squad-advisor-reason">{MOCK_ADVISOR.transfer.reason}</p>
+        </div>
+
+        <div className="squad-advisor-section">
+          <p className="squad-advisor-section-title">Captain</p>
+          <div className="squad-advisor-captain-row">
+            <span className="squad-advisor-transfer-name">{MOCK_ADVISOR.captain.name}</span>
+            <span className="squad-advisor-delta">{MOCK_ADVISOR.captain.delta}</span>
+          </div>
+          <p className="squad-advisor-reason">{MOCK_ADVISOR.captain.reason}</p>
+        </div>
+
+        <div className="squad-advisor-section">
+          <p className="squad-advisor-section-title">Fixture outlook</p>
+          {MOCK_ADVISOR.fixtures.map((f) => (
+            <p className="squad-advisor-reason" key={f.code}><strong>{f.code}</strong> &mdash; {f.run}</p>
           ))}
         </div>
       </div>
@@ -634,6 +728,7 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
   // unlike activeFixture, since availability isn't tied to a specific fixture pill.
   const [activeAvailability, setActiveAvailability] = useState(null);
   const openAvailability = (player) => setActiveAvailability(player);
+  const [showAdvisor, setShowAdvisor] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -667,6 +762,24 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
 
       {!loading && !error && squad && squad.players.length > 0 && (
         <div className="squad-pitch">
+          {/* Floating, always-pulsing "AI" entry point -- deliberately centered on the
+              pitch rather than tucked into the legend row, so it reads as its own
+              standalone thing to tap rather than one more control among several. See
+              MOCK_ADVISOR above: this opens a look-and-feel preview only, GH #44's real
+              suggestion logic doesn't exist yet. */}
+          <button
+            type="button"
+            className="squad-advisor-btn"
+            onClick={() => setShowAdvisor(true)}
+            aria-haspopup="dialog"
+            aria-label="Get suggested moves to improve this squad"
+            title="Get suggested moves to improve this squad"
+          >
+            <span className="squad-advisor-btn-ring" aria-hidden="true" />
+            <span className="squad-advisor-btn-ring squad-advisor-btn-ring-delay" aria-hidden="true" />
+            <SparkleIcon />
+          </button>
+
           {/* Three-column grid row: left column (help icon + team/manager name, which
               truncates per direct feedback -- "truncate name if needed") and right
               column (reserved Advisor slot) are equal-width (minmax(0, 1fr) each), so
@@ -760,6 +873,8 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
           onClose={() => setActiveAvailability(null)}
         />
       )}
+
+      {showAdvisor && <AdvisorModal onClose={() => setShowAdvisor(false)} />}
     </div>
   );
 }
