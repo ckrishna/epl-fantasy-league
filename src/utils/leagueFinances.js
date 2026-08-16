@@ -90,7 +90,16 @@ export async function computeLeagueFinances({ standings, winnersHistory, fetchGw
     if (item) addLineItem(managerId, { ...item, amount: round2(amount) });
   };
 
-  if (standings.length === 0) return new Map();
+  // Before a single gameweek has actually finished, `standings` is just whatever
+  // arbitrary order zero-point managers happen to come back in -- not real standings --
+  // and gwsPlayed below would be 0, which means gwPot is 0 and the ENTIRE buy-in pot
+  // (member_count * buyIn) would get treated as "left over" for the season-end top-N
+  // payout, producing a huge, meaningless number for whoever's sorted first. Nothing
+  // has actually been won yet, so there's nothing to compute -- confirmed live
+  // (2026-08-16): a 9-member league pre-GW1 showed a $171.82 "1st place" payout, which
+  // was 70% of the full $270 pot, not an error in the split math, just this guard
+  // missing.
+  if (standings.length === 0 || winnersHistory.length === 0) return new Map();
 
   const lastRank = Math.max(...standings.map((s) => s.rank));
   const lastPlaceIds = new Set(standings.filter((s) => s.rank === lastRank).map((s) => String(s.manager_id)));
