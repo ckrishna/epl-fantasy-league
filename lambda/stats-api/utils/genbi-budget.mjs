@@ -1,7 +1,7 @@
 // Daily cost guardrail for GenBI's Bedrock usage. Tracks real spend (not just token
-// count) against a hard daily cap, computed from Claude Haiku 4.5's actual Bedrock
-// pricing, so a request that's about to blow the budget is blocked *before* it's sent
-// (zero cost) rather than discovered after the fact.
+// count) against a hard daily cap, computed from the currently-configured model's
+// actual Bedrock pricing, so a request that's about to blow the budget is blocked
+// *before* it's sent (zero cost) rather than discovered after the fact.
 //
 // One DynamoDB row per UTC calendar day in the `genbi-usage-daily` table:
 //   { date: "2026-08-08", cost_usd: 0.42, warned: false }
@@ -12,12 +12,19 @@ import { dynamodb } from './dynamodb.mjs';
 
 const TABLE = 'genbi-usage-daily';
 
-// Bedrock on-demand pricing for us.anthropic.claude-haiku-4-5-20251001-v1:0 (us-west-2),
-// confirmed via AWS Bedrock pricing as of Aug 2026: $1.10 / 1M input tokens, $5.50 / 1M
-// output tokens. If Anthropic/AWS repricing changes this, update here -- this is the
-// only place cost is computed.
-const INPUT_COST_PER_TOKEN = 1.10 / 1_000_000;
-const OUTPUT_COST_PER_TOKEN = 5.50 / 1_000_000;
+// Bedrock on-demand pricing for us.anthropic.claude-sonnet-5 (us-west-2), switched from
+// Haiku 4.5 2026-08-16 (see bedrock.mjs's CLAUDE_MODEL_ID comment for why). Confirmed
+// via Anthropic's official pricing page as of Aug 2026: Sonnet 5 base rate is $2 / 1M
+// input tokens, $10 / 1M output tokens; Bedrock's `us.`-prefixed regional endpoint (used
+// here, not the global endpoint) carries a documented 10% premium over that base rate --
+// the same 1.1x relationship the old Haiku constants below already reflected ($1.10/
+// $5.50 vs Haiku's $1/$5 base) -- giving $2.20 / 1M input, $11 / 1M output. This is
+// exactly 2x the old Haiku cost per token, so the same $10/day default budget now covers
+// roughly half as many questions -- worth raising GENBI_DAILY_BUDGET_USD if that bites.
+// If Anthropic/AWS repricing changes this, update here -- this is the only place cost is
+// computed.
+const INPUT_COST_PER_TOKEN = 2.20 / 1_000_000;
+const OUTPUT_COST_PER_TOKEN = 11.00 / 1_000_000;
 
 export const DAILY_BUDGET_USD = Number(process.env.GENBI_DAILY_BUDGET_USD) || 10;
 export const WARNING_THRESHOLD_RATIO = 0.8;
