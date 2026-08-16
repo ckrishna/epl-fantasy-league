@@ -591,6 +591,112 @@ async function getNextGwProjections(seasonId) {
   }
 }
 
+// GH #46 gap 1 (2026-08-16, from the Bench Boost article that prompted comment-46-
+// fixture-lookahead-chip-state.md): every fixture-aware field above (next_gw_projections,
+// manager-squad.mjs's own fixtures view) is one gameweek deep. Chip/fixture-timing
+// advice ("who has a good run of fixtures coming up", the kind of thing that drives a
+// Bench Boost or Wildcard decision) needs a RUN of upcoming gameweeks per TEAM, not a
+// single next fixture per player. This is purely an aggregation over fpl_fixture_data
+// (already ingested, same table getFixturesForGW/manager-squad.mjs's getUpcomingFixtures
+// already read) plus one bootstrap-static call to resolve team names and the starting
+// gameweek -- no new data source.
+//
+// Finds the starting gameweek the same way getNextGwProjections does (bootstrap-static's
+// own is_next flag, not getActiveGameweek() -- see that function's comment for why:
+// pre-deadline, current_gw and the next gameweek can be the same number, which is
+// expected, not an error). Deliberately independent of getNextGwProjections's own fetch
+// rather than sharing its result -- fixtureRun and nextGwStrategy are gated by different
+// router keywords and either can be requested without the other.
+//
+// numGws defaults to 5 -- long enough to actually show a real fixture swing (the
+// article that prompted this used a 3-4 gameweek window), short enough to stay a small,
+// cheap payload alongside everything else in the prompt. Returns null under the same
+// conditions getNextGwProjections does (no next gameweek exists -- season concluded),
+// logged the same way (2026-08-16 fix -- see that function's own history for why silent
+// failure here was a real, previously-undiagnosable problem).
+async function getFixtureRun(seasonId, numGws = 5) {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
+    if (!response.ok) {
+      console.error(`fixture run: bootstrap-static returned ${response.status} ${response.statusText}`);
+      return null;
+    }
+    const data = await response.json();
+
+    const nextEvent = (data.events || []).find((e) => e.is_next);
+    if (!nextEvent) {
+      console.warn('fixture run: no event in bootstrap-static is flagged is_next (season concluded, or FPL data mid-transition)');
+      return null;
+    }
+    const fromGw = nextEvent.id;
+    const toGw = fromGw + numGws - 1;
+
+    const teamNameById = new Map((data.teams || []).map((t) => [t.id, t.name]));
+
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'fpl_fixture_data',
+      FilterExpression: 'season_id = :sid AND #ev BETWEEN :from AND :to',
+      ExpressionAttributeNames: { '#ev': 'event' },
+      ExpressionAttributeValues: { ':sid': seasonId, ':from': fromGw, ':to': toGw }
+    }));
+    const fixtures = (result.Items || []).sort((a, b) => a.event - b.event);
+
+    const byTeam = new Map(); // team_id -> [{gameweek, opponent, is_home, difficulty}]
+    function addFixture(teamId, entry) {
+      if (!byTeam.has(teamId)) byTeam.set(teamId, []);
+      byTeam.get(teamId).push(entry);
+    }
+    for (const f of fixtures) {
+      if (f.team_h != null) {
+        addFixture(f.team_h, {
+          gameweek: f.event,
+          opponent: teamNameById.get(f.team_a) || 'Unknown',
+          is_home: true,
+          difficulty: f.team_h_difficulty
+        });
+      }
+      if (f.team_a != null) {
+        addFixture(f.team_a, {
+          gameweek: f.event,
+          opponent: teamNameById.get(f.team_h) || 'Unknown',
+          is_home: false,
+          difficulty: f.team_a_difficulty
+        });
+      }
+    }
+
+    const teams = Array.from(byTeam.entries())
+      .map(([teamId, teamFixtures]) => {
+        const difficulties = teamFixtures.map((f) => f.difficulty).filter((d) => typeof d === 'number');
+        const averageDifficulty = difficulties.length > 0
+          ? Math.round((difficulties.reduce((a, b) => a + b, 0) / difficulties.length) * 10) / 10
+          : null;
+        return {
+          team_name: teamNameById.get(teamId) || 'Unknown',
+          average_difficulty: averageDifficulty,
+          fixture_count: teamFixtures.length,
+          fixtures: teamFixtures
+        };
+      })
+      // Easiest average run first -- matches how a manager would actually scan this
+      // ("who's got the kindest run coming up"). A team with zero fixtures in the
+      // window (a blank gameweek) has average_difficulty null -- sorted LAST, not
+      // first, since "no data" is not the same fact as "easy", and the prompt is told
+      // explicitly to treat it that way (see bedrock.mjs's <fixture_run> definition).
+      .sort((a, b) => {
+        if (a.average_difficulty === null && b.average_difficulty === null) return 0;
+        if (a.average_difficulty === null) return 1;
+        if (b.average_difficulty === null) return -1;
+        return a.average_difficulty - b.average_difficulty;
+      });
+
+    return { from_gameweek: fromGw, to_gameweek: toGw, teams };
+  } catch (err) {
+    console.error('Error fetching fixture run:', err);
+    return null;
+  }
+}
+
 // #39 Phase 2: ownership aggregates -- most-owned player and differentials (owned by
 // exactly one manager), for the resolved gameweek. Pure function over already-fetched
 // picks + the entry_id -> name map (same data getOurLeaguePicks/
@@ -772,6 +878,10 @@ export async function handleGenBI(body, corsHeaders) {
     // over, where "next gameweek" has no meaning (mirrors manager-squad.mjs's identical
     // current-season-only restriction on its own fixtures/form view).
     const needsNextGwProjections = fields.nextGwStrategy && !isHistorical;
+    // Same current-season-only restriction as next-gameweek projections, and for the
+    // same reason -- a fixture RUN only means anything looking forward from a season
+    // that's still being played (GH #46 gap 1).
+    const needsFixtureRun = fields.fixtureRun && !isHistorical;
     // Roster scoping only matters for the four functions that read fpl_entry_gameweek/
     // fpl_entry_picks season-wide (neither table carries its own league_id -- see
     // getLeagueRoster's comment) -- no point scanning fpl_league_standings for a roster
@@ -792,7 +902,7 @@ export async function handleGenBI(body, corsHeaders) {
     const authoritativeSeasonTotals = fields.seasonTotals ? await getAuthoritativeSeasonTotals(season) : [];
 
     // 1. Fetch only what the router decided is relevant, in parallel
-    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks, nextGwProjections] = await Promise.all([
+    const [gwWinners, playerData, ourPicks, teamMap, seasonTotals, currentStandings, managerSeasonAggregates, managerNamesForGW, topCaptainPicks, nextGwProjections, fixtureRun] = await Promise.all([
       needsGwWinners ? getGWWinners(season, leagueId) : Promise.resolve([]),
       fields.playerGwData ? getPlayerDataForGW(gw, seasonId) : Promise.resolve([]),
       (fields.managerPicks || fields.ownership) ? getOurLeaguePicks(gw, leagueRoster) : Promise.resolve([]),
@@ -804,7 +914,8 @@ export async function handleGenBI(body, corsHeaders) {
       fields.managerStats ? getManagerSeasonAggregates(season, leagueRoster) : Promise.resolve([]),
       needsManagerNames ? getManagerNamesForGW(gw, season, leagueRoster) : Promise.resolve(new Map()),
       fields.topCaptainPicks ? getTopCaptainPicks(season, 10, leagueRoster) : Promise.resolve({ best: [], worst: [] }),
-      needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null)
+      needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null),
+      needsFixtureRun ? getFixtureRun(seasonId) : Promise.resolve(null)
     ]);
 
     // Diagnostic (2026-08-16): a live check confirmed nextGwProjections reaches this
@@ -970,7 +1081,15 @@ export async function handleGenBI(body, corsHeaders) {
       // a projection, not a fact. null whenever not fetched (question didn't ask, or a
       // historical season is being browsed) -- the prompt handles that explicitly rather
       // than the model guessing why it's empty.
-      next_gw_projections: nextGwProjections
+      next_gw_projections: nextGwProjections,
+      // GH #46 gap 1: multi-gameweek fixture lookahead, one row per TEAM (not per
+      // player) across the next several not-yet-played gameweeks, sorted easiest
+      // average difficulty first. Distinct from next_gw_projections above, which is
+      // single-gameweek and player-level. Used for "who has a good run of fixtures
+      // coming up" / chip-timing-adjacent questions. See getFixtureRun and instruction
+      // 12 in bedrock.mjs. null whenever not fetched (question didn't ask, or a
+      // historical season is being browsed).
+      fixture_run: fixtureRun
     };
 
     // 5. Invoke Claude with refined context

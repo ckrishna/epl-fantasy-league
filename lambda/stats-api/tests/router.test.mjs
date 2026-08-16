@@ -105,7 +105,7 @@ test('[current bug] "own"/"shown"/"known" false positives are avoided -- only sp
 
 test('[regression] every field key is always present, never undefined', () => {
   const fields = selectRelevantFields('anything at all');
-  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership', 'topCaptainPicks', 'nextGwStrategy']) {
+  for (const key of ['standings', 'seasonWins', 'recentForm', 'playerGwData', 'seasonTotals', 'managerPicks', 'managerStats', 'ownership', 'topCaptainPicks', 'nextGwStrategy', 'fixtureRun']) {
     assert.strictEqual(typeof fields[key], 'boolean', `Expected ${key} to always be a boolean`);
   }
 });
@@ -128,6 +128,28 @@ test('a retrospective captain question does NOT select nextGwStrategy', () => {
 test('a season-scoped captain question does NOT select nextGwStrategy', () => {
   const fields = selectRelevantFields('Best captain picks this season?');
   assert.strictEqual(fields.nextGwStrategy, false);
+});
+
+test('a "good fixtures coming up" question selects fixtureRun', () => {
+  const fields = selectRelevantFields('Who has good fixtures coming up?');
+  assert.strictEqual(fields.fixtureRun, true);
+});
+
+test('a "fixture run" question selects fixtureRun', () => {
+  const fields = selectRelevantFields("What's Arsenal's fixture run like?");
+  assert.strictEqual(fields.fixtureRun, true);
+});
+
+test('a retrospective captain question does NOT select fixtureRun', () => {
+  // Deliberately narrow: bare "fixture" shouldn't fire fixtureRun (a second live
+  // bootstrap-static fetch + full-table scan) -- next_gw_projections already covers a
+  // single player's immediate next fixture via nextGwStrategy. Uses a question that
+  // partially matches something else (managerPicks/playerGwData, via "captained" ->
+  // "captain") so this is a real narrow-match assertion, not an accidental full
+  // ALL_TRUE fallback (which "Haaland's next fixture?" alone triggers, since nothing
+  // in KEYWORD_GROUPS matches it at all).
+  const fields = selectRelevantFields('Who captained Haaland this week?');
+  assert.strictEqual(fields.fixtureRun, false);
 });
 
 test('[regression] empty question string does not throw, falls back to everything', () => {

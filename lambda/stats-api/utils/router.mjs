@@ -63,6 +63,21 @@ const KEYWORD_GROUPS = {
     'next gameweek', 'next gw', 'next week', 'upcoming gameweek', 'upcoming gw',
     'who should i captain', 'good captain pick', 'best captain for', 'who to captain',
     'who to pick', 'good pick for'
+  ],
+  // GH #46 gap 1 (2026-08-16): multi-gameweek fixture lookahead -- "who has good
+  // fixtures coming up" is a different question from nextGwStrategy above (single
+  // gameweek, player-level captain advice); this is about a RUN of fixtures per TEAM,
+  // the kind of question that drives chip-timing/wildcard decisions ("Arsenal have 3
+  // easy fixtures in a row, worth a Bench Boost around then"). Deliberately keyed on
+  // "run"/"coming up"/"swing" phrasing, not bare "fixture" or "fixtures" -- those alone
+  // are too broad (would also fire on "what's Haaland's next fixture", already covered
+  // by next_gw_projections' per-player next_fixture) to justify a second live
+  // bootstrap-static fetch plus a table-wide fpl_fixture_data scan for every fixture
+  // question.
+  fixtureRun: [
+    'fixture run', 'run of fixtures', 'good fixtures', 'easy fixtures', 'tough fixtures',
+    'hard fixtures', 'fixtures coming up', 'fixture swing', 'good run', 'bad run',
+    'kind fixtures', 'favourable fixtures', 'favorable fixtures'
   ]
 };
 
@@ -91,7 +106,8 @@ const ALL_TRUE = {
   managerStats: true,
   ownership: true,
   topCaptainPicks: true,
-  nextGwStrategy: true
+  nextGwStrategy: true,
+  fixtureRun: true
 };
 
 // Returns which context fields a question needs. Every key is always present
