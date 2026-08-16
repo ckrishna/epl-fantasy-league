@@ -193,6 +193,11 @@ export async function askClaude(question, leagueContext) {
   // don't add to cost_usd yet). Worth a follow-up once this is live: log a raw
   // responseBody.usage sample from CloudWatch, confirm the real field names, then
   // extend computeCostUsd/recordUsage in genbi-budget.mjs accordingly.
+  //
+  // The line below is that diagnostic -- prints the exact raw usage object Bedrock
+  // returns on every call, so CloudWatch shows the real field names/values instead of
+  // requiring a guess. Safe to delete once genbi-budget.mjs is updated to match.
+  console.log('bedrock usage diagnostic (for prompt-caching cost follow-up):', JSON.stringify(responseBody.usage));
   return {
     response: responseBody.content[0].text,
     usage: responseBody.usage
