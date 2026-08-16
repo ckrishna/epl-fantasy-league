@@ -205,7 +205,25 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
               <h3>{result.title}</h3>
               <p className="asked-question">"{result.question}"</p>
               <div className="answer-box markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.answer}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    // GenBI's answers regularly come back with wide tables (captain
+                    // picks: player/team/price/projected/fixture/difficulty). Wrapping
+                    // just the <table> in its own scroll container -- rather than
+                    // forcing table-layout:fixed on the table itself (the previous
+                    // approach) -- lets the browser size columns to their real content
+                    // and keeps header/body columns aligned, while still scrolling
+                    // horizontally instead of squashing everything to fit.
+                    table: ({ node, ...props }) => (
+                      <div className="table-scroll">
+                        <table {...props} />
+                      </div>
+                    )
+                  }}
+                >
+                  {result.answer}
+                </ReactMarkdown>
               </div>
               <div className="result-metadata">
                 <div className="stat-chip">

@@ -388,15 +388,28 @@
   color: var(--text-tertiary);
 }
 
+/* Wraps every <table> the markdown renderer produces (see Stats.jsx's custom `table`
+   component) -- scrolls horizontally on its own so a wide table never squeezes its
+   columns to fit or forces the whole answer card wider than the page. This replaced an
+   earlier attempt that set table-layout:fixed + display:table independently on thead/
+   tbody/tr to fake a scrollable table: that broke header/body column alignment (each
+   row became its own independently-sized "table"), which is what caused header text
+   like "PROJECTED"/"NEXT FIXTURE"/"DIFFICULTY" to visibly overlap on both desktop and
+   mobile. A plain scrolling wrapper around a normal (auto-layout) table lets the browser
+   size every column consistently from real cell content instead. */
+.answer-box .table-scroll {
+  overflow-x: auto;
+  margin: 0 0 1rem 0;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
 .answer-box table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0 0 1rem 0;
+  margin: 0;
   font-size: 0.9rem;
   background: var(--bg-surface);
-  border-radius: 6px;
-  overflow: hidden;
-  box-shadow: 0 0 0 1px var(--border);
 }
 
 .answer-box th,
@@ -404,6 +417,10 @@
   padding: 0.55rem 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  /* Keep each cell's own content on one line (a price, a projection, a fixture) so nothing
+     wraps awkwardly mid-value -- the table as a whole still scrolls via .table-scroll
+     above if the total width doesn't fit. */
+  white-space: nowrap;
 }
 
 .answer-box thead th {
@@ -421,20 +438,6 @@
 
 .answer-box tbody tr:nth-child(even) {
   background: var(--bg-surface-alt);
-}
-
-/* Horizontal scroll on narrow screens instead of squashing/overflowing the table */
-.answer-box table {
-  display: block;
-  overflow-x: auto;
-  white-space: nowrap;
-}
-.answer-box thead,
-.answer-box tbody,
-.answer-box tr {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
 }
 
 /* Metadata -- small "insight chip" style (muted uppercase label above, bold
