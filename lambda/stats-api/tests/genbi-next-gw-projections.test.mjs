@@ -253,6 +253,36 @@ test('a next-gameweek question about a HISTORICAL season does not fetch next_gw_
   }
 });
 
+// Regression for the 2026-08-16 pre-GW1 investigation: with real, populated
+// next_gw_projections data reaching the model, Claude still declined -- reasoning that
+// since next_gw_projections.next_gameweek matched <current_gw> (both "1", since no FPL
+// event is yet marked is_current or finished this early), it should wait for the
+// "current" gameweek to "conclude" before recommending, rather than recognizing that
+// next_gameweek == current_gw simply means that gameweek hasn't kicked off yet -- exactly
+// when a captain recommendation is needed. Locks in the prompt clarification that closes
+// this gap.
+test('the system prompt explicitly tells Claude not to withhold a pick when next_gameweek equals current_gw', async () => {
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      return jsonResponse(buildBootstrapStatic({ events: [buildEvent(1, { is_next: true })], teams: [], elements: [] }));
+    }
+    return null;
+  });
+  const dynamoMock = installDynamoMock(baseDynamoRouter({ fixtures: [] }));
+  const bedrockMock = installBedrockMock('ok');
+
+  try {
+    await handleGenBI({ question: 'Who should I captain next gameweek?' }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    assert.match(payload.system, /next_gameweek can be the SAME number as <current_gw>/);
+    assert.match(payload.system, /do not withhold a recommendation/i);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
 test('the system prompt covers next_gw_projections and frames it as a projection, not a fact', async () => {
   const fetchMock = installFetchMock((url) => {
     if (url.includes('bootstrap-static')) {
