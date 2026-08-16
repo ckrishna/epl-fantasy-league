@@ -933,6 +933,21 @@ export async function handleGenBI(body, corsHeaders) {
       sample: nextGwProjections?.players?.slice(0, 3) ?? null
     }));
 
+    // Mirrors the nextGwProjections diagnostic above -- getFixtureRun's two early-return
+    // branches (non-2xx bootstrap-static, no is_next event) and its catch-all already log
+    // on outright failure, but a live 2026-08-16 decline showed no such log line at all,
+    // meaning the function likely returned successfully with an EMPTY teams array (e.g.
+    // fpl_fixture_data's BETWEEN scan matching zero rows for the target gameweek range)
+    // rather than failing outright -- that's a silent-in-a-different-way gap the two
+    // existing log lines don't cover. Logging a real sample instead of guessing further.
+    console.log('fixtureRun diagnostic:', JSON.stringify({
+      needsFixtureRun,
+      from_gameweek: fixtureRun?.from_gameweek ?? null,
+      to_gameweek: fixtureRun?.to_gameweek ?? null,
+      team_count: fixtureRun?.teams?.length ?? 0,
+      sample: fixtureRun?.teams?.slice(0, 3) ?? null
+    }));
+
     // 2. Calculate Total Season Wins
     // Keyed by the combined "real name (nickname)" display string, built from
     // gw-winners-cache's real_name (real name, always present) + team_nickname
