@@ -92,3 +92,29 @@ test('[regression] askClaude still returns the response text and usage from Bedr
     bedrockMock.restore();
   }
 });
+
+// Regression for the 2026-08-16 non-determinism investigation: the exact same populated
+// <fixture_run> context produced a correct answer from Sonnet 4.6 once (via
+// scripts/debug-fixture-run.mjs) and a flat "I don't have fixture data" decline on live
+// production traffic the next call -- same data, different outcome, because the request
+// never pinned a temperature and Bedrock defaults to 1.0. Locks in that askClaude()
+// always sends temperature: 0, so this class of bug (confirmed live, not hypothetical)
+// doesn't silently regress in a future edit to the payload.
+test('[regression] askClaude pins temperature to 0 so identical context reliably produces identical output', async () => {
+  const bedrockMock = installBedrockMock('ok');
+  try {
+    await askClaude('Who has good fixtures coming up?', {
+      gameweek: 1,
+      recent_form_summary: {},
+      total_season_summary: {},
+      players_gw_data: [],
+      our_league_picks: []
+    });
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    assert.strictEqual(payload.temperature, 0,
+      'Bedrock defaults to temperature 1.0 when this is omitted -- confirmed live to cause the same ' +
+      'populated context to sometimes produce a correct answer and sometimes a false decline.');
+  } finally {
+    bedrockMock.restore();
+  }
+});

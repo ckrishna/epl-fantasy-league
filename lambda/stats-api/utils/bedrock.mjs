@@ -98,6 +98,20 @@ export async function askClaude(question, leagueContext) {
   const payload = {
     anthropic_version: 'bedrock-2023-05-31',
     max_tokens: 1024,
+    // Confirmed live 2026-08-16: the EXACT SAME populated <fixture_run> data produced a
+    // correct, detailed answer from Sonnet 4.6 in one call (scripts/debug-fixture-run.
+    // mjs) and a flat "I don't have fixture data" decline in another (real production
+    // traffic, same CloudWatch-confirmed team_count: 20 payload) -- with no request
+    // parameter left unset except this one. The system prompt opens by declaring "You
+    // are a deterministic FPL Data Analyst," but nothing in the actual API call enforced
+    // that -- Bedrock defaults to temperature 1.0 (Anthropic's standard default, tuned
+    // for creative variety, not grounded fact-retrieval) when this field is omitted.
+    // Pinning it to 0 makes the model's output the closest thing to deterministic given
+    // identical context, which is exactly what a "read this JSON and report it back
+    // accurately" task like this one needs -- there's no creative-writing upside to
+    // sampling variance here, only the downside of a coin-flip decline on data that's
+    // right there in the prompt.
+    temperature: 0,
     system: buildSystemPrompt(leagueContext),
     messages: [
       {
