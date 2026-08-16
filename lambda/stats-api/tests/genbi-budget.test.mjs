@@ -2,9 +2,9 @@
 //
 // Requirement: GenBI must never let Bedrock spend run unchecked. A $25/day hard cap,
 // computed from real token usage at the currently-configured model's actual Bedrock
-// rates (Claude Sonnet 5 as of 2026-08-16, switched from Haiku 4.5 -- see bedrock.mjs's
-// CLAUDE_MODEL_ID comment), blocks further calls once hit; a warning fires once per day
-// at 80% of budget.
+// rates (Claude Sonnet 4.6 as of 2026-08-16, switched from Haiku 4.5 -- see
+// bedrock.mjs's CLAUDE_MODEL_ID comment), blocks further calls once hit; a warning
+// fires once per day at 80% of budget.
 //
 // Run BEFORE this file existed: N/A (new module). Run against a broken/no-op
 // implementation: expect FAIL. Run against the real implementation: expect PASS.
@@ -24,9 +24,9 @@ import {
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
-test('computeCostUsd uses Sonnet 5 Bedrock rates ($2.20/1M in, $11.00/1M out)', () => {
+test('computeCostUsd uses Sonnet 4.6 Bedrock rates ($3.30/1M in, $16.50/1M out)', () => {
   const cost = computeCostUsd({ inputTokens: 1_000_000, outputTokens: 1_000_000 });
-  assert.ok(Math.abs(cost - 13.20) < 0.0001, `Expected $13.20 for 1M in + 1M out, got $${cost}`);
+  assert.ok(Math.abs(cost - 19.80) < 0.0001, `Expected $19.80 for 1M in + 1M out, got $${cost}`);
 });
 
 test('[current bug] getTodayUsage defaults to $0/not-warned when no row exists yet', async () => {

@@ -6,17 +6,27 @@
 // pattern that's already bitten this project three times (LEAGUE_ID, gameweek fallback
 // x2) -- consolidated into one function so there's only one place to update.
 //
-// Model: Claude Sonnet 5 (switched from Haiku 4.5 2026-08-16 -- see genbi-budget.mjs's
+// Model: Claude Sonnet 4.6 (switched from Haiku 4.5 2026-08-16 -- see genbi-budget.mjs's
 // pricing comment for the cost implication). Confirmed live via scripts/debug-fixture-
 // run.mjs: Haiku repeatedly declined "who has good fixtures coming up?" by reasoning
 // from its own pretrained assumptions about whether a season's fixtures had been
 // "released" yet, even with a genuinely populated <fixture_run> sitting in the prompt --
 // a model-capacity limitation no amount of instruction-wording iteration fixed (see
-// bedrock.mjs's instruction 12 history). us-west-2 does not support in-region on-demand
-// invocation for Sonnet 5 either (confirmed via the Bedrock model card), so this uses
-// the cross-region "Geo: US" inference profile ID (the `us.`-prefixed one) rather than
-// the bare model ID.
-export const CLAUDE_MODEL_ID = 'us.anthropic.claude-sonnet-5';
+// bedrock.mjs's instruction 12 history).
+//
+// NOT Claude Sonnet 5: confirmed live via scripts/check-model-access.mjs that this AWS
+// account gets AccessDeniedException for both anthropic.claude-sonnet-5 and
+// anthropic.claude-opus-5 ("not available for this account... contact AWS Sales") --
+// those need an actual sales conversation to enable, unlike the auto-enable-on-first-
+// invoke flow AWS's retired "Model access" console page description implied. Sonnet 4.5
+// and 4.6 both came back ACCESS OK in that same check; picked 4.6 as the newer
+// generation at identical published pricing to 4.5. Re-run check-model-access.mjs after
+// any future AWS Sales conversation if Sonnet 5 access is ever granted.
+//
+// us-west-2 does not support in-region on-demand invocation for this model (confirmed
+// via the Bedrock model card), so this uses the cross-region "Geo: US" inference
+// profile ID (the `us.`-prefixed one) rather than the bare model ID.
+export const CLAUDE_MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
 
 function buildSystemPrompt(leagueContext) {
   return `

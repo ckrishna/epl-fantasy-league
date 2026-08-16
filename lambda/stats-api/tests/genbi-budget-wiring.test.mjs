@@ -103,7 +103,7 @@ test('[current bug] records the real cost of a successful call against today\'s 
     await handleGenBI({ question: 'Who should I captain?' }, {});
     assert.ok(capturedAdd, 'Expected an UpdateCommand recording usage against genbi-usage-daily');
     const addedCost = capturedAdd.input.ExpressionAttributeValues[':c'];
-    const expectedCost = (4000 * 2.20 / 1_000_000) + (300 * 11.00 / 1_000_000);
+    const expectedCost = (4000 * 3.30 / 1_000_000) + (300 * 16.50 / 1_000_000);
     assert.ok(Math.abs(addedCost - expectedCost) < 1e-9,
       `Expected the recorded cost to reflect the real usage (${expectedCost}), got ${addedCost}`);
   } finally {
