@@ -9,7 +9,7 @@
 // fpl_fixture_data) so those questions get an honest, clearly-labeled-as-a-projection
 // answer instead of a decline.
 
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
 import { installBedrockMock } from './helpers/mock-bedrock.mjs';
@@ -128,6 +128,69 @@ test('unavailable players (status != "a") are excluded from next_gw_projections'
     fetchMock.restore();
     dynamoMock.restore();
     bedrockMock.restore();
+  }
+});
+
+// Regression for the 2026-08-16 silent-failure investigation: a captain question
+// declined with "no projection data available" even though bootstrap-static's own
+// is_next flag was genuinely set on GW1 at the time -- CloudWatch had nothing to show
+// for it, because both early-return branches in getNextGwProjections used to be
+// completely silent. These two tests lock in that they now log, so the next occurrence
+// is diagnosable instead of a repeat of that investigation.
+test('a non-2xx bootstrap-static response logs the status and next_gw_projections stays null', async () => {
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      return jsonResponse({}, { ok: false, status: 429 });
+    }
+    return null;
+  });
+  const dynamoMock = installDynamoMock(baseDynamoRouter({ fixtures: [] }));
+  const bedrockMock = installBedrockMock('ok');
+  const errorMock = mock.method(console, 'error', () => {});
+
+  try {
+    await handleGenBI({ question: "Who's a good captain pick for next gameweek?" }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
+    assert.strictEqual(proj, null);
+
+    const logged = errorMock.mock.calls.some((c) => String(c.arguments[0]).includes('429'));
+    assert.ok(logged, 'Expected the 429 status to be logged instead of failing silently');
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+    bedrockMock.restore();
+    errorMock.mock.restore();
+  }
+});
+
+test('no event flagged is_next logs a warning and next_gw_projections stays null', async () => {
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      // Every event finished, none flagged is_next -- e.g. a concluded season.
+      return jsonResponse(buildBootstrapStatic({ events: [buildEvent(1, { finished: true })], teams: [], elements: [] }));
+    }
+    return null;
+  });
+  const dynamoMock = installDynamoMock(baseDynamoRouter({ fixtures: [] }));
+  const bedrockMock = installBedrockMock('ok');
+  const warnMock = mock.method(console, 'warn', () => {});
+
+  try {
+    await handleGenBI({ question: "Who's a good captain pick for next gameweek?" }, {});
+    const payload = JSON.parse(bedrockMock.calls[0].input.body);
+    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
+    assert.strictEqual(proj, null);
+
+    const logged = warnMock.mock.calls.some((c) => String(c.arguments[0]).includes('is_next'));
+    assert.ok(logged, 'Expected the missing is_next event to be logged instead of failing silently');
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+    bedrockMock.restore();
+    warnMock.mock.restore();
   }
 });
 

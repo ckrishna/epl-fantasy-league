@@ -523,11 +523,26 @@ async function getFixturesForGW(seasonId, gw) {
 async function getNextGwProjections(seasonId) {
   try {
     const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
-    if (!response.ok) return null;
+    // Both early returns below used to be completely silent -- confirmed live 2026-08-16:
+    // a captain question declined with "no projection data available", CloudWatch showed
+    // the invocation ran clean (no thrown error, so the catch block below never fired),
+    // and bootstrap-static's own `is_next` flag was in fact set on GW1 at the time,
+    // ruling out the "no event flagged next" explanation this function's comment used to
+    // assume was the only real-world cause. That left a non-2xx response (rate limiting,
+    // a transient block on Lambda's outbound IP, a genuine FPL outage) as the likely
+    // culprit -- and there was no log line anywhere to confirm it. Logging both branches
+    // now so the next time this happens, CloudWatch actually says why instead of nothing.
+    if (!response.ok) {
+      console.error(`next-gameweek projections: bootstrap-static returned ${response.status} ${response.statusText}`);
+      return null;
+    }
     const data = await response.json();
 
     const nextEvent = (data.events || []).find((e) => e.is_next);
-    if (!nextEvent) return null;
+    if (!nextEvent) {
+      console.warn('next-gameweek projections: no event in bootstrap-static is flagged is_next (season concluded, or FPL data mid-transition)');
+      return null;
+    }
     const nextGw = nextEvent.id;
 
     const teamNameById = new Map((data.teams || []).map((t) => [t.id, t.name]));
