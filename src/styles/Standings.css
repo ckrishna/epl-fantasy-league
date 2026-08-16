@@ -37,7 +37,16 @@
   cursor: pointer;
 }
 
+/* Light mode: a subtle one-step-up shift from the card's own resting background
+   (--bg-surface-alt) -- per direct feedback, this pale lavender hover already read
+   well and didn't need a green tint on top. Dark mode gets the stronger accent-soft
+   green highlight instead (below), since --bg-surface-alt's dark value is barely
+   distinguishable from the card's own resting color against an already-dark page. */
 .standings-card.standings-row-link:hover {
+  background: var(--bg-surface-alt-2);
+}
+
+[data-theme='dark'] .standings-card.standings-row-link:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -189,14 +198,15 @@
   background: var(--bg-surface-alt);
 }
 
-/* Whole row opens the manager's squad -- matches GWWinners' .winners-row-link exactly
-   (cursor + accent-soft hover), only applied for the current season. Higher specificity
-   than the plain tr:hover above so it wins on rows that have both. */
+/* Whole row opens the manager's squad -- matches GWWinners' .winners-row-link exactly,
+   only applied for the current season. Light mode just keeps the plain tr:hover above
+   (per direct feedback, that pale lavender was already good and didn't need a green
+   tint); dark mode gets the stronger accent-soft green highlight below instead. */
 .standings-table tbody tr.standings-row-link {
   cursor: pointer;
 }
 
-.standings-table tbody tr.standings-row-link:hover {
+[data-theme='dark'] .standings-table tbody tr.standings-row-link:hover {
   background: var(--accent-soft);
 }
 
