@@ -8,7 +8,13 @@
 
 .stats-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Was 1fr 1fr (an even 50/50 split) -- the left panel is mostly static chrome (a
+     handful of suggested-question buttons and a tip box that never change), while the
+     right panel holds the actual variable-length answer, which now regularly includes
+     wide markdown tables (see .table-scroll). A capped-width left column gives the
+     answer panel the bulk of the page instead of half of it going unused. Below
+     1024px this still collapses to a single column (see that media block). */
+  grid-template-columns: minmax(280px, 340px) 1fr;
   gap: 2rem;
   max-width: 1400px;
   margin: 0 auto;
@@ -19,7 +25,10 @@
 .stats-left {
   background: var(--bg-surface);
   border-radius: 12px;
-  padding: 2rem;
+  /* Tighter than .stats-right's 2rem -- this column is now capped at 340px (see
+     .stats-container), so the old 2rem inset ate proportionally more of it. Restored
+     to the full 2rem once this stacks to full width below 1024px (see that block). */
+  padding: 1.5rem;
   box-shadow: var(--stats-card-shadow);
   display: flex;
   flex-direction: column;
@@ -37,7 +46,9 @@
 
 .stats-left h2 {
   margin: 0;
-  font-size: 1.8rem;
+  /* Was 1.8rem -- too large for the narrower 340px-capped column, wrapped awkwardly.
+     Restored to 1.8rem once this stacks to full width below 1024px. */
+  font-size: 1.4rem;
   color: var(--text-primary);
 }
 
@@ -51,7 +62,14 @@
 .question-input {
   flex: 1;
   padding: 0.75rem;
-  border: 2px solid var(--border);
+  /* Highlighted at rest (not just on focus) -- this is the primary way to use GenBI,
+     but sitting above a list of suggested-question buttons with the same neutral
+     border, it didn't read as "start here." An accent-colored border + soft glow all
+     the time (a stronger ring on focus below) points the eye at it immediately on
+     both desktop and mobile, same accent-green language the submit button already
+     uses. */
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
   border-radius: 8px;
   /* iOS Safari auto-zooms the page on focus for any input with font-size under 16px --
      that's almost certainly the "white background shifts when we try to type" report:
@@ -62,13 +80,22 @@
   font-size: max(0.95rem, 16px);
   background: var(--bg-surface);
   color: var(--text-primary);
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .question-input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+/* Muted while a question is already in flight -- the glow means "start here," which
+   isn't true mid-request, and a bright ring on a disabled field reads as broken rather
+   than inviting. */
+.question-input:disabled {
+  border-color: var(--border);
+  box-shadow: none;
+  opacity: 0.7;
 }
 
 .submit-btn {
@@ -553,6 +580,16 @@
 
   .stats-left, .stats-right {
     min-height: 400px;
+  }
+
+  /* .stats-left is full-width again once stacked, not capped at 340px -- restore the
+     roomier desktop-scale padding/heading size that the two-column layout trimmed. */
+  .stats-left {
+    padding: 2rem;
+  }
+
+  .stats-left h2 {
+    font-size: 1.8rem;
   }
 }
 
