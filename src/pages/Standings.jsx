@@ -178,14 +178,20 @@ useEffect(() => {
                 <span className="rank-badge">{manager.rank}</span>
               </div>
               <div className="card-info">
-                <p className={`card-team ${isCurrentSeason ? 'card-team-link' : ''}`}>
-                  <span className="card-team-name">{manager.real_name}</span>
-                  {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
-                </p>
+                <p className={`card-team ${isCurrentSeason ? 'card-team-link' : ''}`}>{manager.real_name}</p>
                 {/* Historical (pre-2025/26) seasons only have a manager's real name on
                     record, no separate team nickname -- team_nickname is null for those
-                    rows rather than a blank/duplicate line. */}
-                {manager.team_nickname && <p className="card-manager">{manager.team_nickname}</p>}
+                    rows rather than a blank/duplicate line. The money badge sits next to
+                    THIS line (the actual fantasy team name, e.g. "Self-Goal") rather than
+                    the real-name line above, per direct feedback -- "team name" means the
+                    team_nickname field here, confusingly, since card-team/real_name was
+                    already using that class name for the manager's own name. */}
+                {manager.team_nickname && (
+                  <p className="card-manager">
+                    <span className="card-manager-name">{manager.team_nickname}</span>
+                    {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
+                  </p>
+                )}
               </div>
               <div className="card-stats">
                 <div className="stat">
@@ -227,11 +233,13 @@ useEffect(() => {
                   <span className="rank-badge">{manager.rank}</span>
                 </td>
                 <td className="team-manager">
-                  <div className={`team-name ${isCurrentSeason ? 'team-name-link' : ''}`}>
-                    <span className="team-name-text">{manager.real_name}</span>
-                    {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
-                  </div>
-                  {manager.team_nickname && <div className="manager-name">{manager.team_nickname}</div>}
+                  <div className={`team-name ${isCurrentSeason ? 'team-name-link' : ''}`}>{manager.real_name}</div>
+                  {manager.team_nickname && (
+                    <div className="manager-name">
+                      <span className="manager-name-text">{manager.team_nickname}</span>
+                      {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
+                    </div>
+                  )}
                 </td>
                 <td className="week-points col-divider">{manager.points_this_week}</td>
                 <td className="points col-divider">{manager.total_points}</td>
