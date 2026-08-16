@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import App from './App.jsx'
+import AdvisorPreview from './pages/AdvisorPreview.jsx'
 import './index.css'
 
 // League id lives in the URL path (e.g. epl.candorsolutions.us/438107) so a specific
@@ -17,6 +18,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        {/* Dev-only design-review route, see pages/AdvisorPreview.jsx's header comment.
+            react-router v6 ranks a static path above a dynamic :leagueId segment
+            regardless of declaration order, so this always wins over the route below
+            for this exact path -- not reachable from any link in the app. */}
+        <Route path="/__advisor-preview" element={<AdvisorPreview />} />
         <Route path="/:leagueId" element={<App />} />
         <Route path="*" element={<App />} />
       </Routes>

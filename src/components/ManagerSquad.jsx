@@ -714,9 +714,13 @@ function AvailabilityDetailModal({ player, onClose }) {
   );
 }
 
-export default function ManagerSquad({ entryId, teamName, managerName, onClose }) {
-  const [squad, setSquad] = useState(null);
-  const [loading, setLoading] = useState(true);
+// mockSquad: bypasses the real /manager-squad fetch entirely and renders this data
+// instead -- used only by pages/AdvisorPreview.jsx, a dev-only route for reviewing the
+// GH #44 Advisor mock (see MOCK_ADVISOR above) without depending on real, live picks
+// data. Nothing else should ever pass this prop.
+export default function ManagerSquad({ entryId, teamName, managerName, onClose, mockSquad = null }) {
+  const [squad, setSquad] = useState(mockSquad);
+  const [loading, setLoading] = useState(!mockSquad);
   const [error, setError] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   // Which fixture-detail popup (if any) is open -- { player, fixture } together, since
@@ -731,6 +735,7 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
   const [showAdvisor, setShowAdvisor] = useState(false);
 
   useEffect(() => {
+    if (mockSquad) return;
     setLoading(true);
     setError(false);
     getManagerSquad(entryId)
@@ -740,7 +745,7 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
         setError(true);
       })
       .finally(() => setLoading(false));
-  }, [entryId]);
+  }, [entryId, mockSquad]);
 
   const starters = (squad?.players || []).filter((p) => !p.is_bench);
   const bench = (squad?.players || []).filter((p) => p.is_bench);
