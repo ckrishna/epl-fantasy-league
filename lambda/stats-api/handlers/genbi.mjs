@@ -807,18 +807,19 @@ export async function handleGenBI(body, corsHeaders) {
       needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null)
     ]);
 
-    // Diagnostic (2026-08-16): getNextGwProjections' two failure branches are now
-    // logged (see that function's own comment), but a live check showed FPL's
-    // bootstrap-static genuinely had a next gameweek flagged and no error/warning fired
-    // -- meaning this may have actually returned real data while the model still
-    // declined as if it had none. This line settles that ambiguity directly: it shows
-    // whether nextGwProjections reached this point null, empty, or genuinely populated,
-    // and separately, whether the router even decided to fetch it at all.
+    // Diagnostic (2026-08-16): a live check confirmed nextGwProjections reaches this
+    // point genuinely populated (30 players) and flows unmodified into leagueContext --
+    // yet Claude still declined as if it had none. That rules out every backend/pipeline
+    // explanation, so the remaining question is whether the DATA itself is degenerate
+    // (e.g. every ep_next is still 0 this close to a not-yet-locked GW1 deadline, which
+    // could read as "nothing useful" even though the array isn't empty) rather than
+    // whether it exists at all. Logging a real sample (not just a count) to see actual
+    // values instead of guessing further.
     console.log('nextGwProjections diagnostic:', JSON.stringify({
       needsNextGwProjections,
-      result: nextGwProjections
-        ? { next_gameweek: nextGwProjections.next_gameweek, player_count: nextGwProjections.players?.length ?? 0 }
-        : null
+      next_gameweek: nextGwProjections?.next_gameweek ?? null,
+      player_count: nextGwProjections?.players?.length ?? 0,
+      sample: nextGwProjections?.players?.slice(0, 3) ?? null
     }));
 
     // 2. Calculate Total Season Wins
