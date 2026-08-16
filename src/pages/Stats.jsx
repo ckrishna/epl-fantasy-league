@@ -116,12 +116,20 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
   return (
     <div className="stats-page">
       <div className="stats-container">
-        {/* Left Panel */}
+        {/* Ask Bar -- was a tall left-hand panel taking up half the desktop page
+            (heading, scope note, input, a full vertical stack of suggested-question
+            buttons, and a multi-line tip box); collapsed into a single compact bar
+            above the answer panel so the answer -- the actual reason someone is on
+            this page -- gets the vast majority of the screen on every viewport, not
+            just mobile. Suggested questions are a horizontally-scrolling row of chips
+            (see Stats.css) rather than stacked full-width buttons. */}
         <div className="stats-left">
-          <h2>⚡ League Intelligence</h2>
-          <ScopeNote season={seasonLabel}>
-            Questions are answered using {seasonLabel} season data only
-          </ScopeNote>
+          <div className="ask-bar-header">
+            <h2>⚡ League Intelligence</h2>
+            <ScopeNote season={seasonLabel}>
+              Questions are answered using {seasonLabel} season data only
+            </ScopeNote>
+          </div>
 
           <form className="custom-question" onSubmit={handleCustomQuestion}>
             <input
@@ -138,8 +146,6 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
             </button>
           </form>
 
-          <div className="divider">suggested:</div>
-
           <div className="queries-list">
             {SUGGESTED_QUERIES.map((query, idx) => (
               <button
@@ -148,29 +154,19 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
                 onClick={() => handleQueryClick(query)}
                 disabled={loading}
               >
-                <span className="query-icon">📊</span>
                 <span className="query-text">{query}</span>
-                <span className="query-arrow">→</span>
               </button>
             ))}
           </div>
 
-          <div className="info-box">
-            <p>💡 Each question is answered fresh — no memory of earlier questions. e.g., "Who made the best transfers?" or "Which player is a differential?"</p>
-          </div>
-
-          {/* Mobile-only equivalent of .info-box above -- that box (with its examples)
-              is hidden below 640px to reclaim vertical space for the answer panel (see
-              Stats.css's mobile block), but the "answered fresh" clarification itself
-              still matters there, maybe more so since a phone screen makes this look
-              exactly like a chat box. Trimmed to a single short line with no examples
-              (the suggested-question chips right above already show examples) and no
-              box/border, so it doesn't reintroduce the height problem that redesign
-              fixed. */}
-          <p className="mobile-fresh-note">💡 Each question is answered fresh, no memory of earlier ones.</p>
+          {/* Was a longer, boxed tip shown only on desktop plus a separate trimmed
+              mobile-only line -- now one short line at every size, since the compact
+              ask bar no longer has room to spare for a multi-line box on any screen. */}
+          <p className="fresh-note">💡 Each question is answered fresh, no memory of earlier ones.</p>
         </div>
 
-        {/* Right Panel */}
+        {/* Answer Panel -- fills essentially all remaining height below the compact ask
+            bar above (see .stats-right in Stats.css). */}
         <div className="stats-right">
           {!selectedQuery && !loading && (
             <div className="empty-state">
