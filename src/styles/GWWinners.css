@@ -12,6 +12,28 @@
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
+/* Same treatment as ManagerSquad's .squad-back-btn on Standings -- an explicit
+   affordance for backing out of a single gameweek's full listing, since re-clicking the
+   nav tab (which also works) has no on-screen cue. */
+.winners-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.35rem 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.winners-back-btn:hover {
+  color: var(--accent);
+}
+
 /* Winners dashboard - Compact */
 .winners-dashboard {
   margin: 2rem 0;
