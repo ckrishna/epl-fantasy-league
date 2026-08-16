@@ -17,7 +17,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 // `name` becomes real_name -- the real-name field genbi.mjs now keys manager identity
@@ -109,7 +109,7 @@ test('[current bug] manager_season_stats includes transfer activity, chips, benc
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     assert.strictEqual(stats.length, 1);
@@ -155,12 +155,12 @@ test('[current bug] "Best captain picks this season?" gets manager_season_stats,
   try {
     await handleGenBI({ question: 'Best captain picks this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     assert.strictEqual(stats.length, 1, 'Expected manager_season_stats to actually be populated, not skipped by the router');
     assert.strictEqual(stats[0].captain_points_season, 40, 'Expected 20 x 2 (default captain multiplier)');
-    assert.match(payload.system, /captain_points_season from <manager_season_stats>/, 'Expected the season-scoped captain instruction to be present in the prompt');
+    assert.match(systemText(payload), /captain_points_season from <manager_season_stats>/, 'Expected the season-scoped captain instruction to be present in the prompt');
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();
@@ -186,7 +186,7 @@ test('[current bug] chips_used_totals surfaces the manually-imported season fall
   try {
     await handleGenBI({ question: 'How many chips has each manager used this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     const m = stats.find((s) => s.manager === 'Da Movement');
@@ -211,7 +211,7 @@ test('[regression] chips_used_totals stays null when no manual import exists for
   try {
     await handleGenBI({ question: 'How many chips has each manager used this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     assert.strictEqual(stats[0].chips_used_totals, null);
@@ -239,7 +239,7 @@ test('[current bug] captain_points_season applies the real multiplier, including
   try {
     await handleGenBI({ question: 'How many transfers has each manager made?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     assert.strictEqual(stats[0].captain_points_season, 45, 'Expected 15 x 3 (the stored multiplier for a triple-captain pick), not 15 x 2');
@@ -276,7 +276,7 @@ test('[current bug] win streaks reset when a manager stops winning, not just acc
   try {
     await handleGenBI({ question: 'Who has the longest win streak this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     const daMovement = stats.find((m) => m.manager === 'Da Movement');
@@ -310,7 +310,7 @@ test('[current bug] manager_season_stats leads with the real name, nickname seco
   try {
     await handleGenBI({ question: 'How many transfers has each manager made?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const stats = JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
 
     assert.strictEqual(stats.length, 1);
@@ -405,9 +405,9 @@ test('[current bug] the system prompt covers manager_season_stats and is honest 
   try {
     await handleGenBI({ question: 'Who has the longest win streak?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /<manager_season_stats>/);
-    assert.match(payload.system, /MANAGER SEASON STATS/);
-    assert.match(payload.system, /BEST/, 'Expected an explicit rule distinguishing transfer activity counts from judging transfer quality');
+    assert.match(systemText(payload), /<manager_season_stats>/);
+    assert.match(systemText(payload), /MANAGER SEASON STATS/);
+    assert.match(systemText(payload), /BEST/, 'Expected an explicit rule distinguishing transfer activity counts from judging transfer quality');
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

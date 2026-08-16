@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
@@ -104,7 +104,7 @@ test('[current bug] our_league_picks resolves manager names via the entry_id joi
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const picks = JSON.parse(contextBlock.match(/<manager_picks>(.*?)<\/manager_picks>/)[1]);
 
     assert.strictEqual(picks.length, 2);
@@ -131,7 +131,7 @@ test('[current bug] an unresolvable entry_id falls back to "Unknown" rather than
   try {
     await handleGenBI({ question: 'Who captained this week?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const picks = JSON.parse(contextBlock.match(/<manager_picks>(.*?)<\/manager_picks>/)[1]);
 
     assert.strictEqual(picks[0].manager, 'Unknown');
@@ -159,7 +159,7 @@ test('[current bug] ownership_aggregates identifies the most-owned player across
   try {
     await handleGenBI({ question: 'Who is the most owned player this gameweek?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const agg = JSON.parse(contextBlock.match(/<ownership_aggregates>(.*?)<\/ownership_aggregates>/)[1]);
 
     assert.strictEqual(agg.most_owned_player.player, 'Haaland');
@@ -190,7 +190,7 @@ test('[current bug] ownership_aggregates.differentials only includes players own
   try {
     await handleGenBI({ question: 'Which player is a differential this gameweek?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const agg = JSON.parse(contextBlock.match(/<ownership_aggregates>(.*?)<\/ownership_aggregates>/)[1]);
 
     assert.strictEqual(agg.differentials.length, 2);
@@ -264,9 +264,9 @@ test('[current bug] the system prompt covers ownership_aggregates and distinguis
   try {
     await handleGenBI({ question: 'Which player is a differential?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /<ownership_aggregates>/);
-    assert.match(payload.system, /OWNERSHIP \/ DIFFERENTIALS/);
-    assert.match(payload.system, /global FPL ownership/i);
+    assert.match(systemText(payload), /<ownership_aggregates>/);
+    assert.match(systemText(payload), /OWNERSHIP \/ DIFFERENTIALS/);
+    assert.match(systemText(payload), /global FPL ownership/i);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

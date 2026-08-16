@@ -16,7 +16,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
@@ -64,7 +64,7 @@ test('[current bug] current_standings reaches the Bedrock context, sorted by poi
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const standings = JSON.parse(contextBlock.match(/<current_standings>(.*?)<\/current_standings>/)[1]);
 
     assert.strictEqual(standings.length, 2);
@@ -76,7 +76,7 @@ test('[current bug] current_standings reaches the Bedrock context, sorted by poi
     assert.strictEqual(standings[1].manager, 'Suberox FC (Suberox)');
     assert.strictEqual(standings[1].rank, 2);
 
-    assert.match(payload.system, /STANDINGS:/, 'Expected an explicit instruction routing standings questions to current_standings');
+    assert.match(systemText(payload), /STANDINGS:/, 'Expected an explicit instruction routing standings questions to current_standings');
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();
@@ -101,7 +101,7 @@ test('[current bug] walks back a gameweek if fpl_league_standings has a gap at t
   try {
     await handleGenBI({ question: 'What are our league standings?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const standings = JSON.parse(contextBlock.match(/<current_standings>(.*?)<\/current_standings>/)[1]);
     assert.strictEqual(standings.length, 1);
     assert.strictEqual(standings[0].manager, 'Suberox FC (Suberox)');
@@ -119,8 +119,8 @@ test('[regression] total_season_summary (win counts) is unaffected by the new st
   try {
     await handleGenBI({ question: 'Who has the most GW wins?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /<total_season_summary>/);
-    assert.match(payload.system, /MANAGER WIN COUNTS/);
+    assert.match(systemText(payload), /<total_season_summary>/);
+    assert.match(systemText(payload), /MANAGER WIN COUNTS/);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

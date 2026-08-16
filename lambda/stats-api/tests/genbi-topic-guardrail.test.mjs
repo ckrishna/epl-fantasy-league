@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 // Mirrors genbi-router-integration.test.mjs's baseDynamoRouter -- a historical season
@@ -57,9 +57,9 @@ test('the system prompt tells Claude to decline off-topic questions and redirect
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /TOPIC SCOPE/);
-    assert.match(payload.system, /do NOT attempt to answer it using your own general knowledge/);
-    assert.match(payload.system, /real-world politics, elections/);
+    assert.match(systemText(payload), /TOPIC SCOPE/);
+    assert.match(systemText(payload), /do NOT attempt to answer it using your own general knowledge/);
+    assert.match(systemText(payload), /real-world politics, elections/);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();
@@ -73,8 +73,8 @@ test('the topic-scope instruction survives alongside the forward-looking captain
   try {
     await handleGenBI({ question: 'Who should I captain next gameweek?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /TOPIC SCOPE/);
-    assert.match(payload.system, /FORWARD-LOOKING QUESTIONS/);
+    assert.match(systemText(payload), /TOPIC SCOPE/);
+    assert.match(systemText(payload), /FORWARD-LOOKING QUESTIONS/);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

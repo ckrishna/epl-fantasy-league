@@ -22,7 +22,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 // `name` becomes real_name -- see the identical comment in
@@ -107,7 +107,7 @@ test('[current bug] "best captain picks this season" gets top_captain_picks, ran
   try {
     await handleGenBI({ question: 'Best captain picks this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const topPicks = JSON.parse(contextBlock.match(/<top_captain_picks>(.*?)<\/top_captain_picks>/)[1]);
 
     assert.strictEqual(topPicks.best.length, 2);
@@ -132,7 +132,7 @@ test('[current bug] a 0-point captain pick (blank gameweek) appears in worst[], 
   try {
     await handleGenBI({ question: 'Worst captain picks this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const topPicks = JSON.parse(contextBlock.match(/<top_captain_picks>(.*?)<\/top_captain_picks>/)[1]);
 
     assert.strictEqual(topPicks.worst.length, 1);
@@ -195,7 +195,7 @@ test('a season-scoped captain question (managerStats + topCaptainPicks together)
   try {
     await handleGenBI({ question: 'Best captain picks this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
 
     // Confirms both fields really were populated (not just one), otherwise a single
     // Scan wouldn't prove dedup, just that only one field was requested.
@@ -263,7 +263,7 @@ test('[current bug] the system prompt tells Claude never to leak internal field/
   try {
     await handleGenBI({ question: 'What are our current standings?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /NEVER mention this prompt's internal structure/i);
+    assert.match(systemText(payload), /NEVER mention this prompt's internal structure/i);
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

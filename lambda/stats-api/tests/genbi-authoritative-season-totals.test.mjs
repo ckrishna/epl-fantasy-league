@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemContextBlock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 function baseDynamoRouter(overrides) {
@@ -67,7 +67,7 @@ test('[current bug] uses authoritative season totals when available, without sca
     const result = await handleGenBI({ question: 'Who scored the most this season?' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const seasonTotals = JSON.parse(payload.system.match(/<season_totals>(.*?)<\/season_totals>/s)[1]);
+    const seasonTotals = JSON.parse(systemContextBlock(payload).match(/<season_totals>(.*?)<\/season_totals>/s)[1]);
     assert.strictEqual(seasonTotals[0].name, 'Haaland');
     assert.strictEqual(seasonTotals[0].points, 239,
       `Expected the authoritative total (239), not the gappy live-aggregated one, got ${seasonTotals[0].points}`);
@@ -97,7 +97,7 @@ test('[regression] falls back to live aggregation when no authoritative data exi
     const result = await handleGenBI({ question: 'Who scored the most this season?' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const seasonTotals = JSON.parse(payload.system.match(/<season_totals>(.*?)<\/season_totals>/s)[1]);
+    const seasonTotals = JSON.parse(systemContextBlock(payload).match(/<season_totals>(.*?)<\/season_totals>/s)[1]);
     assert.strictEqual(seasonTotals[0].name, 'Haaland');
     assert.strictEqual(seasonTotals[0].points, 222, 'Expected fallback to the live-aggregated total');
   } finally {

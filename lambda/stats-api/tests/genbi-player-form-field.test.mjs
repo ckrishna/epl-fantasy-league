@@ -17,7 +17,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText, systemContextBlock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 function realisticPlayerRow({ name, total_points, team_id, form }) {
@@ -64,7 +64,7 @@ test('[current bug] players_gw_data sent to Claude includes each player\'s real 
     const result = await handleGenBI({ question: 'Which players are in form?' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const playerDataMatch = payload.system.match(/<player_data>(.*?)<\/player_data>/s);
+    const playerDataMatch = systemContextBlock(payload).match(/<player_data>(.*?)<\/player_data>/s);
     assert.ok(playerDataMatch, 'Expected <player_data> in the system prompt sent to Claude');
     const playerData = JSON.parse(playerDataMatch[1]);
     assert.strictEqual(playerData[0].form, 7.4,
@@ -92,7 +92,7 @@ test('[regression] a missing/undefined form value defaults to 0, not NaN or unde
   try {
     await handleGenBI({ question: 'Which players are in form?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const playerData = JSON.parse(payload.system.match(/<player_data>(.*?)<\/player_data>/s)[1]);
+    const playerData = JSON.parse(systemContextBlock(payload).match(/<player_data>(.*?)<\/player_data>/s)[1]);
     assert.strictEqual(playerData[0].form, 0);
   } finally {
     fetchMock.restore();
@@ -119,9 +119,9 @@ test('[current bug] the system prompt disambiguates PLAYER FORM from MANAGER FOR
   try {
     await handleGenBI({ question: 'Which managers are in form?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.ok(payload.system.includes('PLAYER FORM'),
+    assert.ok(systemText(payload).includes('PLAYER FORM'),
       'Expected the prompt to define PLAYER FORM as distinct from MANAGER FORM, so a small model has an explicit rule instead of guessing which "form" field a question means.');
-    assert.ok(payload.system.includes('MANAGER FORM'));
+    assert.ok(systemText(payload).includes('MANAGER FORM'));
   } finally {
     dynamoMock.restore();
     bedrockMock.restore();

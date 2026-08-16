@@ -24,7 +24,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 const CARPE_DIEM = 438107;
@@ -107,7 +107,7 @@ async function askManagerStats({ leagueId, seasonLeagueId, standings }) {
     if (leagueId !== undefined) body.league_id = leagueId;
     await handleGenBI(body, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     return JSON.parse(contextBlock.match(/<manager_season_stats>(.*?)<\/manager_season_stats>/)[1]);
   } finally {
     dynamoMock.restore();
@@ -219,7 +219,7 @@ test('[current gap] total_season_summary (derived from gw-winners-cache) is also
   try {
     await handleGenBI({ question: 'Who has won the most gameweeks this season?', season: '2025/26' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const summary = JSON.parse(contextBlock.match(/<total_season_summary>(.*?)<\/total_season_summary>/)[1]);
 
     assert.deepStrictEqual(Object.keys(summary), ['Da Movement'], 'Expected only Carpe Diem\'s own winner, not BETSBANTSSPORT\'s');

@@ -12,7 +12,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildEvent } from './helpers/mock-fetch.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
@@ -77,7 +77,7 @@ test('a "next gameweek" captain question fetches next_gw_projections, sorted by 
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
 
     assert.strictEqual(proj.next_gameweek, 1);
@@ -119,7 +119,7 @@ test('unavailable players (status != "a") are excluded from next_gw_projections'
   try {
     await handleGenBI({ question: 'Good captain pick for next gw?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
 
     assert.strictEqual(proj.players.length, 1);
@@ -151,7 +151,7 @@ test('a non-2xx bootstrap-static response logs the status and next_gw_projection
   try {
     await handleGenBI({ question: "Who's a good captain pick for next gameweek?" }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
     assert.strictEqual(proj, null);
 
@@ -180,7 +180,7 @@ test('no event flagged is_next logs a warning and next_gw_projections stays null
   try {
     await handleGenBI({ question: "Who's a good captain pick for next gameweek?" }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
     assert.strictEqual(proj, null);
 
@@ -219,7 +219,7 @@ test('a retrospective captain question (no "next"/"upcoming" wording), current s
     const result = await handleGenBI({ question: 'Who captained Haaland this week?' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
     assert.strictEqual(proj, null);
   } finally {
@@ -243,7 +243,7 @@ test('a next-gameweek question about a HISTORICAL season does not fetch next_gw_
     const result = await handleGenBI({ question: "Who's a good captain pick for next gameweek?", season: '2025/26' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const proj = JSON.parse(contextBlock.match(/<next_gw_projections>([\s\S]*?)<\/next_gw_projections>/)[1]);
     assert.strictEqual(proj, null);
   } finally {
@@ -274,8 +274,8 @@ test('the system prompt explicitly tells Claude not to withhold a pick when next
   try {
     await handleGenBI({ question: 'Who should I captain next gameweek?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /next_gameweek can be the SAME number as <current_gw>/);
-    assert.match(payload.system, /do not withhold a recommendation/i);
+    assert.match(systemText(payload), /next_gameweek can be the SAME number as <current_gw>/);
+    assert.match(systemText(payload), /do not withhold a recommendation/i);
   } finally {
     fetchMock.restore();
     dynamoMock.restore();
@@ -296,9 +296,9 @@ test('the system prompt covers next_gw_projections and frames it as a projection
   try {
     await handleGenBI({ question: 'Who should I captain next gameweek?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /<next_gw_projections>/);
-    assert.match(payload.system, /FORWARD-LOOKING QUESTIONS/);
-    assert.match(payload.system, /PROJECTION, not a fact/);
+    assert.match(systemText(payload), /<next_gw_projections>/);
+    assert.match(systemText(payload), /FORWARD-LOOKING QUESTIONS/);
+    assert.match(systemText(payload), /PROJECTION, not a fact/);
   } finally {
     fetchMock.restore();
     dynamoMock.restore();

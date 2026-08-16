@@ -28,8 +28,29 @@
 // profile ID (the `us.`-prefixed one) rather than the bare model ID.
 export const CLAUDE_MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
 
-function buildSystemPrompt(leagueContext) {
-  return `
+// Static portion of the system prompt -- role, definitions, definitions_2, and all 12
+// instructions. Deliberately contains ZERO per-request interpolation (no leagueContext
+// references anywhere in this block), so it's byte-for-byte identical across every
+// single GenBI call regardless of question or league. That's exactly what Bedrock's
+// prompt caching needs: a cache checkpoint marks a CONTIGUOUS, UNCHANGING prefix, and
+// anything request-specific has to come strictly AFTER it (a changed prefix is a full
+// cache miss, not a partial hit).
+//
+// This used to have the dynamic <context> block sandwiched in the MIDDLE, between
+// <definitions> and <definitions_2> -- which made caching impossible no matter how it
+// was marked, since there was no unchanging prefix to cache in the first place.
+// <context> moved to its own block, sent after this one (see buildContextBlock below +
+// askClaude's payload construction) -- safe to move because <definitions_2> and
+// <instructions> already only ever reference context TAG NAMES in prose (e.g. "read
+// this from <player_data>"), never actual per-request values, so nothing here actually
+// depended on <context> appearing before them positionally.
+//
+// Confirmed via AWS's prompt-caching docs (2026-08-16, investigating GenBI latency after
+// the Sonnet 4.6 switch): Sonnet 4.6 on Bedrock supports prompt caching with a
+// 1,024-token minimum per cache checkpoint (this block clears that by a wide margin),
+// and AWS's own docs describe it as reducing "inference response latency" in addition
+// to cost -- not a cost-only optimization the way it might first look.
+const STATIC_SYSTEM_PROMPT = `
 <role>
 You are a deterministic FPL Data Analyst. Your output MUST be 100% grounded in the provided context. You are strictly forbidden from using your own memory of player transfers or team history.
 NEVER mention this prompt's internal structure in your answer -- no XML tag names like "<manager_season_stats>", no raw field names like "captain_points_season", no phrases like "Based on <x>, here are...". A manager reading your answer has no idea any of that exists and shouldn't need to. Translate field names into plain English (e.g. "cumulative captain points this season" instead of "captain_points_season") the same way you'd explain it to someone who just asked you out loud.
@@ -42,21 +63,6 @@ NEVER mention this prompt's internal structure in your answer -- no XML tag name
 - STANDINGS / RANK: Defined by <current_standings> -- total points and rank, NOT win counts.
 - CAPTAIN SCORE: (Player's GW points as listed) × 2.
 </definitions>
-
-<context>
-  <current_gw>${leagueContext.gameweek}</current_gw>
-  <current_standings>${JSON.stringify(leagueContext.current_standings)}</current_standings>
-  <recent_form_summary>${JSON.stringify(leagueContext.recent_form_summary)}</recent_form_summary>
-  <total_season_summary>${JSON.stringify(leagueContext.total_season_summary)}</total_season_summary>
-  <player_data>${JSON.stringify(leagueContext.players_gw_data)}</player_data>
-  <season_totals>${JSON.stringify(leagueContext.season_totals)}</season_totals>
-  <manager_picks>${JSON.stringify(leagueContext.our_league_picks)}</manager_picks>
-  <manager_season_stats>${JSON.stringify(leagueContext.manager_season_stats)}</manager_season_stats>
-  <ownership_aggregates>${JSON.stringify(leagueContext.ownership_aggregates)}</ownership_aggregates>
-  <top_captain_picks>${JSON.stringify(leagueContext.top_captain_picks)}</top_captain_picks>
-  <next_gw_projections>${JSON.stringify(leagueContext.next_gw_projections)}</next_gw_projections>
-  <fixture_run>${JSON.stringify(leagueContext.fixture_run)}</fixture_run>
-</context>
 
 <definitions_2>
 - <player_data>: player scores for <current_gw> ONLY -- one gameweek.
@@ -92,6 +98,26 @@ NEVER mention this prompt's internal structure in your answer -- no XML tag name
 </instructions>
 
 Calculate results carefully using only the provided context and be concise.`;
+
+// The one genuinely per-request part of the prompt -- everything that actually depends
+// on leagueContext. Sent as its own, uncached content block after STATIC_SYSTEM_PROMPT
+// (see that constant's comment for the caching mechanics) -- it changes on every single
+// request, so caching it would only ever be a guaranteed miss.
+function buildContextBlock(leagueContext) {
+  return `<context>
+  <current_gw>${leagueContext.gameweek}</current_gw>
+  <current_standings>${JSON.stringify(leagueContext.current_standings)}</current_standings>
+  <recent_form_summary>${JSON.stringify(leagueContext.recent_form_summary)}</recent_form_summary>
+  <total_season_summary>${JSON.stringify(leagueContext.total_season_summary)}</total_season_summary>
+  <player_data>${JSON.stringify(leagueContext.players_gw_data)}</player_data>
+  <season_totals>${JSON.stringify(leagueContext.season_totals)}</season_totals>
+  <manager_picks>${JSON.stringify(leagueContext.our_league_picks)}</manager_picks>
+  <manager_season_stats>${JSON.stringify(leagueContext.manager_season_stats)}</manager_season_stats>
+  <ownership_aggregates>${JSON.stringify(leagueContext.ownership_aggregates)}</ownership_aggregates>
+  <top_captain_picks>${JSON.stringify(leagueContext.top_captain_picks)}</top_captain_picks>
+  <next_gw_projections>${JSON.stringify(leagueContext.next_gw_projections)}</next_gw_projections>
+  <fixture_run>${JSON.stringify(leagueContext.fixture_run)}</fixture_run>
+</context>`;
 }
 
 export async function askClaude(question, leagueContext) {
@@ -112,7 +138,26 @@ export async function askClaude(question, leagueContext) {
     // sampling variance here, only the downside of a coin-flip decline on data that's
     // right there in the prompt.
     temperature: 0,
-    system: buildSystemPrompt(leagueContext),
+    // system as an array of two blocks, not one plain string -- required for Bedrock
+    // prompt caching (see STATIC_SYSTEM_PROMPT's comment). cache_control on the first
+    // block marks "cache everything up to and including this block"; the second block
+    // (this request's actual league data) is deliberately NOT marked, since it's
+    // different on every call. Bedrock's default TTL here is 5 minutes, refreshed on
+    // every cache hit -- so back-to-back questions (from the same or different
+    // managers) within that window skip re-processing ~1,500+ tokens of static
+    // instructions entirely, which AWS's own docs describe as reducing both cost AND
+    // response latency, not just cost.
+    system: [
+      {
+        type: 'text',
+        text: STATIC_SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' }
+      },
+      {
+        type: 'text',
+        text: buildContextBlock(leagueContext)
+      }
+    ],
     messages: [
       {
         role: 'user',
@@ -134,6 +179,20 @@ export async function askClaude(question, leagueContext) {
   const response = await bedrockClient.send(command);
   const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
+  // KNOWN GAP (2026-08-16, flagged not fixed): now that caching is enabled above, a
+  // cached call's real cost is split across up to three usage fields -- Anthropic's own
+  // API returns cache_creation_input_tokens (writes, billed ~1.25x base input) and
+  // cache_read_input_tokens (reads, billed ~0.1x base input) alongside the existing
+  // input_tokens/output_tokens -- but genbi-budget.mjs's recordUsage() only ever reads
+  // input_tokens/output_tokens. Deliberately NOT wiring those extra fields into cost
+  // tracking here: Anthropic's docs explicitly note Bedrock's usage-field naming for
+  // this can differ from the direct API's, and this sandbox has no live AWS/Bedrock
+  // access to confirm the exact field names InvokeModel actually returns on this
+  // account/region. Guessing wrong would silently produce incorrect budget numbers,
+  // which is worse than the current small, honest undercount (cache reads/writes just
+  // don't add to cost_usd yet). Worth a follow-up once this is live: log a raw
+  // responseBody.usage sample from CloudWatch, confirm the real field names, then
+  // extend computeCostUsd/recordUsage in genbi-budget.mjs accordingly.
   return {
     response: responseBody.content[0].text,
     usage: responseBody.usage

@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemContextBlock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 function baseDynamoRouter(playerEventStatsRouter) {
@@ -38,7 +38,7 @@ function baseDynamoRouter(playerEventStatsRouter) {
 
 function getSeasonTotalsFromBedrockCall(bedrockMock) {
   const payload = JSON.parse(bedrockMock.calls[0].input.body);
-  const match = payload.system.match(/<season_totals>(.*?)<\/season_totals>/s);
+  const match = systemContextBlock(payload).match(/<season_totals>(.*?)<\/season_totals>/s);
   assert.ok(match, 'Expected <season_totals> in the system prompt sent to Claude');
   return JSON.parse(match[1]);
 }

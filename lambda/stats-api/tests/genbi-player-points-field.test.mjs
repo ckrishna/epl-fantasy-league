@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildPostSeasonEvents } from './helpers/mock-fetch.mjs';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemContextBlock } from './helpers/mock-bedrock.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
 // Shaped exactly like what DynamoDBDocumentClient hands back for a real
@@ -61,8 +61,7 @@ test('[current bug] player_data sent to Claude reflects real total_points, not a
     assert.strictEqual(result.statusCode, 200);
     assert.strictEqual(bedrockMock.calls.length, 1);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const systemPrompt = payload.system;
-    const playerDataMatch = systemPrompt.match(/<player_data>(.*?)<\/player_data>/s);
+    const playerDataMatch = systemContextBlock(payload).match(/<player_data>(.*?)<\/player_data>/s);
     assert.ok(playerDataMatch, 'Expected <player_data> in the system prompt sent to Claude');
     const playerData = JSON.parse(playerDataMatch[1]);
     assert.strictEqual(playerData[0].points, 18,
@@ -109,7 +108,7 @@ test('[current bug] top-50 selection actually sorts by real points, not a no-op 
   try {
     await handleGenBI({ question: 'Who scored the most?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const playerDataMatch = payload.system.match(/<player_data>(.*?)<\/player_data>/s);
+    const playerDataMatch = systemContextBlock(payload).match(/<player_data>(.*?)<\/player_data>/s);
     const playerData = JSON.parse(playerDataMatch[1]);
     assert.strictEqual(playerData[0].name, 'TopScorer',
       `Expected the highest-scoring player first, got "${playerData[0].name}". The sort is comparing a ` +

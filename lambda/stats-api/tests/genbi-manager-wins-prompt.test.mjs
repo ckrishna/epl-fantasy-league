@@ -17,7 +17,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { askClaude } from '../utils/bedrock.mjs';
 
 test('[current bug] system prompt tells the model to answer plain "most wins" questions from total_season_summary, not recent_form_summary', async () => {
@@ -31,7 +31,7 @@ test('[current bug] system prompt tells the model to answer plain "most wins" qu
       our_league_picks: []
     });
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const system = payload.system;
+    const system = systemText(payload);
 
     assert.match(system, /MANAGER WIN COUNTS/,
       'Expected an explicit instruction disambiguating plain "most wins" questions.');
@@ -61,8 +61,8 @@ test('[regression] Form instruction (#1) still routes manager-form questions to 
       our_league_picks: []
     });
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /rank managers by the count in <recent_form_summary>/i);
-    assert.match(payload.system, /last 5 gameweeks/i);
+    assert.match(systemText(payload), /rank managers by the count in <recent_form_summary>/i);
+    assert.match(systemText(payload), /last 5 gameweeks/i);
   } finally {
     bedrockMock.restore();
   }

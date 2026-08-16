@@ -10,7 +10,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert';
 import { installDynamoMock } from './helpers/mock-dynamo.mjs';
-import { installBedrockMock } from './helpers/mock-bedrock.mjs';
+import { installBedrockMock, systemText } from './helpers/mock-bedrock.mjs';
 import { installFetchMock, jsonResponse, buildBootstrapStatic, buildEvent } from './helpers/mock-fetch.mjs';
 import { handleGenBI } from '../handlers/genbi.mjs';
 
@@ -66,7 +66,7 @@ test('a "good fixtures coming up" question fetches fixture_run, sorted easiest f
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const run = JSON.parse(contextBlock.match(/<fixture_run>([\s\S]*?)<\/fixture_run>/)[1]);
 
     assert.strictEqual(run.from_gameweek, 1);
@@ -102,7 +102,7 @@ test('a fixture-run question about a HISTORICAL season does not fetch fixture_ru
     const result = await handleGenBI({ question: 'Who has good fixtures coming up?', season: '2025/26' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const run = JSON.parse(contextBlock.match(/<fixture_run>([\s\S]*?)<\/fixture_run>/)[1]);
     assert.strictEqual(run, null);
   } finally {
@@ -132,7 +132,7 @@ test('a retrospective captain question, current season, does not fetch fixture_r
     const result = await handleGenBI({ question: 'Who captained Haaland this week?' }, {});
     assert.strictEqual(result.statusCode, 200);
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const run = JSON.parse(contextBlock.match(/<fixture_run>([\s\S]*?)<\/fixture_run>/)[1]);
     assert.strictEqual(run, null);
   } finally {
@@ -159,7 +159,7 @@ test('a non-2xx bootstrap-static response logs the status and fixture_run stays 
   try {
     await handleGenBI({ question: 'Who has good fixtures coming up?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const run = JSON.parse(contextBlock.match(/<fixture_run>([\s\S]*?)<\/fixture_run>/)[1]);
     assert.strictEqual(run, null);
 
@@ -187,7 +187,7 @@ test('no event flagged is_next logs a warning and fixture_run stays null', async
   try {
     await handleGenBI({ question: 'Who has good fixtures coming up?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     const run = JSON.parse(contextBlock.match(/<fixture_run>([\s\S]*?)<\/fixture_run>/)[1]);
     assert.strictEqual(run, null);
 
@@ -231,7 +231,7 @@ test('a question needing both fixture_run and next_gw_projections fetches bootst
     assert.strictEqual(result.statusCode, 200);
 
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    const contextBlock = payload.system.match(/<context>([\s\S]*?)<\/context>/)[1];
+    const contextBlock = systemText(payload).match(/<context>([\s\S]*?)<\/context>/)[1];
     // Confirms next_gw_projections really was fetched too (not just fixture_run) --
     // otherwise a single bootstrap-static call wouldn't actually prove dedup, just that
     // only one field was requested.
@@ -263,8 +263,8 @@ test('the system prompt covers fixture_run and distinguishes it from next_gw_pro
   try {
     await handleGenBI({ question: 'Who has good fixtures coming up?' }, {});
     const payload = JSON.parse(bedrockMock.calls[0].input.body);
-    assert.match(payload.system, /<fixture_run>/);
-    assert.match(payload.system, /FIXTURE RUNS \(GH #46 gap 1\)/);
+    assert.match(systemText(payload), /<fixture_run>/);
+    assert.match(systemText(payload), /FIXTURE RUNS \(GH #46 gap 1\)/);
   } finally {
     fetchMock.restore();
     dynamoMock.restore();
