@@ -152,7 +152,9 @@ useEffect(() => {
         <tbody>
           {standings.map((manager) => (
             <tr key={manager.manager_id} className={manager.rank === 1 ? 'top-1' : ''}>
-              <td className="rank">{manager.rank}</td>
+              <td className="rank">
+                <span className="rank-badge">{manager.rank}</span>
+              </td>
               <td className="team-manager">
                 {isCurrentSeason ? (
                   <button

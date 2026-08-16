@@ -30,14 +30,6 @@
   transition: all 0.2s ease;
 }
 
-/* Only rank 1 gets color treatment now -- matches the approved mockup direction
-   (minimal: a single highlighted leader card, everyone else reads as one plain,
-   even list rather than a 3-tier gold/silver/bronze medal system). */
-.standings-card.top-1 {
-  background: linear-gradient(135deg, var(--accent-soft) 0%, transparent 100%);
-  border-color: var(--accent);
-}
-
 /* One label row above the card list instead of repeating "GW N"/"Net Total" on every
    card -- same horizontal padding as .standings-card so its labels land directly
    above the numbers in the cards below. */
@@ -55,8 +47,14 @@
   min-width: 50px;
 }
 
+/* Shared by both the mobile card rank circle and the desktop table's rank circle
+   (added below) -- not scoped to .standings-card, so the same "muted circle, #1 gets
+   the accent fill" treatment applies wherever a .rank-badge shows up. No highlighted
+   row/card anymore (see the removed .top-1 background rules above/below) -- per design
+   feedback, the leader's circled, accent-filled number is enough of a signal on its
+   own, a whole highlighted row on top of that was redundant. */
 .rank-badge {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -64,23 +62,15 @@
   width: 50px;
   height: 50px;
   border-radius: 50%;
-}
-
-/* Muted, neutral badge for every rank except #1 (was a solid --primary-filled circle
-   with hardcoded white text -- broke once --primary became a light color for text
-   readability elsewhere on this page; also matches the approved design direction,
-   where only the leader gets color treatment, not a 3-tier medal system). */
-.standings-card:not(.top-1) .rank-badge {
   background: var(--bg-surface-alt-2);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  font-size: 1.2rem;
 }
 
-.standings-card.top-1 .rank-badge {
+.top-1 .rank-badge {
   background: var(--accent);
   color: var(--text-on-accent);
-  font-size: 1.2rem;
+  border: none;
 }
 
 .card-info {
@@ -106,9 +96,26 @@
   text-align: left;
 }
 
-.card-team-link:hover,
-.team-name-link:hover {
+/* Compound selector (both classes together) for higher specificity than the plain
+   .card-team / .team-name rules below -- those set their own `color` and, at equal
+   (single-class) specificity, whichever is LATER in the file wins regardless of
+   intent. This guarantees the link styling always wins instead of silently depending
+   on source order. Underlined + accent-colored at rest, not just on hover -- before
+   this there was no visual difference between a clickable manager name and plain
+   text until you happened to hover it. */
+.card-team.card-team-link,
+.team-name.team-name-link {
+  color: var(--accent);
   text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s, color 0.15s;
+}
+
+.card-team.card-team-link:hover,
+.team-name.team-name-link:hover {
+  color: var(--accent-hover);
+  text-decoration-color: currentColor;
 }
 
 .card-manager {
@@ -194,21 +201,20 @@
   background: var(--bg-surface-alt);
 }
 
-/* Only rank 1 highlighted, same simplification as the mobile card view above. */
-.standings-table tbody tr.top-1 {
-  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 100%);
-}
-
+/* No row highlight (see the mobile .top-1 rule removed above) -- the circled,
+   accent-filled #1 badge inside .rank (below) is the only leader indicator now. */
 .rank {
-  font-weight: 800;
-  color: var(--text-tertiary);
-  width: 60px;
+  width: 76px;
   text-align: center;
-  font-size: 1.3rem;
 }
 
-.standings-table tbody tr.top-1 .rank {
-  color: var(--accent);
+/* Smaller than the mobile card's 50px circle -- the table row already has less
+   vertical breathing room per line than a card does. */
+.standings-table .rank-badge {
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+  margin: 0 auto;
 }
 
 .team-manager {

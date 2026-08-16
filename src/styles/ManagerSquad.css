@@ -4,6 +4,31 @@
   margin-top: 4px;
 }
 
+/* Re-added per direct design feedback after an earlier round had removed the standalone
+   "Back to standings" header in favor of just re-clicking the Standings nav tab -- that
+   worked but had no on-screen affordance, so most people didn't realize they could back
+   out of this view at all. Uses the app's normal light/dark theme tokens (unlike the
+   pitch below it, which is deliberately theme-fixed), since it sits above the pitch as
+   part of the regular page chrome. */
+.squad-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  padding: 0.35rem 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.squad-back-btn:hover {
+  color: var(--accent);
+}
+
 .squad-loading {
   color: var(--text-secondary);
   font-size: 13px;

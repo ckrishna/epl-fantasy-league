@@ -4,8 +4,9 @@
 // manager's current picks, each player's own club code, a hot/cold form indicator, and
 // their next two fixtures color-coded by difficulty. Renders inline in place of the
 // standings list (not a modal/popup) -- Standings.jsx swaps this in for the list when
-// a manager is selected, and swaps back on "Back to standings" or on re-clicking the
-// Standings nav tab. Design finalized over several mockup rounds with the app owner
+// a manager is selected, and swaps back via the "Back to standings" button below or by
+// re-clicking the Standings nav tab. Design finalized over several mockup rounds with
+// the app owner
 // (see the rules baked into the CSS: every player card shares one fixed background and
 // one fixed club-badge color regardless of light/dark theme -- deliberately NOT
 // theme-aware).
@@ -185,6 +186,13 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
 
   return (
     <div className="squad-page">
+      {/* Re-added per direct design feedback -- the Standings nav tab re-click
+          technically does the same thing, but with no on-screen affordance most
+          people didn't realize this view could be backed out of at all. */}
+      <button type="button" className="squad-back-btn" onClick={onClose}>
+        <span aria-hidden="true">&larr;</span> Back to standings
+      </button>
+
       {loading && <p className="squad-loading">Loading squad...</p>}
 
       {!loading && error && (
