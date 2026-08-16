@@ -99,6 +99,36 @@ export async function getSeasonLeagueIdsForGroup(leagueId) {
   return map.size > 0 ? map : null;
 }
 
+// Real-money prize-pool config (buy-in, per-GW payout, season-end top-N split, the
+// last-place-forgiveness threshold) -- see DATA_MODEL.md's "League money config"
+// section and src/utils/leagueFinances.js on the frontend, which does the actual
+// per-manager computation from whatever this returns. Deliberately opt-in per league:
+// lives as plain attributes on the SAME `groups` row everything else in this file
+// resolves through (no new table), and returns null unless `money_enabled` is
+// explicitly true on that row -- an unconfigured or unregistered league (the common
+// case for anyone other than the one league this was actually built for) gets null,
+// and the frontend renders nothing at all rather than a zeroed-out badge.
+export async function getMoneyConfigForLeagueId(leagueId) {
+  if (leagueId == null) return null;
+
+  const groupId = await getGroupIdForLeagueId(leagueId);
+  if (!groupId) return null;
+
+  const result = await dynamodb.send(new GetCommand({
+    TableName: 'groups',
+    Key: { group_id: groupId }
+  }));
+  const item = result.Item;
+  if (!item || item.money_enabled !== true) return null;
+
+  return {
+    buyIn: Number(item.buy_in) || 0,
+    gwPayout: Number(item.gw_payout) || 0,
+    topSplits: Array.isArray(item.top_splits) ? item.top_splits.map(Number) : [],
+    lastPlaceMinWinsToKeep: Number(item.last_place_min_wins_to_keep) || 0
+  };
+}
+
 // The group's durable display name (e.g. "Carpe Diem") -- the identity that stays
 // constant across seasons even though FPL recycles the underlying league_id every year
 // (see this file's header comment). Answers the other half of GH #49 ("show which

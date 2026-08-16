@@ -1,4 +1,5 @@
 import { queryLeagueStandings, getActiveGameweek, getCurrentSeason, getLatestStoredGameweek } from '../utils/dynamodb.mjs';
+import { getMoneyConfigForLeagueId } from '../utils/group-seasons.mjs';
 
 export async function handleStandings(queryParams, corsHeaders) {
   const currentSeason = await getCurrentSeason();
@@ -15,6 +16,24 @@ export async function handleStandings(queryParams, corsHeaders) {
   const activeGW = isHistorical
     ? await getLatestStoredGameweek(requestedSeason)
     : await getActiveGameweek();
+
+  // Real-money prize-pool config, opt-in per league (see getMoneyConfigForLeagueId's
+  // own comment) -- only resolved for the CURRENT season. A past season's standings
+  // are final/settled, but the money feature is specifically a live projection ("if
+  // today's standings held"), which has no meaning once you're looking at history;
+  // skipping the lookup there also avoids a pointless extra DynamoDB round-trip on
+  // every historical-season request. Wrapped defensively -- this is a purely additive
+  // feature that most leagues will never have configured; a DynamoDB hiccup resolving
+  // it should degrade to "no money data" (same as the common unconfigured case),
+  // never take down the whole standings response it's riding along on.
+  let moneyConfig = null;
+  if (!isHistorical && leagueId) {
+    try {
+      moneyConfig = await getMoneyConfigForLeagueId(leagueId);
+    } catch (err) {
+      console.error('getMoneyConfigForLeagueId failed:', err);
+    }
+  }
 
   let gw = queryParams.gw ? parseInt(queryParams.gw) : activeGW;
 
@@ -42,6 +61,7 @@ export async function handleStandings(queryParams, corsHeaders) {
       gameweek: parseInt(gw),
       active_gameweek: activeGW,
       standings: standingsData,
+      money_config: moneyConfig,
       last_updated: standingsData[0]?.last_synced || null,
       timestamp: new Date().toISOString()
     })

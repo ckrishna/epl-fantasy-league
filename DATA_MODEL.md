@@ -436,6 +436,26 @@ Fixed with a second scoping layer, on top of (not replacing) the existing season
 - **Tests:** `tests/trends.test.mjs` gained 3 new tests — an unrelated league's manager correctly excluded from rank/gap/field once a roster is resolvable, a safety-fallback test for an unbackfilled league_id (falls back to fully unscoped rather than excluding the requesting manager), and a no-league_id regression confirming `league_name`/per-season `league_id` are `null` and nothing changes when scoping was never requested. Full stats-api suite: 200/200 passing.
 - **Scope:** read-side only, same as the rest of Trends — no ingester or schema changes needed, since `getLeagueRoster` and the composite-key tables it reads already existed.
 
+#### League money config (new, 2026-08-16) — real-money prize-pool tracking on Standings
+
+Frontend-only mock first (branch `league-finances-mock`, merged into `main` 2026-08-16), then wired to a real per-league config the same day. No new table — five plain attributes on the same `groups` row everything else in this section already resolves through (`league_id` → `group_id` via `group_seasons` → `groups`):
+
+- `money_enabled` (BOOL) — the actual gate. `getMoneyConfigForLeagueId(leagueId)` (new, `utils/group-seasons.mjs`) returns `null` unless this is explicitly `true`, so a league nobody's configured is a silent no-op end to end (no badge, no separate flag, nothing rendered) — same fallback discipline as `getAllowedSeasonsForLeague`/`getSeasonLeagueIdsForGroup` above.
+- `buy_in` (N) — dollars per manager.
+- `gw_payout` (N) — dollars split among each gameweek's net-score winner(s); ties already split evenly since the ingester's own gameweek-winner computation (`fpl-data-ingester/index.mjs`) collects every manager tied for the max NET score (`points_this_week - transfer_cost`), not just one.
+- `top_splits` (list of N) — season-end top-N payout, as WEIGHTS normalized by their own sum, not literal percentages. Confirmed against the app owner's real numbers: a 10-member league's overall pot is $110 (300 total buy-in − 190 in GW payouts across 38 gameweeks), and "70/30/10" is meant to pay out exactly $70/$30/$10 — which only works if the weights are normalized by 110, not 100.
+- `last_place_min_wins_to_keep` (N, 0 = rule off) — whoever's LAST in the standings passed to the computation forfeits ALL their GW winnings unless they won at least this many gameweeks outright; each forfeited week's payout is reassigned to that specific week's own runner-up (re-ranked excluding last place, ties split evenly), not a season-long runner-up. Carpe Diem's real rule is `2` ("more than one win to keep it").
+
+**Seeding:** `scripts/set-league-money-config.mjs --group-id <id> --buy-in <n> --gw-payout <n> --top-splits <n,n,n> [--last-place-min-wins <n>] [--dry-run]` (or `--disable` to turn `money_enabled` off without discarding the dollar amounts). Requires the `groups` row to already exist (run `seed-default-group.mjs` first) — this script only ever updates an existing group, never creates one.
+
+**Read path:** `handlers/standings.mjs` resolves `money_config` and includes it (or `null`) in every `/standings` response, but ONLY for the current season and only when `league_id` is provided — a past/historical season has no meaningful "live projection" (the whole feature is explicitly a projection assuming today's standings hold, the app owner's confirmed choice over "confirmed money only"), and skipping the lookup there also avoids a pointless extra DynamoDB round-trip on every historical request. The lookup is wrapped in try/catch — a DynamoDB hiccup resolving it degrades to `money_config: null` (same as the common unconfigured case) rather than taking down the whole standings response it rides along on.
+
+**Compute path (frontend, `src/utils/leagueFinances.js`):** `computeLeagueFinances({ standings, winnersHistory, fetchGwStandings, config })` does the actual per-manager math from whatever `money_config` the API returned — `Standings.jsx` only calls it (and only fetches `getWinners()` at all) when `money_config` came back non-null. Renders as a green/red `+$N`/`−$N` badge next to each manager's team-nickname line (mobile card + desktop table), reusing the app's existing `--success`/`--danger` tokens.
+
+**Tests:** `tests/group-money-config.test.mjs` (new, 6 tests — the resolver's null-fallback paths plus the happy path) and 3 new tests in `tests/standings-handler.test.mjs` (money_config passthrough, the historical-season guard, the no-league_id case). Full stats-api suite: 224/224 passing.
+
+**Status:** code complete, not yet seeded for any real league as of 2026-08-16. Next step is running `set-league-money-config.mjs` for Carpe Diem (`group_id: carpe-diem`) and redeploying `stats-api`.
+
 ---
 
 ## `ingestion_runs` (new, 2026-08-08)

@@ -1,9 +1,8 @@
 // src/pages/Standings.jsx
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { getStandings, getWinners } from '../api/client';
 import ManagerSquad from '../components/ManagerSquad';
-import { computeLeagueFinances, DEFAULT_MONEY_CONFIG } from '../utils/leagueFinances';
+import { computeLeagueFinances } from '../utils/leagueFinances';
 import '../styles/Standings.css';
 
 // Rounded to whole dollars -- these are already a projection (see the effect above), so
@@ -26,12 +25,12 @@ const [activeGW, setActiveGW] = useState(null);
 const [displayGW, setDisplayGW] = useState(null);  // ← ADD THIS
 const [selectedManager, setSelectedManager] = useState(null); // { entryId, teamName, managerName }
 
-// Prize-pool money feature -- mock/preview only, not exposed to real users yet. Gated
-// behind ?money=1 so the real production Standings page never shows this until it's a
-// real per-league setting. See src/utils/leagueFinances.js for the actual math and the
-// business rules it encodes (confirmed with the app owner).
-const [searchParams] = useSearchParams();
-const showMoney = searchParams.get('money') === '1';
+// Real-money prize-pool feature -- opt-in per league. `money_config` comes back on
+// the standings response itself (null unless the backend resolves a league that's
+// actually had scripts/set-league-money-config.mjs run against it -- see
+// getMoneyConfigForLeagueId in stats-api). No separate flag or query param: a league
+// with no config just never gets one back, and the whole feature is a no-op for it.
+const [moneyConfig, setMoneyConfig] = useState(null);
 const [finances, setFinances] = useState(new Map()); // manager_id (string) -> {totalWon, net}
 
 // Re-clicking the "Standings" nav tab while already on this page should return from
@@ -65,6 +64,7 @@ useEffect(() => {
     if (data.gameweek) {
       setDisplayGW(data.gameweek);  // ← ADD THIS
     }
+    setMoneyConfig(data.money_config || null);
 
     const sorted = (data.standings || [])
       .sort((a, b) => b.total_points - a.total_points)
@@ -83,15 +83,16 @@ useEffect(() => {
   return () => { cancelled = true; };
 }, [season, leagueId]);
 
-// Prize-pool money -- mock/preview, only runs when ?money=1 is present and only for the
-// current season (a past/historical season has no meaningful "live projection", and the
-// last-place-forgiveness rule needs the winners history alongside the standings, which
-// getWinners already scopes to leagueId the same way getStandings does). Recomputes
-// whenever the underlying standings change so the green/red figures always reflect
-// wherever the season actually stands right now -- explicitly a live projection assuming
-// today's standings are final, not a "confirmed money only" figure (app owner's choice).
+// Only runs when the backend actually resolved a money_config for this league (see
+// above) and only for the current season (a past/historical season has no meaningful
+// "live projection" -- the backend already only returns a config for non-historical
+// requests, but this stays defensive rather than trusting that invariant silently).
+// Recomputes whenever the underlying standings change so the green/red figures always
+// reflect wherever the season actually stands right now -- explicitly a live
+// projection assuming today's standings are final, not a "confirmed money only" figure
+// (app owner's choice).
 useEffect(() => {
-  if (!showMoney || season || standings.length === 0) {
+  if (!moneyConfig || season || standings.length === 0) {
     setFinances(new Map());
     return;
   }
@@ -103,7 +104,7 @@ useEffect(() => {
       standings,
       winnersHistory,
       fetchGwStandings: (gw) => getStandings(gw, season, leagueId).then((d) => d.standings || []),
-      config: DEFAULT_MONEY_CONFIG
+      config: moneyConfig
     }).then((result) => {
       if (!cancelled) setFinances(result);
     });
@@ -112,7 +113,7 @@ useEffect(() => {
     console.error('Error computing league finances:', err);
   });
   return () => { cancelled = true; };
-}, [showMoney, season, leagueId, standings]);
+}, [moneyConfig, season, leagueId, standings]);
 
   if (loading) return <div className="loading">Loading standings...</div>;
 
@@ -189,7 +190,7 @@ useEffect(() => {
                 {manager.team_nickname && (
                   <p className="card-manager">
                     <span className="card-manager-name">{manager.team_nickname}</span>
-                    {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
+                    {moneyConfig && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
                   </p>
                 )}
               </div>
@@ -237,7 +238,7 @@ useEffect(() => {
                   {manager.team_nickname && (
                     <div className="manager-name">
                       <span className="manager-name-text">{manager.team_nickname}</span>
-                      {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
+                      {moneyConfig && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
                     </div>
                   )}
                 </td>
