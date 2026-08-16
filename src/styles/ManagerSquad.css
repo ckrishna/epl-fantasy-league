@@ -62,24 +62,24 @@
      reads the same as before the bubble was trimmed, rather than the whole page
      just getting shorter. */
   gap: 20px;
-  /* Anchors .squad-advisor-btn's absolute centering below. */
-  position: relative;
+  /* No position:relative here anymore -- .squad-advisor-btn now anchors to
+     .squad-legend's own position:relative below instead (moved off the whole pitch
+     onto the legend row itself, see that comment). */
 }
 
 /* ---- Advisor entry point (GH #44 preview -- see MOCK_ADVISOR in ManagerSquad.jsx) ----
-   Floats centered above the pitch's top edge, like a badge -- reads as its own
-   standalone thing worth tapping rather than one more icon in the legend row, and
-   (unlike an earlier version centered mid-pitch) never sits on top of a player card.
-   Gold, not the app's usual green accent: this badge straddles the green turf and the
-   page background behind it, and green-on-green turf was low-contrast and easy to miss
-   entirely -- exactly the opposite of "obvious to click." Fixed colors like the rest of
-   this file (not theme tokens), since half of this badge always sits on the
-   always-dark-green pitch regardless of app theme. */
+   Centered on the legend row itself -- same height as "Preview FC"/"GW4", not floating
+   above the whole card -- sitting in the empty middle gap between the identity block
+   and the GW/points block (see .squad-legend's position:relative below, which anchors
+   this). Gold, not the app's usual green accent: this badge sits on the pitch's green
+   turf, and green-on-green was low-contrast and easy to miss entirely -- exactly the
+   opposite of "obvious to click." Fixed colors like the rest of this file (not theme
+   tokens), since it always sits on the always-dark-green pitch regardless of app theme. */
 .squad-advisor-btn {
   position: absolute;
-  top: -16px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 5;
   width: 44px;
   height: 44px;
@@ -143,6 +143,8 @@
   font-size: 12px;
   color: #ffffff;
   padding: 0 4px 2px;
+  /* Anchors .squad-advisor-btn's absolute centering above. */
+  position: relative;
 }
 
 /* Left column: help icon + team/manager name, grouped together so they occupy a

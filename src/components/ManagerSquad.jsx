@@ -767,25 +767,6 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
 
       {!loading && !error && squad && squad.players.length > 0 && (
         <div className="squad-pitch">
-          {/* Floating, always-pulsing "AI" entry point -- badged above the top-center of
-              the pitch rather than tucked into the legend row, so it reads as its own
-              standalone thing to tap rather than one more control among several (and,
-              floating above the card instead of sitting mid-pitch, never covers a
-              player). See MOCK_ADVISOR above: this opens a look-and-feel preview only,
-              GH #44's real suggestion logic doesn't exist yet. */}
-          <button
-            type="button"
-            className="squad-advisor-btn"
-            onClick={() => setShowAdvisor(true)}
-            aria-haspopup="dialog"
-            aria-label="Get suggested moves to improve this squad"
-            title="Get suggested moves to improve this squad"
-          >
-            <span className="squad-advisor-btn-ring" aria-hidden="true" />
-            <span className="squad-advisor-btn-ring squad-advisor-btn-ring-delay" aria-hidden="true" />
-            <SparkleIcon />
-          </button>
-
           {/* Three-column grid row: left column (help icon + team/manager name, which
               truncates per direct feedback -- "truncate name if needed") and right
               column (reserved Advisor slot) are equal-width (minmax(0, 1fr) each), so
@@ -794,6 +775,26 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
               the name. The chip is shown once (in the badge's own bar below the
               number) -- no separate tag next to the name. */}
           <div className="squad-legend">
+            {/* Floating, always-pulsing "AI" entry point -- centered on the legend row
+                itself (same height as the team name / GW total, not floating above the
+                whole card) so it reads as level with the header rather than a stray
+                badge, while still sitting in the empty middle gap between the identity
+                block and the GW/points block so it doesn't cover either. See
+                MOCK_ADVISOR above: this opens a look-and-feel preview only, GH #44's
+                real suggestion logic doesn't exist yet. */}
+            <button
+              type="button"
+              className="squad-advisor-btn"
+              onClick={() => setShowAdvisor(true)}
+              aria-haspopup="dialog"
+              aria-label="Get suggested moves to improve this squad"
+              title="Get suggested moves to improve this squad"
+            >
+              <span className="squad-advisor-btn-ring" aria-hidden="true" />
+              <span className="squad-advisor-btn-ring squad-advisor-btn-ring-delay" aria-hidden="true" />
+              <SparkleIcon />
+            </button>
+
             <div className="squad-legend-left">
               <button
                 type="button"
