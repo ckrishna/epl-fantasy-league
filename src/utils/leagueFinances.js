@@ -23,9 +23,16 @@
 //     (win count 0 is moot -- nothing to reassign -- and 1 is the only nonzero case
 //     below the threshold) -- but the general form below handles any threshold a
 //     different league might configure, not just 2.
-//   - Season-end top-N payout: whatever's left of the pot (member_count * buyIn, minus
-//     gwPayout * gameweeks_played so far) splits across the current top N of the SAME
-//     standings passed in, weighted by config.topSplits.
+//   - Season-end top-N payout: splits across the current top N of the SAME standings
+//     passed in, weighted by config.topSplits, out of a pot that's FIXED for the whole
+//     season (member_count * buyIn, minus gwPayout * config.totalGameweeks -- the
+//     FULL season length, not however many gameweeks happen to have been played so
+//     far). This is deliberate, not an oversight: the other totalGameweeks-minus-so-far
+//     gameweeks' payouts WILL still happen before the season ends, so that money was
+//     never actually available for the top-N split, not even in week 1 -- using
+//     games-played-so-far instead (an earlier bug, caught 2026-08-16) let the top-N pot
+//     shrink AS the season progressed, which is backwards: it made a single-week sample
+//     size look like it was worth almost the entire season's pot right after GW1.
 //
 // Known simplification, not yet asked about: if MULTIPLE managers are tied for last
 // place, this treats their GW wins as one pooled count (any win by anyone in the tied
@@ -47,7 +54,8 @@ export const DEFAULT_MONEY_CONFIG = {
   buyIn: 30,
   gwPayout: 5,
   topSplits: [70, 30, 10],
-  lastPlaceMinWinsToKeep: 2
+  lastPlaceMinWinsToKeep: 2,
+  totalGameweeks: 38
 };
 
 function round2(n) {
@@ -63,11 +71,14 @@ function round2(n) {
 //   (each row shaped like getStandings(gw, ...)'s response: {manager_id, net_points}).
 //   Called AT MOST ONCE, and only if the last-place manager(s) won exactly one GW --
 //   the expensive per-gameweek lookup never fires for the common case.
-// config: {buyIn, gwPayout, topSplits, lastPlaceMinWinsToKeep} -- see
+// config: {buyIn, gwPayout, topSplits, lastPlaceMinWinsToKeep, totalGameweeks} -- see
 //   DEFAULT_MONEY_CONFIG. lastPlaceMinWinsToKeep of 0/null/undefined turns the
 //   forgiveness rule off entirely -- last place keeps every GW win like anyone else.
+//   totalGameweeks (default 38) is the FULL season length used to size the top-N pot --
+//   see the header comment above for why this must NOT be however many gameweeks have
+//   actually been played so far.
 export async function computeLeagueFinances({ standings, winnersHistory, fetchGwStandings, config = DEFAULT_MONEY_CONFIG }) {
-  const { buyIn, gwPayout, topSplits, lastPlaceMinWinsToKeep = 0 } = config;
+  const { buyIn, gwPayout, topSplits, lastPlaceMinWinsToKeep = 0, totalGameweeks = 38 } = config;
   const won = new Map();
   // Per-manager line items backing the "how did I get this number" breakdown UI
   // (Standings.jsx's money badge, click to expand) -- every dollar in `won` traces back
@@ -146,10 +157,14 @@ export async function computeLeagueFinances({ standings, winnersHistory, fetchGw
   }
 
   const memberCount = standings.length;
-  const gwsPlayed = winnersHistory.length;
   const totalPot = memberCount * buyIn;
-  const gwPot = gwsPlayed * gwPayout;
-  const overallPot = Math.max(0, totalPot - gwPot);
+  // FULL season length, not winnersHistory.length (games played so far) -- see this
+  // function's header comment for why using games-played-so-far was a bug, not a
+  // simplification. Confirmed against the app owner's own example: 10 members, 38 GWs,
+  // $5/GW -> $300 total pot, $190 in GW payouts, exactly $110 left for the top-3 split,
+  // fixed for the whole season.
+  const seasonGwPot = totalGameweeks * gwPayout;
+  const overallPot = Math.max(0, totalPot - seasonGwPot);
 
   const weightSum = topSplits.reduce((a, b) => a + b, 0) || 1;
   const topN = [...standings].sort((a, b) => a.rank - b.rank).slice(0, topSplits.length);

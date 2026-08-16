@@ -84,7 +84,8 @@ test('returns the config, camelCased, when money_enabled is true', async () => {
           buy_in: 30,
           gw_payout: 5,
           top_splits: [70, 30, 10],
-          last_place_min_wins_to_keep: 2
+          last_place_min_wins_to_keep: 2,
+          total_gameweeks: 38
         }
       };
     }
@@ -97,8 +98,35 @@ test('returns the config, camelCased, when money_enabled is true', async () => {
     buyIn: 30,
     gwPayout: 5,
     topSplits: [70, 30, 10],
-    lastPlaceMinWinsToKeep: 2
+    lastPlaceMinWinsToKeep: 2,
+    totalGameweeks: 38
   });
+  dynamoMock.restore();
+});
+
+test('totalGameweeks defaults to 38 (standard EPL season) when not set on the row', async () => {
+  const dynamoMock = installDynamoMock((command) => {
+    if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'group_seasons') {
+      return { Items: [{ group_id: 'carpe-diem', league_id: 438107 }] };
+    }
+    if (command.constructor.name === 'GetCommand' && command.input.TableName === 'groups') {
+      return {
+        Item: {
+          group_id: 'carpe-diem',
+          money_enabled: true,
+          buy_in: 30,
+          gw_payout: 5,
+          top_splits: [70, 30, 10]
+          // no total_gameweeks at all
+        }
+      };
+    }
+    return undefined;
+  });
+
+  const result = await getMoneyConfigForLeagueId(438107);
+
+  assert.strictEqual(result.totalGameweeks, 38);
   dynamoMock.restore();
 });
 

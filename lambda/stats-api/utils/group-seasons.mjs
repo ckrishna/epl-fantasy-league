@@ -125,7 +125,11 @@ export async function getMoneyConfigForLeagueId(leagueId) {
     buyIn: Number(item.buy_in) || 0,
     gwPayout: Number(item.gw_payout) || 0,
     topSplits: Array.isArray(item.top_splits) ? item.top_splits.map(Number) : [],
-    lastPlaceMinWinsToKeep: Number(item.last_place_min_wins_to_keep) || 0
+    lastPlaceMinWinsToKeep: Number(item.last_place_min_wins_to_keep) || 0,
+    // FULL season length, used to size the season-end top-N pot -- see
+    // leagueFinances.js's header comment for why this must be the whole season, not
+    // however many gameweeks have been played so far. Standard EPL season if unset.
+    totalGameweeks: Number(item.total_gameweeks) || 38
   };
 }
 

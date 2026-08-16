@@ -12,7 +12,8 @@
 //
 // Usage:
 //   node scripts/set-league-money-config.mjs --group-id carpe-diem \
-//     --buy-in 30 --gw-payout 5 --top-splits 70,30,10 --last-place-min-wins 2 [--dry-run]
+//     --buy-in 30 --gw-payout 5 --top-splits 70,30,10 --last-place-min-wins 2 \
+//     [--total-gameweeks 38] [--dry-run]
 //   node scripts/set-league-money-config.mjs --group-id carpe-diem --disable [--dry-run]
 //
 //   --group-id            required. The slug printed by seed-default-group.mjs (must
@@ -32,6 +33,13 @@
 //                          week gets reassigned to that week's own runner-up (ties
 //                          split evenly), not held back. The confirmed real rule for
 //                          Carpe Diem is 2 ("more than one win to keep it").
+//   --total-gameweeks       optional, default 38 (standard EPL season). The FULL season
+//                          length, used to size the season-end top-N pot -- deliberately
+//                          NOT however many gameweeks have been played so far (see
+//                          leagueFinances.js's header comment: using games-played-so-far
+//                          was an actual bug, caught live 2026-08-16, that made a single
+//                          gameweek's standings look like they were worth almost the
+//                          entire season's pot).
 //   --disable               turns money_enabled off without needing to also repeat the
 //                          dollar amounts -- keeps them on the row untouched (so
 //                          re-enabling later doesn't require re-typing everything).
@@ -56,12 +64,13 @@ function parseArgs(argv) {
     buyIn: flag('--buy-in'),
     gwPayout: flag('--gw-payout'),
     topSplits: flag('--top-splits'),
-    lastPlaceMinWins: flag('--last-place-min-wins')
+    lastPlaceMinWins: flag('--last-place-min-wins'),
+    totalGameweeks: flag('--total-gameweeks')
   };
 }
 
 function printUsage() {
-  console.error('Usage: node scripts/set-league-money-config.mjs --group-id <id> --buy-in <n> --gw-payout <n> --top-splits <n,n,n> [--last-place-min-wins <n>] [--dry-run]');
+  console.error('Usage: node scripts/set-league-money-config.mjs --group-id <id> --buy-in <n> --gw-payout <n> --top-splits <n,n,n> [--last-place-min-wins <n>] [--total-gameweeks <n>] [--dry-run]');
   console.error('   or: node scripts/set-league-money-config.mjs --group-id <id> --disable [--dry-run]');
 }
 
@@ -110,6 +119,7 @@ async function main() {
   const gwPayout = Number(args.gwPayout);
   const topSplits = args.topSplits.split(',').map((s) => Number(s.trim()));
   const lastPlaceMinWins = args.lastPlaceMinWins != null ? Number(args.lastPlaceMinWins) : 0;
+  const totalGameweeks = args.totalGameweeks != null ? Number(args.totalGameweeks) : 38;
 
   if (!(buyIn > 0)) {
     console.error(`--buy-in must be a positive number, got "${args.buyIn}".`);
@@ -131,12 +141,18 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  if (!Number.isInteger(totalGameweeks) || totalGameweeks <= 0) {
+    console.error(`--total-gameweeks must be a positive integer, got "${args.totalGameweeks}".`);
+    process.exitCode = 1;
+    return;
+  }
 
   console.log(`\nWriting money config for "${args.groupId}":`);
   console.log(`  buy_in: $${buyIn}`);
   console.log(`  gw_payout: $${gwPayout}`);
   console.log(`  top_splits: [${topSplits.join(', ')}]  (weights, normalized by their own sum -- not literal percentages)`);
   console.log(`  last_place_min_wins_to_keep: ${lastPlaceMinWins}${lastPlaceMinWins === 0 ? '  (rule off)' : ''}`);
+  console.log(`  total_gameweeks: ${totalGameweeks}`);
   console.log('  money_enabled: true');
 
   if (args.dryRun) {
@@ -147,12 +163,13 @@ async function main() {
   await dynamodb.send(new UpdateCommand({
     TableName: 'groups',
     Key: { group_id: args.groupId },
-    UpdateExpression: 'SET buy_in = :buyIn, gw_payout = :gwPayout, top_splits = :topSplits, last_place_min_wins_to_keep = :lastPlaceMinWins, money_enabled = :enabled',
+    UpdateExpression: 'SET buy_in = :buyIn, gw_payout = :gwPayout, top_splits = :topSplits, last_place_min_wins_to_keep = :lastPlaceMinWins, total_gameweeks = :totalGameweeks, money_enabled = :enabled',
     ExpressionAttributeValues: {
       ':buyIn': buyIn,
       ':gwPayout': gwPayout,
       ':topSplits': topSplits,
       ':lastPlaceMinWins': lastPlaceMinWins,
+      ':totalGameweeks': totalGameweeks,
       ':enabled': true
     }
   }));

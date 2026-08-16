@@ -229,7 +229,8 @@ test('money_config comes back populated for a league with money_enabled set, and
           buy_in: 30,
           gw_payout: 5,
           top_splits: [70, 30, 10],
-          last_place_min_wins_to_keep: 2
+          last_place_min_wins_to_keep: 2,
+          total_gameweeks: 38
         }
       };
     }
@@ -250,7 +251,8 @@ test('money_config comes back populated for a league with money_enabled set, and
       buyIn: 30,
       gwPayout: 5,
       topSplits: [70, 30, 10],
-      lastPlaceMinWinsToKeep: 2
+      lastPlaceMinWinsToKeep: 2,
+      totalGameweeks: 38
     });
 
     // Same league_id, but browsing a past season -- money_config should be null without
