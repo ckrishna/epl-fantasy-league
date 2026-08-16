@@ -179,7 +179,7 @@ useEffect(() => {
               </div>
               <div className="card-info">
                 <p className={`card-team ${isCurrentSeason ? 'card-team-link' : ''}`}>
-                  {manager.real_name}
+                  <span className="card-team-name">{manager.real_name}</span>
                   {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
                 </p>
                 {/* Historical (pre-2025/26) seasons only have a manager's real name on
@@ -228,7 +228,7 @@ useEffect(() => {
                 </td>
                 <td className="team-manager">
                   <div className={`team-name ${isCurrentSeason ? 'team-name-link' : ''}`}>
-                    {manager.real_name}
+                    <span className="team-name-text">{manager.real_name}</span>
                     {showMoney && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
                   </div>
                   {manager.team_nickname && <div className="manager-name">{manager.team_nickname}</div>}

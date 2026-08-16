@@ -96,6 +96,7 @@
 
 .card-info {
   flex: 1;
+  min-width: 0;
 }
 
 .card-team {
@@ -103,22 +104,37 @@
   color: var(--primary);
   font-weight: 700;
   font-size: 1rem;
+  /* Flex row so the money badge (when present) sits glued to the end of the name on
+     one line, never wrapping down onto its own row. min-width:0 on both this and the
+     name span is what lets the name truncate instead of forcing the row to grow --
+     without it a flex child won't shrink past its content's natural width and the
+     badge gets pushed off/wraps anyway. */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.card-team-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 /* Prize-pool net-winnings badge -- mock/preview only, only ever rendered when the page
    is loaded with ?money=1 (see Standings.jsx). Reuses the app's existing success/danger
    tokens (same pair already used for GenBI's thumbs-up/down state in Stats.css) rather
    than introducing new colors. Sits inline next to the team name -- the "badge next to
-   name" layout the app owner picked over a dedicated Net $ column. */
+   name" layout the app owner picked over a dedicated Net $ column -- and never wraps
+   onto its own row (see .card-team/.team-name flex rules above).*/
 .money-badge {
-  display: inline-block;
-  margin-left: 8px;
+  flex-shrink: 0;
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  vertical-align: middle;
 }
 
 .money-badge-positive {
@@ -260,6 +276,17 @@
   font-weight: 700;
   color: var(--primary);
   font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.team-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .manager-name {
