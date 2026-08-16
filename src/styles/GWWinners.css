@@ -131,15 +131,22 @@
   background: var(--bg-surface-alt);
 }
 
-/* Each row in "All Gameweek Winners" opens that gameweek's full standings -- the
-   pointer cursor plus a slightly stronger hover than the plain hover above is the
-   only affordance needed, matching how Standings' team-name links are styled (an
-   underline felt too heavy across an entire row). */
-.winners-row-link {
+/* Each row in "All Gameweek Winners" opens that gameweek's full standings -- pointer
+   cursor plus a stronger accent-soft hover than the plain bg-surface-alt hover above.
+   Bug: `.winners-row-link:hover` alone is one class + one pseudo-class (specificity
+   0,1,0), which is LOWER than the plain `.winners-table tbody tr:hover` rule above it
+   (one class + two elements, 0,1,2) -- so the plain hover always won and this rule
+   never visibly applied at all, in either theme. It just happened to be less
+   noticeable in light mode, where bg-surface-alt's hover is closer in tone to
+   accent-soft; in dark mode the difference is stark, which is what actually got
+   noticed. Scoping this selector the same way Standings.css does for its own
+   equivalent (.standings-table tbody tr.standings-row-link:hover) gives it enough
+   specificity (0,2,2) to actually win. */
+.winners-table tbody tr.winners-row-link {
   cursor: pointer;
 }
 
-.winners-row-link:hover {
+.winners-table tbody tr.winners-row-link:hover {
   background: var(--accent-soft);
 }
 
