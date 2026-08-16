@@ -105,6 +105,32 @@
   font-size: 1rem;
 }
 
+/* Prize-pool net-winnings badge -- mock/preview only, only ever rendered when the page
+   is loaded with ?money=1 (see Standings.jsx). Reuses the app's existing success/danger
+   tokens (same pair already used for GenBI's thumbs-up/down state in Stats.css) rather
+   than introducing new colors. Sits inline next to the team name -- the "badge next to
+   name" layout the app owner picked over a dedicated Net $ column. */
+.money-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+}
+
+.money-badge-positive {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.money-badge-negative {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 /* No special color/underline on the manager name text anymore -- that read as
    inconsistent next to GW Winners' clickable rows, which don't tint or underline any
    cell text either (see .manager-cell/.team-cell in GWWinners.css, both plain
