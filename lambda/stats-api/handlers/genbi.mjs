@@ -807,6 +807,20 @@ export async function handleGenBI(body, corsHeaders) {
       needsNextGwProjections ? getNextGwProjections(seasonId) : Promise.resolve(null)
     ]);
 
+    // Diagnostic (2026-08-16): getNextGwProjections' two failure branches are now
+    // logged (see that function's own comment), but a live check showed FPL's
+    // bootstrap-static genuinely had a next gameweek flagged and no error/warning fired
+    // -- meaning this may have actually returned real data while the model still
+    // declined as if it had none. This line settles that ambiguity directly: it shows
+    // whether nextGwProjections reached this point null, empty, or genuinely populated,
+    // and separately, whether the router even decided to fetch it at all.
+    console.log('nextGwProjections diagnostic:', JSON.stringify({
+      needsNextGwProjections,
+      result: nextGwProjections
+        ? { next_gameweek: nextGwProjections.next_gameweek, player_count: nextGwProjections.players?.length ?? 0 }
+        : null
+    }));
+
     // 2. Calculate Total Season Wins
     // Keyed by the combined "real name (nickname)" display string, built from
     // gw-winners-cache's real_name (real name, always present) + team_nickname
