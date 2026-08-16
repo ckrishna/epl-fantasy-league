@@ -29,6 +29,29 @@ test('computeCostUsd uses Sonnet 4.6 Bedrock rates ($3.30/1M in, $16.50/1M out)'
   assert.ok(Math.abs(cost - 19.80) < 0.0001, `Expected $19.80 for 1M in + 1M out, got $${cost}`);
 });
 
+// Confirmed live 2026-08-16 via a CloudWatch check of the raw Bedrock response (the
+// diagnostic log in bedrock.mjs's askClaude): InvokeModel returns Anthropic's own
+// cache_creation_input_tokens/cache_read_input_tokens field names unchanged, and a real
+// cache write followed ~3 minutes later by a real cache hit (4344 tokens each way) --
+// see genbi-budget.mjs's CACHE_WRITE_5M_COST_PER_TOKEN comment for that exact example.
+test('computeCostUsd bills a 5-minute cache write at 1.25x the base input rate', () => {
+  const cost = computeCostUsd({ cacheCreationInputTokens: 1_000_000 });
+  const expected = 3.30 * 1.25; // $4.125 per 1M cache-write tokens
+  assert.ok(Math.abs(cost - expected) < 0.0001, `Expected $${expected} for 1M cache-write tokens, got $${cost}`);
+});
+
+test('computeCostUsd bills a cache read at 0.1x the base input rate', () => {
+  const cost = computeCostUsd({ cacheReadInputTokens: 1_000_000 });
+  const expected = 3.30 * 0.1; // $0.33 per 1M cache-read tokens
+  assert.ok(Math.abs(cost - expected) < 0.0001, `Expected $${expected} for 1M cache-read tokens, got $${cost}`);
+});
+
+test('[regression] computeCostUsd with no cache fields at all behaves exactly as before caching existed', () => {
+  const cost = computeCostUsd({ inputTokens: 4000, outputTokens: 300 });
+  const expected = (4000 * 3.30 / 1_000_000) + (300 * 16.50 / 1_000_000);
+  assert.ok(Math.abs(cost - expected) < 1e-9);
+});
+
 test('[current bug] getTodayUsage defaults to $0/not-warned when no row exists yet', async () => {
   const dynamoMock = installDynamoMock((command) => {
     if (command.input.TableName === 'genbi-usage-daily' && command.constructor.name === 'GetCommand') {

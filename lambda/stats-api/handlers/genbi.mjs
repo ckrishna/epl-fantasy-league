@@ -1154,7 +1154,13 @@ export async function handleGenBI(body, corsHeaders) {
     // the whole request -- the manager still gets their answer.
     const costUsd = await recordUsage({
       inputTokens: result.usage?.input_tokens || 0,
-      outputTokens: result.usage?.output_tokens || 0
+      outputTokens: result.usage?.output_tokens || 0,
+      // Confirmed live 2026-08-16 via the CloudWatch diagnostic in bedrock.mjs's
+      // askClaude: Bedrock returns these under Anthropic's own field names, unchanged.
+      // See genbi-budget.mjs's CACHE_WRITE_5M_COST_PER_TOKEN/CACHE_READ_COST_PER_TOKEN
+      // comment for the confirmed real cache-hit example this was verified against.
+      cacheCreationInputTokens: result.usage?.cache_creation_input_tokens || 0,
+      cacheReadInputTokens: result.usage?.cache_read_input_tokens || 0
     });
     if (budget.shouldWarn) {
       try {

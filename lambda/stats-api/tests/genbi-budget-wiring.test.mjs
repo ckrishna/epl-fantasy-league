@@ -87,6 +87,41 @@ test('[regression] still calls Bedrock and answers normally when comfortably und
   }
 });
 
+// Regression for the 2026-08-16 prompt-caching cost follow-up: uses the exact token
+// counts observed live via CloudWatch (a real cache read of 4344 tokens) to confirm the
+// full request -> recordUsage -> UpdateCommand path actually carries the cache fields
+// through, not just computeCostUsd in isolation.
+test('[current bug] a cache-hit response records cache read cost, not just base input/output', async () => {
+  const fetchMock = installFplFetchMock();
+  let capturedAdd = null;
+  const router = baseDynamoRouter({ todaysCost: 0.10, warned: false });
+  const dynamoMock = installDynamoMock((command) => {
+    if (command.input.TableName === 'genbi-usage-daily' && command.constructor.name === 'UpdateCommand') {
+      capturedAdd = command;
+    }
+    return router(command);
+  });
+  const bedrockMock = installBedrockMock('Answer.', {
+    inputTokens: 586,
+    outputTokens: 300,
+    cacheReadInputTokens: 4344 // the exact real cache-hit figure seen live in CloudWatch
+  });
+
+  try {
+    await handleGenBI({ question: 'Who should I captain?' }, {});
+    assert.ok(capturedAdd, 'Expected an UpdateCommand recording usage against genbi-usage-daily');
+    const addedCost = capturedAdd.input.ExpressionAttributeValues[':c'];
+    const expectedCost = (586 * 3.30 / 1_000_000) + (300 * 16.50 / 1_000_000) + (4344 * 3.30 * 0.1 / 1_000_000);
+    assert.ok(Math.abs(addedCost - expectedCost) < 1e-9,
+      `Expected the recorded cost to include the cache-read discount (${expectedCost}), got ${addedCost}. ` +
+      `If this equals the cost WITHOUT the cache term, the cache fields aren't reaching recordUsage.`);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+    bedrockMock.restore();
+  }
+});
+
 test('[current bug] records the real cost of a successful call against today\'s total', async () => {
   const fetchMock = installFplFetchMock();
   let capturedAdd = null;

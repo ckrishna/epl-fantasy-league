@@ -5,13 +5,23 @@
 import { mock } from 'node:test';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 
-export function installBedrockMock(responseText = 'Mock GenBI answer', { inputTokens = 10, outputTokens = 10 } = {}) {
+// cacheCreationInputTokens/cacheReadInputTokens default to 0 (omitted from most tests'
+// mocked responses, same as real Bedrock traffic outside the 5-minute cache window) --
+// set them explicitly to simulate a cache write or cache hit, matching the exact field
+// names confirmed live via CloudWatch (see genbi-budget.mjs's CACHE_WRITE_5M_COST_PER_TOKEN
+// comment for the real example this was verified against).
+export function installBedrockMock(responseText = 'Mock GenBI answer', { inputTokens = 10, outputTokens = 10, cacheCreationInputTokens = 0, cacheReadInputTokens = 0 } = {}) {
   const calls = [];
   const handle = mock.method(BedrockRuntimeClient.prototype, 'send', async (command) => {
     calls.push(command);
     const payload = JSON.stringify({
       content: [{ text: responseText }],
-      usage: { input_tokens: inputTokens, output_tokens: outputTokens }
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cache_creation_input_tokens: cacheCreationInputTokens,
+        cache_read_input_tokens: cacheReadInputTokens
+      }
     });
     return { body: new TextEncoder().encode(payload) };
   });

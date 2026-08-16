@@ -28,6 +28,31 @@ const TABLE = 'genbi-usage-daily';
 const INPUT_COST_PER_TOKEN = 3.30 / 1_000_000;
 const OUTPUT_COST_PER_TOKEN = 16.50 / 1_000_000;
 
+// Prompt-caching rates (added 2026-08-16 -- see bedrock.mjs's STATIC_SYSTEM_PROMPT
+// comment for why caching exists at all). Confirmed live via a CloudWatch check of the
+// raw Bedrock response (the diagnostic log in bedrock.mjs's askClaude): InvokeModel on
+// this account/region returns Anthropic's own direct-API field names unchanged --
+// cache_creation_input_tokens, cache_read_input_tokens, and a cache_creation breakdown
+// by TTL -- not some Bedrock-specific renaming, which Anthropic's docs had left open as
+// a possibility. A first call showed cache_creation_input_tokens: 4344 /
+// cache_read_input_tokens: 0 (cache miss, wrote the static prompt to cache); a second
+// call ~3 minutes later showed the exact reverse (4344 read, 0 written) -- confirming
+// the cache is genuinely being hit, not just accepted and ignored.
+//
+// Multipliers are Anthropic's own published ratios against the BASE (uncached) input
+// rate: a 5-minute cache write costs 1.25x base input; a cache read costs 0.1x base
+// input. Applied on top of this account's existing $3.30/1M base (which already bakes
+// in Bedrock's confirmed 10% regional premium over Anthropic's $3/1M list price -- see
+// INPUT_COST_PER_TOKEN's comment above), NOT on top of Anthropic's un-marked-up $3/1M,
+// so these stay consistent with the base rate actually in use here.
+//
+// Only the 5-minute TTL is handled -- askClaude's cache_control never requests the
+// 1-hour option, so cache_creation.ephemeral_1h_input_tokens should always be 0 today.
+// If a 1-hour cache is ever added, this needs its own rate (2x base, per Anthropic's
+// pricing table) rather than assuming everything written to cache used the 5-minute rate.
+const CACHE_WRITE_5M_COST_PER_TOKEN = INPUT_COST_PER_TOKEN * 1.25;
+const CACHE_READ_COST_PER_TOKEN = INPUT_COST_PER_TOKEN * 0.1;
+
 export const DAILY_BUDGET_USD = Number(process.env.GENBI_DAILY_BUDGET_USD) || 10;
 export const WARNING_THRESHOLD_RATIO = 0.8;
 
@@ -35,8 +60,11 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD", UTC
 }
 
-export function computeCostUsd({ inputTokens = 0, outputTokens = 0 }) {
-  return inputTokens * INPUT_COST_PER_TOKEN + outputTokens * OUTPUT_COST_PER_TOKEN;
+export function computeCostUsd({ inputTokens = 0, outputTokens = 0, cacheCreationInputTokens = 0, cacheReadInputTokens = 0 }) {
+  return inputTokens * INPUT_COST_PER_TOKEN
+    + outputTokens * OUTPUT_COST_PER_TOKEN
+    + cacheCreationInputTokens * CACHE_WRITE_5M_COST_PER_TOKEN
+    + cacheReadInputTokens * CACHE_READ_COST_PER_TOKEN;
 }
 
 // Reads today's accumulated spend. No row yet (first request of the day) => $0, not warned.
@@ -63,9 +91,9 @@ export async function checkBudget() {
 // Adds a completed call's real cost to today's running total (creates the row if this
 // is the first call of the day). Uses an atomic ADD so concurrent requests don't clobber
 // each other's writes.
-export async function recordUsage({ inputTokens, outputTokens }) {
+export async function recordUsage({ inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens }) {
   const date = todayKey();
-  const costUsd = computeCostUsd({ inputTokens, outputTokens });
+  const costUsd = computeCostUsd({ inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens });
   await dynamodb.send(new UpdateCommand({
     TableName: TABLE,
     Key: { date },
