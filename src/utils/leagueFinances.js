@@ -69,10 +69,25 @@ function round2(n) {
 export async function computeLeagueFinances({ standings, winnersHistory, fetchGwStandings, config = DEFAULT_MONEY_CONFIG }) {
   const { buyIn, gwPayout, topSplits, lastPlaceMinWinsToKeep = 0 } = config;
   const won = new Map();
+  // Per-manager line items backing the "how did I get this number" breakdown UI
+  // (Standings.jsx's money badge, click to expand) -- every dollar in `won` traces back
+  // to exactly one push here, so the breakdown always sums to the same total shown on
+  // the badge. Line item shapes: {type: 'gw_win', gameweek, amount, tieCount},
+  // {type: 'gw_reassigned', gameweek, amount, tieCount} (a forfeited last-place win,
+  // reassigned to that week's own runner-up), {type: 'top_split', rank, amount},
+  // {type: 'buy_in', amount} (always negative, always exactly one per manager).
+  const breakdown = new Map();
 
-  const addWinnings = (managerId, amount) => {
+  const addLineItem = (managerId, item) => {
+    const key = String(managerId);
+    if (!breakdown.has(key)) breakdown.set(key, []);
+    breakdown.get(key).push(item);
+  };
+
+  const addWinnings = (managerId, amount, item) => {
     const key = String(managerId);
     won.set(key, (won.get(key) || 0) + amount);
+    if (item) addLineItem(managerId, { ...item, amount: round2(amount) });
   };
 
   if (standings.length === 0) return new Map();
@@ -103,14 +118,22 @@ export async function computeLeagueFinances({ standings, winnersHistory, fetchGw
         const topScore = Math.max(...eligible.map((s) => s.net_points ?? 0));
         const runnersUp = eligible.filter((s) => (s.net_points ?? 0) === topScore);
         const share = gwPayout / runnersUp.length;
-        runnersUp.forEach((r) => addWinnings(r.manager_id, share));
+        runnersUp.forEach((r) => addWinnings(r.manager_id, share, {
+          type: 'gw_reassigned',
+          gameweek: gw.gameweek,
+          tieCount: runnersUp.length
+        }));
       }
       // If nobody's eligible (everyone tied for last, degenerate edge case), the
       // payout just isn't awarded rather than guessing who "should" get it.
       continue;
     }
     const share = gwPayout / Math.max(1, gw.winners.length);
-    gw.winners.forEach((w) => addWinnings(w.entry_id, share));
+    gw.winners.forEach((w) => addWinnings(w.entry_id, share, {
+      type: 'gw_win',
+      gameweek: gw.gameweek,
+      tieCount: gw.winners.length
+    }));
   }
 
   const memberCount = standings.length;
@@ -122,15 +145,25 @@ export async function computeLeagueFinances({ standings, winnersHistory, fetchGw
   const weightSum = topSplits.reduce((a, b) => a + b, 0) || 1;
   const topN = [...standings].sort((a, b) => a.rank - b.rank).slice(0, topSplits.length);
   topN.forEach((manager, i) => {
-    addWinnings(manager.manager_id, (overallPot * topSplits[i]) / weightSum);
+    addWinnings(manager.manager_id, (overallPot * topSplits[i]) / weightSum, {
+      type: 'top_split',
+      rank: i + 1
+    });
   });
+
+  // Buy-in is the one line item every manager gets, win or lose -- added last so it's
+  // not clobbered by an earlier addWinnings call, and tracked as its own negative
+  // amount (not just folded into `net` at the end) so the breakdown UI can show it as
+  // an explicit line rather than an unexplained gap between totalWon and net.
+  standings.forEach((s) => addLineItem(s.manager_id, { type: 'buy_in', amount: round2(-buyIn) }));
 
   const result = new Map();
   for (const s of standings) {
     const totalWon = won.get(String(s.manager_id)) || 0;
     result.set(String(s.manager_id), {
       totalWon: round2(totalWon),
-      net: round2(totalWon - buyIn)
+      net: round2(totalWon - buyIn),
+      breakdown: breakdown.get(String(s.manager_id)) || []
     });
   }
   return result;

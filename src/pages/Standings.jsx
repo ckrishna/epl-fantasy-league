@@ -6,15 +6,104 @@ import { computeLeagueFinances } from '../utils/leagueFinances';
 import '../styles/Standings.css';
 
 // Rounded to whole dollars -- these are already a projection (see the effect above), so
-// showing cents would read as more precise than the figure actually is.
-function MoneyBadge({ net }) {
+// showing cents would read as more precise than the figure actually is. Clickable when
+// a breakdown is available (stopPropagation so tapping the badge doesn't also trigger
+// the row's own click-to-open-squad handler) -- "why is this number what it is" is
+// exactly the question a real-money feature needs to answer on demand, not just assert.
+function MoneyBadge({ net, onClick }) {
   if (typeof net !== 'number') return null;
   const rounded = Math.round(net);
   const positive = rounded >= 0;
   return (
-    <span className={`money-badge ${positive ? 'money-badge-positive' : 'money-badge-negative'}`}>
+    <button
+      type="button"
+      className={`money-badge ${positive ? 'money-badge-positive' : 'money-badge-negative'}`}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      title="See how this was calculated"
+    >
       {positive ? '+' : '−'}${Math.abs(rounded)}
-    </span>
+    </button>
+  );
+}
+
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// One line item's plain-English label -- kept out of leagueFinances.js since that file
+// is deliberately UI-free (see its own header comment), this is presentation only.
+function lineItemLabel(item) {
+  switch (item.type) {
+    case 'buy_in':
+      return 'Buy-in';
+    case 'gw_win':
+      return `Gameweek ${item.gameweek} win` + (item.tieCount > 1 ? ` (split ${item.tieCount} ways)` : '');
+    case 'gw_reassigned':
+      return `Gameweek ${item.gameweek} win — runner-up payout*` + (item.tieCount > 1 ? ` (split ${item.tieCount} ways)` : '');
+    case 'top_split':
+      return `Season ${ordinal(item.rank)}-place payout`;
+    default:
+      return item.type;
+  }
+}
+
+// Sort order for the breakdown list: buy-in first (the starting cost), then every GW
+// line chronologically, then the season-end payout last -- reads top-to-bottom the way
+// the money actually accumulated over the season instead of in whatever order the
+// algorithm happened to compute it.
+function sortLineItems(items) {
+  const rank = (item) => (item.type === 'buy_in' ? 0 : item.type === 'top_split' ? 2 : 1);
+  return [...items].sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
+    return (a.gameweek ?? 0) - (b.gameweek ?? 0);
+  });
+}
+
+function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
+  const items = sortLineItems(finance.breakdown || []);
+  const hasReassigned = items.some((i) => i.type === 'gw_reassigned');
+  const net = Math.round(finance.net);
+  return (
+    <div className="money-breakdown-overlay" onClick={onClose}>
+      <div className="money-breakdown-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="money-breakdown-modal-header">
+          <div>
+            <h4>{teamName}</h4>
+            {managerName && <p className="money-breakdown-modal-subtitle">{managerName}</p>}
+          </div>
+          <button type="button" className="money-breakdown-close-btn" onClick={onClose} aria-label="Close">&times;</button>
+        </div>
+
+        <ul className="money-breakdown-list">
+          {items.map((item, i) => (
+            <li key={i} className="money-breakdown-row">
+              <span className="money-breakdown-label">{lineItemLabel(item)}</span>
+              <span className={`money-breakdown-amount ${item.amount >= 0 ? 'money-breakdown-amount-positive' : 'money-breakdown-amount-negative'}`}>
+                {item.amount >= 0 ? '+' : '−'}${Math.abs(item.amount).toFixed(2)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="money-breakdown-net-row">
+          <span>Net</span>
+          <span className={net >= 0 ? 'money-breakdown-amount-positive' : 'money-breakdown-amount-negative'}>
+            {net >= 0 ? '+' : '−'}${Math.abs(net)}
+          </span>
+        </div>
+
+        {hasReassigned && (
+          <p className="money-breakdown-footnote">
+            * Last place forfeits a gameweek win unless they win enough to clear the
+            league's minimum — that payout goes to whoever was on top once last place
+            is excluded from that week's ranking.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -31,7 +120,8 @@ const [selectedManager, setSelectedManager] = useState(null); // { entryId, team
 // getMoneyConfigForLeagueId in stats-api). No separate flag or query param: a league
 // with no config just never gets one back, and the whole feature is a no-op for it.
 const [moneyConfig, setMoneyConfig] = useState(null);
-const [finances, setFinances] = useState(new Map()); // manager_id (string) -> {totalWon, net}
+const [finances, setFinances] = useState(new Map()); // manager_id (string) -> {totalWon, net, breakdown}
+const [breakdownFor, setBreakdownFor] = useState(null); // { teamName, managerName, finance } | null
 
 // Re-clicking the "Standings" nav tab while already on this page should return from
 // the squad view to the list -- App.jsx bumps resetKey on every Standings tab click
@@ -190,7 +280,16 @@ useEffect(() => {
                 {manager.team_nickname && (
                   <p className="card-manager">
                     <span className="card-manager-name">{manager.team_nickname}</span>
-                    {moneyConfig && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
+                    {moneyConfig && (
+                      <MoneyBadge
+                        net={finances.get(String(manager.manager_id))?.net}
+                        onClick={() => setBreakdownFor({
+                          teamName: manager.real_name,
+                          managerName: manager.team_nickname,
+                          finance: finances.get(String(manager.manager_id))
+                        })}
+                      />
+                    )}
                   </p>
                 )}
               </div>
@@ -238,7 +337,16 @@ useEffect(() => {
                   {manager.team_nickname && (
                     <div className="manager-name">
                       <span className="manager-name-text">{manager.team_nickname}</span>
-                      {moneyConfig && <MoneyBadge net={finances.get(String(manager.manager_id))?.net} />}
+                      {moneyConfig && (
+                        <MoneyBadge
+                          net={finances.get(String(manager.manager_id))?.net}
+                          onClick={() => setBreakdownFor({
+                            teamName: manager.real_name,
+                            managerName: manager.team_nickname,
+                            finance: finances.get(String(manager.manager_id))
+                          })}
+                        />
+                      )}
                     </div>
                   )}
                 </td>
@@ -252,6 +360,15 @@ useEffect(() => {
 
       {standings.length === 0 && (
         <p className="no-data">No standings data available</p>
+      )}
+
+      {breakdownFor && breakdownFor.finance && (
+        <MoneyBreakdownModal
+          teamName={breakdownFor.teamName}
+          managerName={breakdownFor.managerName}
+          finance={breakdownFor.finance}
+          onClose={() => setBreakdownFor(null)}
+        />
       )}
     </div>
   );
