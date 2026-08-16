@@ -67,27 +67,31 @@
 }
 
 /* ---- Advisor entry point (GH #44 preview -- see MOCK_ADVISOR in ManagerSquad.jsx) ----
-   Centered over the pitch rather than in the legend row, on purpose: this needs to read
-   as its own standalone thing worth tapping, not one more icon among several. Fixed
-   colors like the rest of this file (not theme tokens) -- it sits directly on the
+   Floats centered above the pitch's top edge, like a badge -- reads as its own
+   standalone thing worth tapping rather than one more icon in the legend row, and
+   (unlike an earlier version centered mid-pitch) never sits on top of a player card.
+   Gold, not the app's usual green accent: this badge straddles the green turf and the
+   page background behind it, and green-on-green turf was low-contrast and easy to miss
+   entirely -- exactly the opposite of "obvious to click." Fixed colors like the rest of
+   this file (not theme tokens), since half of this badge always sits on the
    always-dark-green pitch regardless of app theme. */
 .squad-advisor-btn {
   position: absolute;
-  top: 50%;
+  top: -16px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   z-index: 5;
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: none;
-  background: radial-gradient(circle at 35% 30%, rgba(0, 255, 135, 0.55), #0c2a1e 72%);
-  color: #00ff87;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 205, 60, 0.65), #241a06 72%);
+  color: #ffcd3c;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
 .squad-advisor-btn svg {
@@ -102,7 +106,7 @@
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  border: 2px solid rgba(0, 255, 135, 0.6);
+  border: 2px solid rgba(255, 205, 60, 0.7);
   animation: squad-advisor-pulse 2s ease-out infinite;
 }
 

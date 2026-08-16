@@ -767,11 +767,12 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
 
       {!loading && !error && squad && squad.players.length > 0 && (
         <div className="squad-pitch">
-          {/* Floating, always-pulsing "AI" entry point -- deliberately centered on the
-              pitch rather than tucked into the legend row, so it reads as its own
-              standalone thing to tap rather than one more control among several. See
-              MOCK_ADVISOR above: this opens a look-and-feel preview only, GH #44's real
-              suggestion logic doesn't exist yet. */}
+          {/* Floating, always-pulsing "AI" entry point -- badged above the top-center of
+              the pitch rather than tucked into the legend row, so it reads as its own
+              standalone thing to tap rather than one more control among several (and,
+              floating above the card instead of sitting mid-pitch, never covers a
+              player). See MOCK_ADVISOR above: this opens a look-and-feel preview only,
+              GH #44's real suggestion logic doesn't exist yet. */}
           <button
             type="button"
             className="squad-advisor-btn"
