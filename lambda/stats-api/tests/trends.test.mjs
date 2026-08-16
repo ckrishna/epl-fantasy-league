@@ -77,7 +77,15 @@ function buildFixtureRows() {
 // every pre-existing test omits it entirely, and getAllowedSeasonsForLeague() returns
 // null (no scoping) without ever touching DynamoDB when leagueId is null, so this is a
 // pure addition that changes nothing for tests that don't opt in.
-function mockScan(rows, standingsAtGw = new Map(), groupSeasonRows = []) {
+//
+// `rosterRows` backs getLeagueRoster's per-season fpl_league_standings scan (GH #49's
+// roster-level scoping, layered on top of allowedSeasons/group_seasons above) -- rows
+// shaped like fpl_league_standings items (season_event/manager_id/league_id). Omit for
+// tests that don't opt into a league_id, same reasoning as groupSeasonRows.
+//
+// `groupName` backs the `groups` table GetCommand (getGroupNameForLeagueId) -- also only
+// consulted when a league_id resolves to a real group.
+function mockScan(rows, standingsAtGw = new Map(), groupSeasonRows = [], rosterRows = [], groupName = null) {
   return installDynamoMock((command) => {
     if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'fpl_entry_gameweek') {
       return { Items: rows };
@@ -92,15 +100,25 @@ function mockScan(rows, standingsAtGw = new Map(), groupSeasonRows = []) {
       }
       return { Items: [] };
     }
+    // getLeagueRoster's per-season scan (begins_with season_event, "{season}#").
+    if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'fpl_league_standings') {
+      const prefix = command.input.ExpressionAttributeValues[':prefix'];
+      return { Items: rosterRows.filter((r) => r.season_event.startsWith(prefix)) };
+    }
     // getGroupIdForLeagueId's reverse lookup (Scan, filtered by league_id).
     if (command.constructor.name === 'ScanCommand' && command.input.TableName === 'group_seasons') {
       const lid = command.input.ExpressionAttributeValues[':lid'];
       return { Items: groupSeasonRows.filter((r) => r.league_id === lid) };
     }
-    // getAllowedSeasonsForLeague's follow-up (Query, by the resolved group_id).
+    // getAllowedSeasonsForLeague's / getSeasonLeagueIdsForGroup's follow-up (Query, by
+    // the resolved group_id).
     if (command.constructor.name === 'QueryCommand' && command.input.TableName === 'group_seasons') {
       const groupId = command.input.ExpressionAttributeValues[':g'];
       return { Items: groupSeasonRows.filter((r) => r.group_id === groupId) };
+    }
+    // getGroupNameForLeagueId's lookup.
+    if (command.constructor.name === 'GetCommand' && command.input.TableName === 'groups') {
+      return { Item: groupName ? { group_id: command.input.Key.group_id, name: groupName } : undefined };
     }
     return undefined;
   });
@@ -274,6 +292,88 @@ test('a league_id registered in group_seasons excludes seasons outside that grou
     // The historical envelope (built from OTHER seasons besides current) should be
     // empty too, since its one source (2024/25) was scoped out.
     assert.deepStrictEqual(body.pace.history_envelope, []);
+  } finally {
+    mock.restore();
+  }
+});
+
+// GH #49 -- roster-level scoping. allowedSeasons/group_seasons above only decide which
+// SEASONS to include; these tests cover the layer on top that decides which MANAGERS
+// within an allowed season actually belong to the requesting league -- the gap that let
+// an unrelated league's managers blend into Finish/Gap-to-1st/the worm graph once a
+// second league's real data shared the same fpl_entry_gameweek table.
+function rosterStandingsRow({ managerId, leagueId, gw = 6 }) {
+  return { season_event: `${SEASON_CURRENT}#${gw}`, manager_id: managerId, league_id: leagueId };
+}
+
+// Dave Outsider (entry_id 4) belongs to some OTHER league whose 2025/26 data happens to
+// share the same fpl_entry_gameweek table -- he's outside Carpe Diem's roster even
+// though his season (2025/26) is otherwise an allowed one.
+function buildFixtureRowsWithOutsider() {
+  const rows = buildFixtureRows();
+  for (let gw = 1; gw <= 6; gw++) {
+    rows.push(gwRow({ season: SEASON_CURRENT, entry_id: 4, gameweek: gw, points_total: gw * 100, real_name: 'Dave Outsider' }));
+  }
+  return rows;
+}
+
+test('roster-level scoping excludes a manager from an unrelated league sharing the same allowed season', async () => {
+  const groupSeasonRows = [{ group_id: 'carpe-diem', season_string: SEASON_CURRENT, league_id: 438107 }];
+  const rosterRows = [
+    rosterStandingsRow({ managerId: 1, leagueId: 438107 }),
+    rosterStandingsRow({ managerId: 3, leagueId: 438107 })
+    // Deliberately no roster row for manager_id 4 (Dave) -- he's some other league.
+  ];
+  const mock = mockScan(buildFixtureRowsWithOutsider(), new Map(), groupSeasonRows, rosterRows, 'Carpe Diem');
+  try {
+    const result = await handleTrends({ manager: 'Alice Smith', league_id: '438107' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(result.statusCode, 200);
+
+    // Dave out-scores everyone (100/gw) -- if he leaked into the field/ranking, he'd be
+    // both the field leader and would push Alice off rank 1. He must not appear at all.
+    assert.ok(!body.field.some((m) => m.real_name === 'Dave Outsider'), 'Dave should be excluded from the field entirely');
+    assert.strictEqual(body.field.length, 2);
+
+    const currentSeasonSummary = body.seasons.find((s) => s.season === SEASON_CURRENT);
+    // Alice (60/gw) still outranks Carol (45/gw) once Dave's excluded.
+    assert.strictEqual(currentSeasonSummary.final_rank, 1);
+    assert.strictEqual(currentSeasonSummary.gap_to_first, 0);
+    assert.strictEqual(currentSeasonSummary.league_id, 438107);
+
+    assert.strictEqual(body.league_name, 'Carpe Diem');
+  } finally {
+    mock.restore();
+  }
+});
+
+test('roster-level scoping is skipped (falls back to unscoped) when the league_id has no backfilled standings yet', async () => {
+  // group_seasons resolves a league_id for the current season, but fpl_league_standings
+  // has nothing stamped with it yet (e.g. registered but not yet backfilled) -- must NOT
+  // silently exclude everyone, including the requesting manager themselves.
+  const groupSeasonRows = [{ group_id: 'carpe-diem', season_string: SEASON_CURRENT, league_id: 438107 }];
+  const mock = mockScan(buildFixtureRowsWithOutsider(), new Map(), groupSeasonRows, [], 'Carpe Diem');
+  try {
+    const result = await handleTrends({ manager: 'Alice Smith', league_id: '438107' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(result.statusCode, 200);
+    // Unscoped -- Dave shows up exactly like before this fix.
+    assert.ok(body.field.some((m) => m.real_name === 'Dave Outsider'));
+    assert.strictEqual(body.field.length, 3);
+  } finally {
+    mock.restore();
+  }
+});
+
+test('without a league_id, roster-level scoping never kicks in and league_name is null', async () => {
+  const mock = mockScan(buildFixtureRowsWithOutsider());
+  try {
+    const result = await handleTrends({ manager: 'Alice Smith' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(result.statusCode, 200);
+    assert.strictEqual(body.league_name, null);
+    assert.ok(body.field.some((m) => m.real_name === 'Dave Outsider'), 'Unscoped behavior unchanged when no league_id is passed at all');
+    assert.strictEqual(body.seasons.find((s) => s.season === SEASON_CURRENT).league_id, null);
   } finally {
     mock.restore();
   }

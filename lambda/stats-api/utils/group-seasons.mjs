@@ -20,7 +20,7 @@
 // name across two completely unrelated leagues. Scoping the SEASONS under
 // consideration to the current league's own group closes that off, without needing
 // per-manager roster joins.
-import { QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { QueryCommand, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { dynamodb } from './dynamodb.mjs';
 
 // group_seasons' partition key is group_id, not league_id, so finding "which group is
@@ -60,4 +60,61 @@ export async function getAllowedSeasonsForLeague(leagueId) {
   }));
   const seasons = (result.Items || []).map((item) => item.season_string).filter(Boolean);
   return seasons.length > 0 ? new Set(seasons) : null;
+}
+
+// GH #49 -- getAllowedSeasonsForLeague above only answers "which SEASONS should the
+// cross-season walk consider"; it says nothing about which MANAGERS within an allowed
+// season actually belong to the requesting league. That's fine as long as exactly one
+// league's data ever lands in the shared fpl_entry_gameweek table for a given season,
+// but breaks the moment a second, unrelated league shares an allowed season (our own
+// case now: BETSBANTSSPORT and Carpe Diem both have real 2026/27 data) -- rankAt/
+// leaderPointsAt/the "vs the field" worm graph in trends.mjs would blend the wrong
+// league's managers into "Finish"/"Gap to 1st"/the worm lines.
+//
+// Returns a Map of season_string -> league_id for every season in the given league_id's
+// group that has a REAL (non-null) league_id -- i.e. only the seasons where a per-league
+// roster can actually be resolved via utils/dynamodb.mjs's getLeagueRoster. A season
+// missing from this map (pre-2025/26 historical seasons predating real FPL league
+// tracking, or a group that's never been registered at all) means "no roster-level
+// scoping available" -- callers should leave that season's rows exactly as season-level
+// scoping already left them, not guess or exclude anyone.
+export async function getSeasonLeagueIdsForGroup(leagueId) {
+  if (leagueId == null) return null;
+
+  const groupId = await getGroupIdForLeagueId(leagueId);
+  if (!groupId) return null;
+
+  const result = await dynamodb.send(new QueryCommand({
+    TableName: 'group_seasons',
+    KeyConditionExpression: 'group_id = :g',
+    ExpressionAttributeValues: { ':g': groupId }
+  }));
+
+  const map = new Map();
+  for (const item of result.Items || []) {
+    if (item.season_string && item.league_id != null) {
+      map.set(item.season_string, item.league_id);
+    }
+  }
+  return map.size > 0 ? map : null;
+}
+
+// The group's durable display name (e.g. "Carpe Diem") -- the identity that stays
+// constant across seasons even though FPL recycles the underlying league_id every year
+// (see this file's header comment). Answers the other half of GH #49 ("show which
+// league they reflect"): a Trends response is always scoped to exactly one group, so one
+// name for the whole response is enough, no per-season name needed. Returns null if the
+// group can't be resolved, or its `groups` row has no name for any reason -- same
+// deliberate "don't guess" fallback used throughout this file.
+export async function getGroupNameForLeagueId(leagueId) {
+  if (leagueId == null) return null;
+
+  const groupId = await getGroupIdForLeagueId(leagueId);
+  if (!groupId) return null;
+
+  const result = await dynamodb.send(new GetCommand({
+    TableName: 'groups',
+    Key: { group_id: groupId }
+  }));
+  return result.Item?.name || null;
 }

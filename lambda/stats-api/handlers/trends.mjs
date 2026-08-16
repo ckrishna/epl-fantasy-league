@@ -1,6 +1,6 @@
 import { getAllGwRows, normName } from '../utils/trends-data.mjs';
-import { getCurrentSeason, getActiveGameweek, queryLeagueStandings } from '../utils/dynamodb.mjs';
-import { getAllowedSeasonsForLeague } from '../utils/group-seasons.mjs';
+import { getCurrentSeason, getActiveGameweek, queryLeagueStandings, getLeagueRoster } from '../utils/dynamodb.mjs';
+import { getAllowedSeasonsForLeague, getSeasonLeagueIdsForGroup, getGroupNameForLeagueId } from '../utils/group-seasons.mjs';
 import { stablePersonId } from '../utils/people.mjs';
 
 // Reference gameweek for the "hot start vs strong finish" comparison -- arbitrary but
@@ -102,10 +102,38 @@ export async function handleTrends(queryParams, corsHeaders) {
   // null (no filtering, today's behavior) unless the caller passed a league_id AND
   // that league_id is registered in a group via group_seasons.
   const leagueId = queryParams.league_id || null;
-  const allowedSeasons = await getAllowedSeasonsForLeague(leagueId);
+  const [allowedSeasons, seasonLeagueIds, leagueName] = await Promise.all([
+    getAllowedSeasonsForLeague(leagueId),
+    getSeasonLeagueIdsForGroup(leagueId),
+    getGroupNameForLeagueId(leagueId)
+  ]);
   const allRows = allowedSeasons ? allRowsRaw.filter((r) => allowedSeasons.has(r.season)) : allRowsRaw;
 
-  const managerRows = allRows.filter((r) => stablePersonId(r.real_name) === requestedPersonId);
+  // GH #49 -- allowedSeasons above only decides which SEASONS to consider; it says
+  // nothing about which MANAGERS within an allowed season actually belong to the
+  // requesting league. That's the exact gap that let a second, unrelated league's
+  // managers blend into "Finish"/"Gap to 1st"/the worm graph once BETSBANTSSPORT's real
+  // 2026/27 data landed in this same shared table. Resolve each allowed season's OWN
+  // roster (a season's own league_id can differ from another season's -- FPL recycles
+  // the id every year) and filter rows down to it before anything downstream reads them.
+  // A season absent from seasonLeagueIds (no resolvable league_id -- pre-2025/26
+  // history, or an unregistered group) is left exactly as allowedSeasons already left
+  // it, same "don't guess" fallback used everywhere else in this scoping chain.
+  const rosterBySeasonMap = new Map();
+  if (seasonLeagueIds) {
+    for (const [season, seasonLeagueId] of seasonLeagueIds) {
+      const roster = await getLeagueRoster(seasonLeagueId, season);
+      if (roster) rosterBySeasonMap.set(season, roster);
+    }
+  }
+  const scopedRows = rosterBySeasonMap.size > 0
+    ? allRows.filter((r) => {
+        const roster = rosterBySeasonMap.get(r.season);
+        return !roster || roster.has(String(r.entry_id));
+      })
+    : allRows;
+
+  const managerRows = scopedRows.filter((r) => stablePersonId(r.real_name) === requestedPersonId);
   if (managerRows.length === 0) {
     return {
       statusCode: 404,
@@ -119,7 +147,7 @@ export async function handleTrends(queryParams, corsHeaders) {
   // Index EVERY manager's rows by season -> gameweek, so rankAt() can compare this
   // manager against their peers at any point in any season.
   const bySeasonGw = new Map();
-  for (const row of allRows) {
+  for (const row of scopedRows) {
     if (!bySeasonGw.has(row.season)) bySeasonGw.set(row.season, new Map());
     const gwMap = bySeasonGw.get(row.season);
     if (!gwMap.has(row.gameweek)) gwMap.set(row.gameweek, []);
@@ -146,6 +174,12 @@ export async function handleTrends(queryParams, corsHeaders) {
       return {
         season,
         is_current: season === currentSeason,
+        // GH #49 -- the specific league_id this season's rank/gap figures were scoped
+        // to, when resolvable (see rosterBySeasonMap above); null for a season with no
+        // roster-level scoping available (nothing to name, not necessarily unscoped --
+        // could just be a season season-level scoping already fully covers, e.g. one
+        // that predates real FPL league tracking).
+        league_id: seasonLeagueIds?.get(season) ?? null,
         final_gameweek: finalRow.gameweek,
         final_points: finalRow.points_total,
         final_rank: rankAt(bySeasonGw, requestedPersonId, season, finalRow.gameweek),
@@ -272,6 +306,11 @@ export async function handleTrends(queryParams, corsHeaders) {
     headers: corsHeaders,
     body: JSON.stringify({
       manager: { real_name: requestedName, team_nickname: teamNickname },
+      // GH #49 -- which league/group this whole response is scoped to, when a league_id
+      // was resolvable at all. null (no indicator) exactly when scoping itself is null --
+      // i.e. no league_id was passed, or it isn't registered into a group yet -- matching
+      // the fully-unscoped, today's-behavior case.
+      league_name: leagueName,
       current_season: currentSeason,
       current_gameweek: currentGameweek,
       pace: {

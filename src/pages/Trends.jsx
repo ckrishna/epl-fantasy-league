@@ -383,7 +383,10 @@ export default function Trends({ leagueId = null } = {}) {
             <div className={`trends-section trends-section-wide ${activeSection === 'seasons' ? 'active' : ''}`}>
               <div className="trends-card">
                 <div className="trends-card-title">Season by season</div>
-                <div className="trends-card-subtitle">Total points, finish, and pace across every season on record</div>
+                <div className="trends-card-subtitle">
+                  Total points, finish, and pace across every season on record
+                  {data.league_name && <> &mdash; scoped to <strong>{data.league_name}</strong></>}
+                </div>
 
                 {(!data.seasons || data.seasons.length === 0) ? (
                   <p className="no-data">No season data available yet.</p>

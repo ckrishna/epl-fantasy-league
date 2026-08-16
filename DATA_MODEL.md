@@ -291,7 +291,7 @@ Fixed by giving both tables a composite sort key that folds `league_id` in:
 
 Tests: `lambda/fpl-data-ingester/tests/multi-league-standings-winners.test.mjs` (new, 4 tests) — a shared manager gets one row per league (not one overwritten row), a shared manager's picks are fetched exactly once, winners are computed independently per league (deliberately set up so pooling the two leagues together would produce the *wrong* winner for one of them, to prove it's not just filtering a single shared computation), and a regression proving zero-additional-leagues behaves identically to the old single-league code path. Full ingester suite: 25/25 passing.
 
-**Status:** live. Migration run and verified against production 2026-08-15; ingester code committed, not yet deployed as of this writing (needs the usual zip + `aws lambda update-function-code` for `fpl-data-ingester`).
+**Status:** live. Migration run and verified against production 2026-08-15; `stats-api` and `fpl-data-ingester` both deployed and confirmed live 2026-08-15.
 
 ### Identity redesign (in progress, started 2026-08-14): `people`, `groups`, `group_seasons`
 
@@ -421,6 +421,18 @@ The script is idempotent (`if_not_exists` on `created_at`/`added_at`), so re-run
 - **Tests:** `tests/group-seasons.test.mjs` (new, 5 tests, mirrors the now-deleted `tests/league-groups.test.mjs`'s structure) plus `tests/trends.test.mjs`'s mock helper and its two league-scoping tests updated to mock `group_seasons` instead of `leagues`.
 
 **Cleanup (2026-08-15, task #127):** `utils/league-groups.mjs` and `tests/league-groups.test.mjs` deleted — confirmed via grep that nothing else actually imported `league-groups.mjs` (only its own test did; other files just mentioned it in comments). Full stats-api suite re-run after deletion: 191/191 passing. The `leagues` table itself is untouched — it still backs live onboarding validation (`add-league.mjs`/`league-validation.mjs`: existence/open check, duplicate check, 100-entry cap), a job `group_seasons` has never done. That reconciliation is task #128, deliberately left open until task #48 (multi-league support) is actually picked up, since it's currently blocked on #50 anyway.
+
+#### Trends roster-level league scoping (2026-08-15, GH #49, task #136)
+
+The multi-league standings/winners fix above (composite sort keys, tasks #48/#139-150) landed real 2026/27 data for a second league (BETSBANTSSPORT, 616920) into the same shared `fpl_entry_gameweek` table Trends reads from. That exposed a gap the season-level scoping in the section above never closed: `getAllowedSeasonsForLeague` only decides which *seasons* the cross-season walk considers, not which *managers* within an allowed season actually belong to the requesting league. `rankAt`/`leaderPointsAt` (driving each season's `final_rank`/`mid_rank`/`gap_to_first`) and the "vs the field" worm graph all pooled *every* manager with a row at a given (season, gameweek) — so a Carpe Diem manager's Trends view would blend in BETSBANTSSPORT's managers too, the moment both leagues had real data for the same season.
+
+Fixed with a second scoping layer, on top of (not replacing) the existing season-level one:
+
+- **`utils/group-seasons.mjs` gained two new exports.** `getSeasonLeagueIdsForGroup(leagueId)` resolves the same league_id → group_id as `getAllowedSeasonsForLeague`, but returns a `Map<season_string, league_id>` instead of a `Set<season_string>` — the per-season league_id is necessary because a group's underlying FPL league_id changes every season (Carpe Diem: `212889` for 2025/26, `438107` for 2026/27). Seasons with no real league_id (pre-2025/26 history) are simply absent from the map. `getGroupNameForLeagueId(leagueId)` resolves the group's durable display name (e.g. `"Carpe Diem"`) via a `GetCommand` on `groups` — the stable identity to show the user, since the league_id itself isn't.
+- **`handlers/trends.mjs`** resolves both alongside `allowedSeasons`, then for each season with a resolvable league_id calls the same `getLeagueRoster(leagueId, season)` already built for GenBI (task #139, `utils/dynamodb.mjs`) to get that season's own roster of entry_ids. Every row is filtered against its own season's roster (`rosterBySeasonMap`) before `bySeasonGw`/`managerRows` are built — a season absent from the roster map, or one where `getLeagueRoster` itself falls back to `null` (no backfill yet), is left completely unfiltered, matching `getLeagueRoster`'s own "don't guess, don't exclude everyone" fallback discipline.
+- **Response additions:** each entry in `seasons[]` now carries `league_id` (the specific league_id that season was scoped to, or `null`), and the top-level response carries `league_name` (the group's display name, or `null` when no league_id was resolvable) — answering the issue's "show which league they reflect" half. `src/pages/Trends.jsx`'s season-by-season card subtitle shows it when present.
+- **Tests:** `tests/trends.test.mjs` gained 3 new tests — an unrelated league's manager correctly excluded from rank/gap/field once a roster is resolvable, a safety-fallback test for an unbackfilled league_id (falls back to fully unscoped rather than excluding the requesting manager), and a no-league_id regression confirming `league_name`/per-season `league_id` are `null` and nothing changes when scoping was never requested. Full stats-api suite: 200/200 passing.
+- **Scope:** read-side only, same as the rest of Trends — no ingester or schema changes needed, since `getLeagueRoster` and the composite-key tables it reads already existed.
 
 ---
 
