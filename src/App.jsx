@@ -238,14 +238,21 @@ export default function App() {
               {/* Plain text, not a link/button -- per direct feedback this shouldn't
                   navigate anywhere. (Previously jumped to the current season's
                   standings; that shortcut is gone, not relocated -- the Standings tab
-                  itself still does the same thing.) */}
-              ⚽ EPL Fantasy League
+                  itself still does the same thing.) Split into its own span (rather
+                  than a bare text node) so the title text and the league ID below can
+                  wrap onto separate lines independently -- see .app-title/.app-title-text
+                  in App.css for why that's needed. */}
+              <span className="app-title-text">⚽ EPL Fantasy League</span>
               {/* Raw league ID, not the name -- an ID is guaranteed unique across
-                  leagues where a human-chosen name isn't (direct feedback). Same line,
-                  same font as the title (inherits .app-title's size/weight) rather than
-                  a smaller stacked subtitle -- confirmed there's room for it here.
-                  Hidden entirely once there's no league_id to show (six historical
-                  seasons predate real FPL league tracking -- see DATA_MODEL.md). */}
+                  leagues where a human-chosen name isn't (direct feedback). Same font
+                  as the title (inherits .app-title's size/weight), same line as it
+                  WHEN THERE'S ROOM -- .app-title is a flex row that wraps this onto its
+                  own line otherwise (confirmed live on a real phone: forcing it onto
+                  one unbreakable line with the title overflowed off the right edge of
+                  narrow screens, since .app-title used to be white-space:nowrap +
+                  flex-shrink:0 with no fallback). Hidden entirely once there's no
+                  league_id to show (six historical seasons predate real FPL league
+                  tracking -- see DATA_MODEL.md). */}
               {viewingLeagueId != null && (
                 <span className="app-league-id">- {viewingLeagueId}</span>
               )}

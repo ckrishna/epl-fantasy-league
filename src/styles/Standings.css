@@ -17,9 +17,22 @@
   font-size: clamp(1.15rem, 5vw, 1.6rem);
 }
 
-/* Mobile Card View */
+/* Mobile Card View
+   grid-template-columns: minmax(0, 1fr) -- NOT just "display: grid" with an implicit
+   column -- is load-bearing here. A CSS Grid's implicit column defaults to sizing
+   itself to fit its content's min-content width, and if any row's content can't
+   shrink small enough (see .stat below -- the "NET TOTAL" header label is
+   white-space:nowrap with no min-width:0 on its flex item), the grid track -- and with
+   it, .standings-cards, .standings-page, and everything up the tree -- gets forced
+   wider than the viewport rather than staying capped at 100%. Confirmed live on a real
+   phone: at true 100% zoom (no extra room from zooming out), every card's right edge
+   sat flush against the screen instead of leaving its intended padding, because the
+   grid had silently grown past its container's width. minmax(0, 1fr) caps the track at
+   0 minimum, so a too-wide row now truncates/overflows only within its own row instead
+   of blowing out the whole page. */
 .standings-cards {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   margin-bottom: 2rem;
 }
@@ -305,11 +318,19 @@
   gap: 1.5rem;
 }
 
+/* min-width: 0 -- a flex item's default min-width is auto (= its content's min-content
+   size), which for a white-space:nowrap label like "NET TOTAL" means the browser won't
+   shrink it below the label's own unbroken width even though a fixed `width` is set
+   below. Without this, that label's true min-content size (wider than the 76px it's
+   supposed to fit in) can force .card-stats -- and, since .standings-cards is a CSS
+   Grid with no min-width:0 of its own, the whole page -- wider than the viewport. See
+   .standings-cards' own comment for the matching Grid-side half of this fix. */
 .stat {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
+  min-width: 0;
 }
 
 /* Fixed per-column widths so the header row's labels and each card's values land in
@@ -325,12 +346,20 @@
   width: 76px;
 }
 
+/* overflow/text-overflow are a last-resort fallback, not the primary fix (that's
+   .stat's min-width:0 above + .standings-cards' minmax(0, 1fr) track) -- belt-and-
+   suspenders so that IF this label's content ever still doesn't fit its 76px column on
+   some narrower device, it ellipsizes cleanly ("NET TO...") instead of doing either of
+   the two bad things it could otherwise do: spill outside its box, or force the whole
+   page wider again. */
 .stat-label {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-value {

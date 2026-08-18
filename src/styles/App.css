@@ -319,23 +319,42 @@ body {
 
 /* Plain text, not a link -- per direct feedback, the title used to double as a
    shortcut back to the current season's standings, but that behavior is gone now (the
-   Standings tab already does the same thing), not just visually hidden. */
+   Standings tab already does the same thing), not just visually hidden.
+
+   A flex row (not a plain nowrap block) so its two children -- .app-title-text and
+   .app-league-id -- can wrap onto separate lines independently when there isn't room
+   for both. Confirmed live on a real phone: with the whole h1 forced onto one
+   unbreakable line (white-space:nowrap + flex-shrink:0, no fallback), adding the
+   league ID pushed the combined text wider than narrow viewports, and since
+   `html, body` has overflow-x:hidden as a defensive floor, the overflow wasn't a
+   scrollbar -- it was the right edge of the ENTIRE page silently sliced off. flex-
+   shrink is 1 here (not 0) so this row yields width to its sibling
+   (.app-header-top-right, which stays flex-shrink:0) before resorting to wrapping. */
 .app-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.4rem;
   font-size: clamp(1rem, 2.2vw, 1.15rem);
   font-weight: 700;
   letter-spacing: -0.3px;
-  white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   color: var(--text-primary);
 }
 
-/* Raw league ID, right next to the title on the same line (task #179) -- inherits
-   .app-title's size/weight/color via `font: inherit` so it reads as part of the
-   heading, not a caption. Just enough left margin to separate it from the title text. */
+.app-title-text {
+  white-space: nowrap;
+}
+
+/* Raw league ID, right next to the title on the same line (task #179) when there's
+   room -- inherits .app-title's size/weight/color via `font: inherit` so it reads as
+   part of the heading, not a caption. Wraps onto its own line below the title
+   otherwise (see .app-title's flex-wrap above), rather than overflowing. */
 .app-league-id {
   font: inherit;
   color: inherit;
-  margin-left: 0.4rem;
+  white-space: nowrap;
   cursor: default;
 }
 
