@@ -264,10 +264,15 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
         </div>
         {/* Same affordance as ManagerSquad's "Back to standings" button -- re-clicking
             the GW Winners nav tab does the same thing (see the resetKey effect above),
-            but with no on-screen cue for that most people won't discover it. */}
-        <button type="button" className="winners-back-btn" onClick={() => setSelectedGW(null)}>
-          <span aria-hidden="true">&larr;</span> Back to GW Winners
-        </button>
+            but with no on-screen cue for that most people won't discover it. The
+            "GW{n} Standings" bit after it is plain context, not part of the control --
+            only "Back to GW Winners" itself is clickable (per direct feedback). */}
+        <div className="winners-back-row">
+          <button type="button" className="winners-back-btn" onClick={() => setSelectedGW(null)}>
+            <span aria-hidden="true">&larr;</span> Back to GW Winners
+          </button>
+          <span className="winners-back-context">(GW{selectedGW} Standings)</span>
+        </div>
         <GWDetail gameweek={selectedGW} season={season} leagueId={leagueId} />
       </div>
     );

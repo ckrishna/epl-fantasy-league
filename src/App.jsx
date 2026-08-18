@@ -235,29 +235,11 @@ export default function App() {
         <div className="app-header-inner">
           <div className="app-header-row app-header-row-top">
             <h1 className="app-title">
-              <button
-                type="button"
-                className="app-title-link"
-                onClick={() => {
-                  // Set state directly rather than relying on navigate() to trigger the
-                  // URL-resolution effect -- if the URL is already at the current league
-                  // (e.g. the dropdown was just used to view a no-league_id historical
-                  // season, which doesn't change the URL -- see its onChange below),
-                  // navigate() to that same URL is a no-op and the leagueId param never
-                  // actually changes, so that effect would never re-fire. Confirmed live
-                  // 2026-08-14: this exact sequence left the title button doing nothing.
-                  setSelectedSeason(null);
-                  if (currentSeasonRow?.league_id != null) {
-                    navigate(`/${currentSeasonRow.league_id}`);
-                  }
-                  setActiveTab('standings');
-                  setStandingsResetKey((k) => k + 1);
-                }}
-                aria-label="Go to current season standings"
-                title="Go to current season standings"
-              >
-                ⚽ EPL Fantasy League
-              </button>
+              {/* Plain text, not a link/button -- per direct feedback this shouldn't
+                  navigate anywhere. (Previously jumped to the current season's
+                  standings; that shortcut is gone, not relocated -- the Standings tab
+                  itself still does the same thing.) */}
+              ⚽ EPL Fantasy League
               {/* Raw league ID, not the name -- an ID is guaranteed unique across
                   leagues where a human-chosen name isn't (direct feedback). Same line,
                   same font as the title (inherits .app-title's size/weight) rather than

@@ -17,6 +17,18 @@
   font-size: clamp(1.15rem, 5vw, 1.6rem);
 }
 
+/* Wraps the back button and its (non-clickable) "(GW{n} Standings)" context label on
+   one row -- the label sits after the button's own bottom margin would otherwise push
+   it down, so that margin moved here. baseline (not center) alignment -- the button's
+   icon+text and the plain span don't share a line-height, and center was landing them
+   at visibly different heights. */
+.winners-back-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+}
+
 /* Same treatment as ManagerSquad's .squad-back-btn on Standings -- an explicit
    affordance for backing out of a single gameweek's full listing, since re-clicking the
    nav tab (which also works) has no on-screen cue. */
@@ -24,7 +36,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin: 0 0 1rem;
+  margin: 0;
   padding: 0.35rem 0;
   background: none;
   border: none;
@@ -37,6 +49,23 @@
 
 .winners-back-btn:hover {
   color: var(--accent);
+}
+
+/* Plain context text, not a control -- just says which gameweek's full standings are
+   showing below, since "Back to GW Winners" alone doesn't say that. Parenthesized and
+   inline right after the button (no divider) per direct feedback. Mobile only -- on
+   desktop the drill-down table's own "Gameweek {n} -- Full Standings" heading right
+   below already says this, so it was redundant there; only needed on mobile where that
+   heading gets cramped next to everything else on a phone screen. */
+.winners-back-context {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+@media (min-width: 769px) {
+  .winners-back-context {
+    display: none;
+  }
 }
 
 /* Winners dashboard - Compact */

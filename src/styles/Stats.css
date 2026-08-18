@@ -6,6 +6,16 @@
   padding: 2rem;
 }
 
+/* Desktop only -- same follow-up as Standings.css's .standings-page: the base rule's
+   2rem top padding, stacked on top of .app-content's own (already-trimmed) top
+   margin, still read as too much dead space between the tabs and "League
+   Intelligence". Left/right/bottom stay at 2rem; only the top gets cut. */
+@media (min-width: 769px) {
+  .stats-page {
+    padding-top: 1.1rem;
+  }
+}
+
 .stats-container {
   /* Was a 2-column grid (originally an even 1fr 1fr split, later narrowed to a capped
      left column) -- collapsed to a single vertical stack on EVERY viewport: a compact
@@ -54,10 +64,15 @@
   gap: 0.6rem 0.9rem;
 }
 
+/* Matches Standings/GW Winners' page-title color and size exactly (var(--primary),
+   the same clamp()) -- this heading was still on its own separate white/text-primary/
+   1.25rem styling from before those two pages got their shared treatment, so "League
+   Intelligence" read like a different, less-important heading next to "League
+   Standings" and "GW Winners" despite being the same kind of page title. */
 .stats-left h2 {
   margin: 0;
-  font-size: 1.25rem;
-  color: var(--text-primary);
+  font-size: clamp(1.15rem, 5vw, 1.6rem);
+  color: var(--primary);
   white-space: nowrap;
 }
 

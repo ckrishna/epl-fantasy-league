@@ -339,11 +339,15 @@
   color: var(--primary);
 }
 
-/* Desktop Table View */
+/* Desktop Table View -- padding/font sizes trimmed down from the original 1rem cells
+   (task follow-up, direct feedback: "too spaced out, should fit 10 rows without
+   scrolling"). Row height was dominated by vertical cell padding, not content, so
+   that's what got cut hardest; font sizes came down a touch too so the now-tighter
+   rows still read comfortably rather than looking cramped in one dimension only. */
 .standings-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   display: none;
 }
 
@@ -353,17 +357,17 @@
 }
 
 .standings-table th {
-  padding: 1rem;
+  padding: 0.6rem 1rem;
   text-align: left;
   font-weight: 700;
   color: var(--primary);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .standings-table td {
-  padding: 1rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -396,11 +400,13 @@
 }
 
 /* Smaller than the mobile card's 50px circle -- the table row already has less
-   vertical breathing room per line than a card does. */
+   vertical breathing room per line than a card does. Shrunk further (36px -> 30px)
+   as part of the desktop row-density pass above -- the two-line team/manager text next
+   to it is the taller of the two anyway, so this was never what set row height. */
 .standings-table .rank-badge {
-  width: 36px;
-  height: 36px;
-  font-size: 1rem;
+  width: 30px;
+  height: 30px;
+  font-size: 0.9rem;
   margin: 0 auto;
 }
 
@@ -411,12 +417,12 @@
 .team-name {
   font-weight: 700;
   color: var(--primary);
-  font-size: 1rem;
+  font-size: 0.92rem;
 }
 
 .manager-name {
   color: var(--text-tertiary);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -483,6 +489,17 @@
 
   .standings-table {
     display: table;
+  }
+
+  /* Trims the card's own top/bottom padding from the base rule's 2.5rem (fixed at
+     that value for every desktop width -- see .standings-page's clamp() caps out well
+     before 769px) down to 1.1rem/1.5rem, freeing up room for more table rows to fit
+     above the fold alongside the row-density cuts above. Top gets cut harder than
+     bottom -- per direct feedback the gap ABOVE "League Standings" (tabs -> heading)
+     was the one that read as excessive, not the card's bottom edge. */
+  .standings-page {
+    padding-top: 1.1rem;
+    padding-bottom: 1.5rem;
   }
 }
 

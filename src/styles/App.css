@@ -317,6 +317,9 @@ body {
   transform: translateX(0);
 }
 
+/* Plain text, not a link -- per direct feedback, the title used to double as a
+   shortcut back to the current season's standings, but that behavior is gone now (the
+   Standings tab already does the same thing), not just visually hidden. */
 .app-title {
   font-size: clamp(1rem, 2.2vw, 1.15rem);
   font-weight: 700;
@@ -324,25 +327,6 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
   color: var(--text-primary);
-}
-
-/* The title doubles as a "home" link (current season, Standings tab) now that there
-   are enough seasons that users can land deep in history -- styled to read as plain
-   heading text, not a button, with just a hover/focus cue that it's clickable. */
-.app-title-link {
-  font: inherit;
-  color: inherit;
-  letter-spacing: inherit;
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.app-title-link:hover,
-.app-title-link:focus-visible {
-  color: var(--accent);
 }
 
 /* Raw league ID, right next to the title on the same line (task #179) -- inherits
@@ -667,6 +651,18 @@ body {
   .app-content {
     padding: 0 0.4rem;
     margin-top: 0.5rem;
+  }
+}
+
+/* Desktop only, per direct feedback: the base rule's margin-top clamps to 2rem (32px)
+   at most desktop widths, which on top of each page's own card padding (e.g.
+   Standings' 1.5rem desktop top padding) made for a lot of dead space between the tabs
+   and a page's heading. Cut to roughly half -- shared by every page via .app-content,
+   so this tightens that gap consistently across Standings/GW Winners/GenBI/Trends
+   rather than just one of them. */
+@media (min-width: 769px) {
+  .app-content {
+    margin-top: 0.9rem;
   }
 }
 
