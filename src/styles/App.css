@@ -195,13 +195,9 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-/* Two explicit rows rather than one flex-wrap row -- previously a single wrapping row
-   put the title+help on line 1 and the league picker+toggle crammed together on line 2
-   whenever the viewport was too narrow for one line, which read as cramped and grouped
-   controls (picker, toggle) that have nothing to do with each other. Now it's always
-   two deliberate rows, at every width: title + (toggle, help) on top, league/season
-   picker alone underneath, right-aligned. Confirmed via mobile screenshot feedback
-   (2026-08-15) that the single-row wrap felt compressed. */
+/* Single row now -- the league/season picker moved (task #177/#178) out of its own row
+   here and into each page's own title, next to "League Standings" etc, so this header
+   only ever holds the title + toggle/help. */
 .app-header-inner {
   display: flex;
   flex-direction: column;
@@ -209,6 +205,11 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0.85rem clamp(0.75rem, 3vw, 1.5rem);
+  /* Clears the iPhone Dynamic Island/notch -- without this, the title/toggle/help row
+     rendered right at the true top edge and visually collided with the island (which
+     physically occupies part of that space regardless of what CSS says). env() falls
+     back to 0 on devices with no safe area, so this is a no-op everywhere else. */
+  padding-top: calc(0.85rem + env(safe-area-inset-top, 0px));
 }
 
 .app-header-row {
@@ -222,15 +223,17 @@ body {
   gap: 0.5rem 1rem;
 }
 
-.app-header-row-bottom {
-  justify-content: flex-end;
-}
-
 .app-header-top-right {
   display: flex;
   align-items: center;
   gap: 0.65rem;
   flex-shrink: 0;
+}
+
+/* A bit more breathing room before the "?" button specifically -- it's small and round,
+   and sitting right up against the toggle read as cramped/easy to mis-tap. */
+.app-help-link {
+  margin-left: 0.3rem;
 }
 
 /* Sun/moon SLIDING switch (2026-08-12, replaced the two-icon segmented pill above with
@@ -383,14 +386,18 @@ body {
    up against the edge of the screen rather than just the box. Extra right padding
    clears mobile Safari's own built-in dropdown arrow; text-overflow handles the rare
    case a very long label still doesn't fit. */
+/* Default state = viewing the CURRENT season -- green (the app's one accent), so the
+   picker itself signals "you're on the live season" at a glance. Was plain/neutral
+   with green reserved for .viewing-history below; swapped (2026-08-17) so green
+   consistently means "current" everywhere else in the app too, not "changed". */
 .league-picker {
-  background: var(--bg-surface-alt);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border: 1px solid var(--accent);
   border-radius: 6px;
   padding: 0.4rem 1.5rem 0.4rem 0.85rem;
   font-size: clamp(0.8rem, 2vw, 0.9rem);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   /* flex-grow: 0 -- size to content, don't stretch to fill the header row (that's what
      made this span nearly the full width on desktop). flex-shrink: 1 + min-width: 0 is
@@ -410,12 +417,16 @@ body {
 
 /* Flags "you're not looking at the current season" via color instead of a separate
    "Viewing past season" text badge -- the dropdown itself becomes the indicator. Uses
-   --accent (the app's one green) rather than --secondary now that --secondary isn't a
-   separate gold tone anymore -- see --text-on-accent for the fixed dark text on top. */
+   --warning (amber) rather than --accent now that green means "current" above --
+   amber reads as "heads up, this isn't live" without implying an error. Text is a
+   fixed dark amber/brown (not --text-on-accent, which is a dark TEAL tuned for the
+   green accent specifically) -- same idea as --text-on-accent, just paired with this
+   badge's own color instead. --warning is a similarly bright amber in both themes, so
+   one fixed dark value reads fine against either. */
 .league-picker.viewing-history {
-  background: var(--accent);
-  color: var(--text-on-accent);
-  border-color: var(--accent);
+  background: var(--warning);
+  color: #451a03;
+  border-color: var(--warning);
   font-weight: 700;
 }
 
@@ -483,12 +494,150 @@ body {
   border-bottom-color: var(--accent);
 }
 
+/* Shared wrapper for a page's own h2 + the season/league picker sitting next to it
+   (task #178 -- moved the picker out of its own row in the app header and inline next
+   to whichever page is showing, per "League Standings"/"Gameweek Winners"/"League
+   Intelligence"). Used by Standings.jsx, GWWinners.jsx (x2), and Stats.jsx -- Trends
+   never receives a picker since it ignores the season dropdown entirely. Each page's
+   own h2 keeps its font-size/color; this rule only owns the row layout + the spacing
+   that used to live on the h2's own margin-bottom. */
+.page-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.page-title-row h2 {
+  margin: 0;
+}
+
+/* Tighter than the picker's general (now-unused header) sizing -- shorter text
+   ("2026/27" instead of "2026/27 (current)") means it no longer needs generous
+   padding/max-width to avoid truncating, and a more compact control reads better
+   sitting directly next to a page title than the old full-size header version did. */
+.page-title-row .league-picker {
+  font-size: 0.85rem;
+  padding: 0.3rem 1.3rem 0.3rem 0.65rem;
+  max-width: none;
+  flex-shrink: 0;
+}
+
 .beta-tag {
   font-size: 0.55em;
   font-weight: 700;
   color: var(--gray-400);
   margin-left: 2px;
   vertical-align: super;
+}
+
+/* Mobile bottom icon nav (task #177) -- replaces .tabs below 768px (the same
+   breakpoint Standings.css/GWWinners.css/Trends.css already use for their own
+   desktop/mobile split, kept consistent here). Hidden entirely on desktop; .tabs
+   above handles desktop and is hidden the other direction in the media query below.
+   Flush against the bottom edge (not a floating inset pill -- tried that first, but
+   it left the footer's Help link/copyright/last-updated squeezed into a barely-legible
+   strip above it). The footer is hidden on mobile entirely instead (see below); Help
+   is still one tap away via the header's "?" icon, and the footer's copyright/
+   last-updated text now lives in the Help page itself. */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .tabs {
+    display: none;
+  }
+
+  .bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: stretch;
+    gap: 2px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Content needs room reserved at the bottom so the last card isn't hidden behind
+     the now-fixed bar -- the bar's own height (~64px) plus a little breathing room. */
+  .app-content {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The footer (Help & Support link, copyright, last-updated) is redundant here --
+     Help is already reachable via the header's "?" icon, and that text was reading as
+     an illegible strip squeezed above the nav bar. Its content now lives in the Help
+     page instead (see Help.jsx), so nothing is actually lost, just relocated. */
+  .app-footer {
+    display: none;
+  }
+}
+
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 2px;
+  border: none;
+  background: none;
+  border-radius: 14px;
+  cursor: pointer;
+  color: var(--gray-500);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.bottom-nav-item svg {
+  flex-shrink: 0;
+}
+
+.bottom-nav-item:hover,
+.bottom-nav-item:active {
+  color: var(--accent);
+}
+
+.bottom-nav-item.active {
+  color: var(--accent);
+}
+
+/* Wraps just the icon so the BETA pill can anchor to it (not the whole button, which
+   is as wide as the label and would push the pill off-center). */
+.bottom-nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Deliberately NOT var(--accent) -- accent is the active-state indicator on this same
+   bar, so a badge in that color would read as "GenBI is selected" even when it isn't.
+   A distinct violet keeps "beta" legible as its own signal in both states. */
+.bottom-nav-beta-pill {
+  position: absolute;
+  top: -9px;
+  right: -16px;
+  background: #a78bfa;
+  color: #1a1224;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 8px;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 /* Content Area */
@@ -596,15 +745,20 @@ body {
    so title -> pill is 2 rows, not 3). Stats' left panel is a flex column with its own
    gap, hence no margin needed there either; this bottom margin only matters on
    Standings/GWWinners, which aren't flex containers. */
+/* border-radius dropped from a full pill (999px) to 10px -- now holding a combined,
+   longer note (season-scope + "answered fresh", merged into one line -- see Stats.jsx)
+   that regularly wraps to 2 lines on mobile; a pill shape reads oddly once it's no
+   longer a single short line. */
 .scope-note {
   display: inline-block;
   font-size: 0.78rem;
   color: var(--text-muted);
   background: var(--bg-surface-alt-2);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.3rem 0.75rem;
+  border-radius: 10px;
+  padding: 0.35rem 0.7rem;
   margin: 0 0 1.5rem 0;
+  line-height: 1.35;
 }
 
 /* Small muted qualifier appended inline to a page heading (e.g. "League Standings
@@ -659,6 +813,7 @@ textarea:focus {
 /* Print Styles */
 @media print {
   .tabs,
+  .bottom-nav,
   .app-footer {
     display: none;
   }

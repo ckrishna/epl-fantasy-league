@@ -6,10 +6,15 @@
   box-shadow: var(--shadow);
 }
 
+/* margin-bottom now lives on .page-title-row (App.css) which wraps this h2 -- kept off
+   here so there's no cascade-order ambiguity between two same-specificity rules in
+   different stylesheets. font-size shrunk from clamp(1.5rem, 4vw, 2rem) -- the picker
+   now sits on the same line (task #178 follow-up) and the two were fighting for room
+   on a phone, wrapping to two rows. This fits both on one line at typical phone widths
+   now that the picker text is also shorter ("2026/27", not "2026/27 (current)"). */
 .standings-page h2 {
   color: var(--primary);
-  margin-bottom: 0.5rem;
-  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-size: clamp(1.15rem, 5vw, 1.6rem);
 }
 
 /* Mobile Card View */
@@ -484,6 +489,71 @@
 @media (max-width: 768px) {
   .standings-page {
     padding: 1.5rem 1rem;
+  }
+
+  /* Slimmer cards on mobile (was ~4 visible above the fold, now fits ~6) -- rank badge,
+     padding, gaps, and font sizes all trimmed together so the row still reads as one
+     coherent (smaller) card rather than looking cramped in one dimension only. Scoped
+     to this media query rather than the base rules above since .rank-badge in
+     particular is shared with the desktop table's rank circle (see its own comment) --
+     shrinking it globally would've shrunk that too, which nobody asked for. The money
+     badge (.money-badge) isn't touched -- its own fixed font-size/padding already read
+     fine at this card size without adjustment. */
+  .standings-cards {
+    gap: 0.55rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .standings-cards-header {
+    padding: 0 0.85rem;
+  }
+
+  .standings-card {
+    padding: 0.65rem 0.85rem;
+    gap: 0.75rem;
+  }
+
+  .card-rank {
+    min-width: 38px;
+  }
+
+  .rank-badge {
+    width: 38px;
+    height: 38px;
+    font-size: 0.95rem;
+  }
+
+  /* Truncate to one line instead of reserving 2-line height -- tried the reserved-
+     height approach first, but at this font size nearly every name already fits on
+     one line, so the "reserved" 2nd line just showed as a gap on almost every card,
+     not just some. Truncating guarantees every card is exactly the same (single-line)
+     height with zero wasted space; the trade is that a genuinely long name (e.g.
+     "aditya shringarpure") ellipsizes instead of wrapping. min-width:0 is required
+     alongside .card-info's own min-width:0 for text-overflow to actually kick in
+     inside a flex layout instead of the box just growing to fit the text. */
+  .card-team {
+    font-size: 0.92rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .card-manager {
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
+  }
+
+  .card-stats {
+    gap: 1rem;
+  }
+
+  .stat-value {
+    font-size: 0.95rem;
+  }
+
+  .stat-label {
+    font-size: 0.62rem;
   }
 }
 

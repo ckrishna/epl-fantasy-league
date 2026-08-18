@@ -76,7 +76,7 @@ function GWDetail({ gameweek, season, leagueId }) {
   );
 }
 
-export default function GWWinners({ season = null, seasonLabel = null, resetKey = 0, leagueId = null } = {}) {
+export default function GWWinners({ season = null, seasonLabel = null, resetKey = 0, leagueId = null, seasonPicker = null } = {}) {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -107,6 +107,11 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
       if (cancelled) return;
       const flatWinners = [];
       (data.finished_gameweeks || []).forEach(gwData => {
+        // More than one winner for this gameweek means it was a tie (see winners.mjs
+        // -- ties are already handled server-side by listing every co-winner, not
+        // picking one arbitrarily). Computed once here per gameweek rather than in the
+        // render loop, since it only depends on this one gwData.winners array.
+        const isTied = gwData.winners.length > 1;
         gwData.winners.forEach(winner => {
           flatWinners.push({
             gameweek: gwData.gameweek,
@@ -115,7 +120,8 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
             real_name: winner.real_name,
             gross_points: winner.gross_points,
             transfer_cost: winner.transfer_cost,
-            net_points: winner.net_points
+            net_points: winner.net_points,
+            isTied
           });
         });
       });
@@ -136,7 +142,10 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
   if (selectedGW) {
     return (
       <div className="gw-winners-page">
-        <h2>Gameweek Winners{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
+        <div className="page-title-row">
+          <h2>Gameweek Winners</h2>
+          {seasonPicker}
+        </div>
         {/* Same affordance as ManagerSquad's "Back to standings" button -- re-clicking
             the GW Winners nav tab does the same thing (see the resetKey effect above),
             but with no on-screen cue for that most people won't discover it. */}
@@ -168,7 +177,10 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
 
   return (
     <div className="gw-winners-page">
-      <h2>Gameweek Winners{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
+      <div className="page-title-row">
+        <h2>Gameweek Winners</h2>
+        {seasonPicker}
+      </div>
 
       {/* Manager Wins Summary - Compact */}
       <div className="winners-dashboard">
@@ -207,9 +219,9 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
             {winners.map((w) => (
               <tr
                 key={`${w.gameweek}-${w.entry_id}`}
-                className="winners-row-link"
+                className={`winners-row-link ${w.isTied ? 'winners-row-tied' : ''}`}
                 onClick={() => setSelectedGW(w.gameweek)}
-                title={`View full GW${w.gameweek} standings`}
+                title={w.isTied ? `Tied for the win in GW${w.gameweek} -- view full standings` : `View full GW${w.gameweek} standings`}
               >
                 <td className="gw-cell">{w.gameweek}</td>
                 <td className="team-cell desktop-only">{w.real_name}</td>
@@ -219,6 +231,7 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
                   {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
                 </td>
                 <td className="net-points">
+                  {w.isTied && <span className="tied-badge">Tied</span>}
                   <strong>{w.net_points}</strong>
                 </td>
               </tr>

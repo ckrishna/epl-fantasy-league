@@ -205,7 +205,7 @@ export default function Trends({ leagueId = null } = {}) {
   return (
     <div className="trends-page">
       <h2>Your trends</h2>
-      <p className="scope-note">Always spans every season on record for the manager you pick below — the season selector above doesn't apply on this tab.</p>
+      <p className="scope-note">Spans every season for the manager picked below.</p>
 
       <div className="trends-manager-picker">
         <label htmlFor="trends-manager-select">Manager</label>

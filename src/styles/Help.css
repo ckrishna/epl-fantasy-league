@@ -66,6 +66,32 @@
   color: var(--accent);
 }
 
+/* App-footer's old copyright/last-updated text, relocated here (task #177) once the
+   footer was hidden on mobile. Muted and centered like it was in the footer -- this is
+   informational fine print, not a "card" that should draw the eye like the others. */
+.help-card-about {
+  background: none;
+  border: none;
+  text-align: center;
+  padding: 0.5rem 1.5rem 0;
+}
+
+.help-card-about:hover {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.help-about-updated,
+.help-about-copyright {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.help-about-copyright {
+  margin-top: 0.25rem;
+}
+
 /* "How It Works" and "Browser Support" span the full row on wider screens -- they read
    better as a single line than squeezed into a narrow column. Targeted by class rather
    than position (nth-child) -- with only 3 cards left after trimming Standings/GW

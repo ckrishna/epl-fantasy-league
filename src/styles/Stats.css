@@ -200,17 +200,6 @@
   cursor: not-allowed;
 }
 
-/* One short line, no box/border -- replaces the old two-tier setup (a bordered
-   .info-box with examples on desktop, a separate trimmed single-line note on mobile).
-   The compact ask bar has no spare height for a multi-line tip box on any screen now,
-   and the suggested-question chips above already double as examples. */
-.fresh-note {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  line-height: 1.4;
-}
-
 /* Answer Panel (was "Right Panel" back when this was a 2-column grid) */
 .stats-right {
   background: var(--bg-surface);

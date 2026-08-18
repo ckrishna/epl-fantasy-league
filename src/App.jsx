@@ -31,6 +31,55 @@ function MoonIcon() {
   );
 }
 
+// Bottom-nav icons (same Feather-style/currentColor convention as Sun/Moon above) --
+// one per mobile bottom-nav item (task #177). Help deliberately has no icon here; it
+// stays reachable via the "?" header button and the footer link, same as before, since
+// the bottom bar only has room for the four primary sections without feeling cramped.
+function TrophyIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function SparklesIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+      <path d="M5 3v4" />
+      <path d="M19 17v4" />
+      <path d="M3 5h4" />
+      <path d="M17 19h4" />
+    </svg>
+  );
+}
+
+function TrendingUpIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  );
+}
+
 // Reads any previously-saved choice; a first-time visitor with no saved preference
 // gets dark by default (the app's own default, not the OS/browser's light/dark
 // preference -- a visitor can still switch via the toggle, which then persists here).
@@ -141,6 +190,44 @@ export default function App() {
   // to scope against for those, same as omitting the param entirely.
   const viewingLeagueId = (seasons.find((s) => s.season === seasonLabel))?.league_id ?? null;
 
+  // Season/league dropdown -- moved (task #177) from its own row under the app header
+  // into each page's own title row instead, sitting right next to "League Standings" /
+  // "Gameweek Winners" / "League Intelligence". Built once here since the element and
+  // its onChange logic are identical everywhere it's used; Trends deliberately never
+  // receives this (it ignores the season dropdown -- see its own render call below).
+  const seasonPicker = seasons.length > 0 ? (
+    <select
+      className={`league-picker ${viewingHistory ? 'viewing-history' : ''}`}
+      value={selectedSeason ?? currentSeason ?? ''}
+      onChange={(e) => {
+        const value = e.target.value;
+        const chosen = seasons.find((s) => s.season === value);
+        // Always set state directly -- don't rely solely on navigate() triggering the
+        // URL-resolution effect. That effect only re-runs when the leagueId URL PARAM
+        // actually changes value; picking a no-league_id historical season never
+        // changes the URL at all (nothing to route through), so switching FROM one of
+        // those BACK to a real-league_id season can navigate to a URL that's unchanged
+        // from before that detour -- a no-op navigate that would otherwise leave
+        // selectedSeason stuck. Confirmed live 2026-08-14: picking 2022/23 then trying
+        // to get back to 2026/27 left the dropdown stuck on 2022/23 for exactly this
+        // reason. Still navigating too (when there's a real league_id) so the URL stays
+        // a shareable/bookmarkable reflection of what's on screen.
+        setSelectedSeason(value === currentSeason ? null : value);
+        if (chosen?.league_id != null) {
+          navigate(`/${chosen.league_id}`);
+        }
+      }}
+      aria-label="Select league and season"
+      title={viewingHistory ? 'Viewing a past season' : undefined}
+    >
+      {seasons.map((s) => (
+        <option key={s.season} value={s.season}>
+          {s.season}
+        </option>
+      ))}
+    </select>
+  ) : null;
+
   return (
     <div className="app">
       <header className="app-header">
@@ -198,43 +285,6 @@ export default function App() {
               </button>
             </div>
           </div>
-
-          {seasons.length > 0 && (
-            <div className="app-header-row app-header-row-bottom">
-              <select
-                className={`league-picker ${viewingHistory ? 'viewing-history' : ''}`}
-                value={selectedSeason ?? currentSeason ?? ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  const chosen = seasons.find((s) => s.season === value);
-                  // Always set state directly -- don't rely solely on navigate()
-                  // triggering the URL-resolution effect. That effect only re-runs when
-                  // the leagueId URL PARAM actually changes value; picking a no-league_id
-                  // historical season never changes the URL at all (nothing to route
-                  // through), so switching FROM one of those BACK to a real-league_id
-                  // season can navigate to a URL that's unchanged from before that
-                  // detour -- a no-op navigate that would otherwise leave selectedSeason
-                  // stuck. Confirmed live 2026-08-14: picking 2022/23 then trying to get
-                  // back to 2026/27 left the dropdown stuck on 2022/23 for exactly this
-                  // reason. Still navigating too (when there's a real league_id) so the
-                  // URL stays a shareable/bookmarkable reflection of what's on screen.
-                  setSelectedSeason(value === currentSeason ? null : value);
-                  if (chosen?.league_id != null) {
-                    navigate(`/${chosen.league_id}`);
-                  }
-                }}
-                aria-label="Select league and season"
-                title={viewingHistory ? 'Viewing a past season' : undefined}
-              >
-                {seasons.map((s) => (
-                  <option key={s.season} value={s.season}>
-                    {s.season}
-                    {s.current ? ' (current)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
         </div>
       </header>
 
@@ -285,10 +335,55 @@ export default function App() {
         </button>
       </nav>
 
+      {/* Mobile-only bottom icon bar (task #177) -- same tabs, same handlers/state as
+          .tabs above, just a second nav rendered alongside it. App.css shows exactly
+          one of the two at any given width (.tabs hidden, .bottom-nav flex) rather than
+          this component picking between them, so there's no duplicated width-detection
+          logic in JS. */}
+      <nav className="bottom-nav">
+        <button
+          className={`bottom-nav-item ${activeTab === 'standings' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('standings');
+            setStandingsResetKey((k) => k + 1);
+          }}
+        >
+          <TrophyIcon />
+          <span>Standings</span>
+        </button>
+        <button
+          className={`bottom-nav-item ${activeTab === 'winners' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('winners');
+            setWinnersResetKey((k) => k + 1);
+          }}
+        >
+          <CalendarIcon />
+          <span>GW Winners</span>
+        </button>
+        <button
+          className={`bottom-nav-item ${activeTab === 'stats' ? 'active' : ''}`}
+          onClick={() => setActiveTab('stats')}
+        >
+          <span className="bottom-nav-icon-wrap">
+            <SparklesIcon />
+            <span className="bottom-nav-beta-pill">Beta</span>
+          </span>
+          <span>GenBI</span>
+        </button>
+        <button
+          className={`bottom-nav-item ${activeTab === 'trends' ? 'active' : ''}`}
+          onClick={() => setActiveTab('trends')}
+        >
+          <TrendingUpIcon />
+          <span>Trends</span>
+        </button>
+      </nav>
+
       <main className="app-content">
-        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} leagueId={viewingLeagueId} />}
-        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} resetKey={winnersResetKey} leagueId={viewingLeagueId} />}
-        {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} leagueId={viewingLeagueId} />}
+        {activeTab === 'standings' && <Standings season={selectedSeason} seasonLabel={seasonLabel} resetKey={standingsResetKey} leagueId={viewingLeagueId} seasonPicker={seasonPicker} />}
+        {activeTab === 'winners' && <GWWinners season={selectedSeason} seasonLabel={seasonLabel} resetKey={winnersResetKey} leagueId={viewingLeagueId} seasonPicker={seasonPicker} />}
+        {activeTab === 'stats' && <Stats season={selectedSeason} seasonLabel={seasonLabel} leagueId={viewingLeagueId} seasonPicker={seasonPicker} />}
         {/* Trends deliberately ignores the season dropdown (its own manager picker spans
             every season) -- leagueId here is always the LIVE league, i.e. which
             league_group_id "your" cross-season history should be scoped to, not

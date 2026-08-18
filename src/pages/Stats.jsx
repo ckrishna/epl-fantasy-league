@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { queryStats, submitFeedback } from '../api/client';
-import ScopeNote from '../components/ScopeNote';
 import '../styles/Stats.css';
 
 // "5m 42.7s" style formatting, minutes only shown once there are any -- matches the
@@ -32,7 +31,7 @@ function shouldAutoFocus() {
   return typeof window !== 'undefined' && window.matchMedia('(min-width: 641px)').matches;
 }
 
-export default function Stats({ season = null, seasonLabel = null, leagueId = null }) {
+export default function Stats({ season = null, seasonLabel = null, leagueId = null, seasonPicker = null }) {
   const [selectedQuery, setSelectedQuery] = useState(null);
   const [customQuestion, setCustomQuestion] = useState('');
   const [loading, setLoading] = useState(false);
@@ -126,9 +125,16 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
         <div className="stats-left">
           <div className="ask-bar-header">
             <h2>⚡ League Intelligence</h2>
-            <ScopeNote season={seasonLabel}>
-              Questions are answered using {seasonLabel} season data only
-            </ScopeNote>
+            {seasonPicker}
+            {/* Combined the season-scope reminder and the "answered fresh" tip into one
+                line (was two separate notes -- one up here, one down by the suggested
+                questions -- eating too much vertical space on mobile). Dropped the bulb
+                emoji too; the text carries the meaning on its own. */}
+            {seasonLabel && (
+              <p className="scope-note">
+                Answered fresh using {seasonLabel} season data -- no memory of earlier questions.
+              </p>
+            )}
           </div>
 
           <form className="custom-question" onSubmit={handleCustomQuestion}>
@@ -158,11 +164,6 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
               </button>
             ))}
           </div>
-
-          {/* Was a longer, boxed tip shown only on desktop plus a separate trimmed
-              mobile-only line -- now one short line at every size, since the compact
-              ask bar no longer has room to spare for a multi-line box on any screen. */}
-          <p className="fresh-note">💡 Each question is answered fresh, no memory of earlier ones.</p>
         </div>
 
         {/* Answer Panel -- fills essentially all remaining height below the compact ask

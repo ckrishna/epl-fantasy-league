@@ -6,10 +6,15 @@
   box-shadow: var(--shadow);
 }
 
+/* margin-bottom now lives on .page-title-row (App.css) which wraps this h2 -- kept off
+   here so there's no cascade-order ambiguity between two same-specificity rules in
+   different stylesheets. font-size shrunk from clamp(1.5rem, 4vw, 2rem) -- the picker
+   now sits on the same line (task #178 follow-up) and the two were fighting for room
+   on a phone, wrapping to two rows. This fits both on one line at typical phone widths
+   now that the picker text is also shorter ("2026/27", not "2026/27 (current)"). */
 .gw-winners-page h2 {
   color: var(--primary);
-  margin-bottom: 0.5rem;
-  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-size: clamp(1.15rem, 5vw, 1.6rem);
 }
 
 /* Same treatment as ManagerSquad's .squad-back-btn on Standings -- an explicit
@@ -171,6 +176,45 @@
   background: var(--accent-soft);
 }
 
+/* Flags a gameweek where two or more managers tied for the win -- winners.mjs already
+   lists every co-winner as its own row (see GWWinners.jsx), but until now they looked
+   like any other row, so a tie was easy to miss while skimming.
+   Mixed against `transparent`, not `--bg-surface` -- mixing a bright amber into an
+   OPAQUE dark color computes a flat muddy brown (confirmed live: looked like a solid
+   brown block in dark mode, not a tint). Mixing against transparent instead produces a
+   translucent amber that alpha-composites over whatever's actually behind the row --
+   a proper warm glow layered on top, correct in both themes instead of only light
+   mode (where mixing into white happens to look fine either way).
+   Same specificity gotcha as .winners-row-link above (tbody tr wins over a bare class
+   otherwise), so this is scoped the same way. */
+.winners-table tbody tr.winners-row-tied {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+[data-theme='dark'] .winners-table tbody tr.winners-row-tied {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+
+.winners-table tbody tr.winners-row-tied:hover {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+/* Small pill next to the points value on a tied row -- fixed dark amber text (not a
+   theme token) for the same reason .league-picker.viewing-history uses one: --warning
+   is a similarly bright amber in both themes, so one fixed dark value reads fine
+   against either without needing a separate light/dark override. */
+.tied-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #451a03;
+  background: var(--warning);
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
 .gw-cell {
   font-weight: 700;
   color: var(--primary);
@@ -191,6 +235,16 @@
   font-weight: 700;
   color: var(--primary);
   text-align: center;
+}
+
+/* Flex so the tied-badge (when present) sits directly beside the points value instead
+   of stacking above/below it -- text-align:center above still applies to gross-points,
+   which never holds a badge. */
+.net-points {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .transfer-cost {

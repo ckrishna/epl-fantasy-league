@@ -136,6 +136,24 @@ export default function Help() {
           <h3>📱 Browser Support</h3>
           <p>Works on all modern browsers.</p>
         </section>
+
+        {/* Was previously the always-visible app footer's job -- moved here (task
+            #177) once the footer was hidden on mobile so this info wasn't lost, just
+            relocated to where mobile visitors now reach it (the header's "?" icon). */}
+        <section className="help-card help-card-wide help-card-about">
+          <p className="help-about-updated">
+            Last updated: {new Date().toLocaleString('en-US', {
+              timeZone: 'UTC',
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            })} UTC
+          </p>
+          <p className="help-about-copyright">&copy; {new Date().getFullYear()} candorsolutions.us</p>
+        </section>
       </div>
     </div>
   );

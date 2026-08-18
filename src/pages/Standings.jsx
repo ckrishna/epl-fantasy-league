@@ -107,7 +107,7 @@ function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
   );
 }
 
-export default function Standings({ season = null, seasonLabel = null, resetKey = 0, leagueId = null } = {}) {
+export default function Standings({ season = null, seasonLabel = null, resetKey = 0, leagueId = null, seasonPicker = null } = {}) {
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(false);
 const [activeGW, setActiveGW] = useState(null);
@@ -228,7 +228,10 @@ useEffect(() => {
 
   return (
     <div className="standings-page">
-      <h2>League Standings{seasonLabel && <span className="page-title-note">({seasonLabel})</span>}</h2>
+      <div className="page-title-row">
+        <h2>League Standings</h2>
+        {seasonPicker}
+      </div>
 
       {/* Mobile Card View */}
       <div className="standings-cards">
