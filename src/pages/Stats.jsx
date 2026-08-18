@@ -132,7 +132,7 @@ export default function Stats({ season = null, seasonLabel = null, leagueId = nu
                 emoji too; the text carries the meaning on its own. */}
             {seasonLabel && (
               <p className="scope-note">
-                Answered fresh using {seasonLabel} season data -- no memory of earlier questions.
+                Answered using {seasonLabel} season data, independent of prior conversational history.
               </p>
             )}
           </div>

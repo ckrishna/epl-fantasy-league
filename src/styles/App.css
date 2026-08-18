@@ -345,6 +345,16 @@ body {
   color: var(--accent);
 }
 
+/* Raw league ID, right next to the title on the same line (task #179) -- inherits
+   .app-title's size/weight/color via `font: inherit` so it reads as part of the
+   heading, not a caption. Just enough left margin to separate it from the title text. */
+.app-league-id {
+  font: inherit;
+  color: inherit;
+  margin-left: 0.4rem;
+  cursor: default;
+}
+
 /* Help moved out of the main tab row (2026-08-12) -- at 5 tabs on a narrow phone,
    labels ran together with nothing to mark where one ended and the next began; Help
    itself doesn't really belong as a peer of the season-scoped data tabs anyway. Small

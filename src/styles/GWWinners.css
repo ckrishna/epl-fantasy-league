@@ -56,12 +56,21 @@
   gap: 0.75rem;
 }
 
+/* Now a real <button> -- clicking a card filters "All Gameweek Winners" below to just
+   that manager (see GWWinners.jsx). It used to be a plain div with the #1 card always
+   highlighted, which looked clickable but wasn't -- direct feedback. Reset the button
+   defaults so it still reads as the same card, then only highlight the one the user
+   has actually selected (`.active`), not whichever happens to rank first. */
 .stat-card {
+  display: block;
+  width: 100%;
+  font: inherit;
   background: var(--bg-surface-alt);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1rem;
   text-align: center;
+  cursor: pointer;
   transition: all 0.2s ease;
 }
 
@@ -70,10 +79,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* Top-of-the-table gets the same single-accent highlight treatment as Standings'
-   rank-1 card, instead of every card in the row looking identical -- keeps the "only
-   the leader gets color" language consistent across pages. */
-.stat-card.top-1 {
+.stat-card.active {
   background: linear-gradient(135deg, var(--accent-soft) 0%, transparent 100%);
   border-color: var(--accent);
 }
@@ -124,6 +130,44 @@
   font-size: 1.1rem;
 }
 
+/* Wraps the "All Gameweek Winners" heading and the (optional) active-filter banner so
+   they can sit on one row on desktop without a layout component of their own. */
+.winners-table-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.winners-table-heading h3 {
+  margin-bottom: 0;
+}
+
+.winners-filter-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.winners-filter-clear {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.winners-filter-clear:hover {
+  border-color: var(--accent);
+}
+
 .winners-table {
   width: 100%;
   border-collapse: collapse;
@@ -143,6 +187,34 @@
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Every header in both tables on this page is clickable (see useSortableRows in
+   GWWinners.jsx) -- click to sort by that column, click again to flip direction. */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-th:hover {
+  color: var(--accent);
+}
+
+.sortable-th:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sort-arrow {
+  display: inline-block;
+  margin-left: 0.3em;
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+
+.sort-arrow.active {
+  color: var(--accent);
 }
 
 .winners-table td {
@@ -237,13 +309,17 @@
   text-align: center;
 }
 
-/* Flex so the tied-badge (when present) sits directly beside the points value instead
-   of stacking above/below it -- text-align:center above still applies to gross-points,
-   which never holds a badge. */
-.net-points {
+/* Scoped to the data cell (td), not the header -- flex-end so the number's right edge
+   always lands in the same place whether or not a row has a tied-badge next to it.
+   Centering here (the original approach) let the badge's width push the number
+   left/right of where it sat on every other row, so the "Net Total" column visibly
+   zig-zagged wherever a tie showed up. The header th keeps the plain centered
+   text-align from the .gross-points, .net-points rule above -- no badge ever appears
+   there, so it doesn't need this. */
+td.net-points {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 6px;
 }
 

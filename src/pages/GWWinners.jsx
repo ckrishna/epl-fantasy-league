@@ -1,7 +1,79 @@
 // src/pages/GWWinners.jsx - Updated with compact summary
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getWinners, getStandings } from '../api/client';
 import '../styles/GWWinners.css';
+
+// Shared by both tables on this page (the drill-down GWDetail table and the main "All
+// Gameweek Winners" table) -- click a header to sort by that column, click again to
+// flip direction. `accessor` pulls the comparable value off a row; `defaultDir` picks
+// which direction feels natural on a column's FIRST click (numbers high-to-low, names
+// A-to-Z), separately from whatever direction it's currently sorted in.
+function useSortableRows(rows, columns, defaultKey, defaultDir = 'desc') {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortDir, setSortDir] = useState(defaultDir);
+
+  const sorted = useMemo(() => {
+    const column = columns.find((c) => c.key === sortKey);
+    if (!column) return rows;
+    const copy = rows.slice();
+    copy.sort((a, b) => {
+      const av = column.accessor(a);
+      const bv = column.accessor(b);
+      if (typeof av === 'string' || typeof bv === 'string') {
+        const cmp = String(av).localeCompare(String(bv), undefined, { sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
+      const an = av ?? 0;
+      const bn = bv ?? 0;
+      return sortDir === 'asc' ? an - bn : bn - an;
+    });
+    return copy;
+  }, [rows, columns, sortKey, sortDir]);
+
+  const onSort = (key) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(columns.find((c) => c.key === key)?.defaultDir || 'desc');
+  };
+
+  return { sorted, sortKey, sortDir, onSort };
+}
+
+function SortableTh({ column, sortKey, sortDir, onSort }) {
+  const isActive = sortKey === column.key;
+  return (
+    <th
+      className={`${column.className || ''} sortable-th`.trim()}
+      onClick={() => onSort(column.key)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSort(column.key);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-sort={isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      {column.label}
+      <span className={`sort-arrow ${isActive ? 'active' : ''}`} aria-hidden="true">
+        {isActive ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+      </span>
+    </th>
+  );
+}
+
+const DETAIL_COLUMNS = [
+  { key: 'rank', label: 'Rank', className: 'gw-cell', accessor: (m) => m.rank, defaultDir: 'asc' },
+  { key: 'manager', label: 'Manager', className: 'team-cell desktop-only', accessor: (m) => m.real_name || '', defaultDir: 'asc' },
+  { key: 'team', label: 'Team', className: 'manager-cell', accessor: (m) => m.team_nickname || m.real_name || '', defaultDir: 'asc' },
+  { key: 'gross', label: 'Gross Points', className: 'gross-points desktop-only', accessor: (m) => m.points_this_week ?? 0, defaultDir: 'desc' },
+  { key: 'transfer', label: 'Transfer Cost', className: 'transfer-cost desktop-only', accessor: (m) => m.transfer_cost ?? 0, defaultDir: 'desc' },
+  { key: 'net', label: 'Net Total', className: 'net-points', accessor: (m) => m.net_points ?? 0, defaultDir: 'desc' }
+];
 
 // Clicking a row in "All Gameweek Winners" swaps in the full manager listing for that
 // specific gameweek, ranked by THAT week's net points (leader on top) rather than the
@@ -35,6 +107,8 @@ function GWDetail({ gameweek, season, leagueId }) {
     return () => { cancelled = true; };
   }, [gameweek, season, leagueId]);
 
+  const { sorted, sortKey, sortDir, onSort } = useSortableRows(rows, DETAIL_COLUMNS, 'rank', 'asc');
+
   if (loading) return <div className="loading">Loading Gameweek {gameweek}...</div>;
 
   return (
@@ -43,16 +117,13 @@ function GWDetail({ gameweek, season, leagueId }) {
       <table className="winners-table">
         <thead>
           <tr>
-            <th>Rank</th>
-            <th className="desktop-only">Manager</th>
-            <th>Team</th>
-            <th className="desktop-only">Gross Points</th>
-            <th className="desktop-only">Transfer Cost</th>
-            <th>Net Total</th>
+            {DETAIL_COLUMNS.map((col) => (
+              <SortableTh key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((m) => (
+          {sorted.map((m) => (
             <tr key={m.manager_id} className={m.rank === 1 ? 'top-1' : ''}>
               <td className="gw-cell">{m.rank}</td>
               <td className="team-cell desktop-only">{m.real_name}</td>
@@ -76,11 +147,26 @@ function GWDetail({ gameweek, season, leagueId }) {
   );
 }
 
+const WINNERS_COLUMNS = [
+  { key: 'gameweek', label: 'GW', className: 'gw-cell', accessor: (w) => w.gameweek, defaultDir: 'desc' },
+  { key: 'manager', label: 'Manager', className: 'team-cell desktop-only', accessor: (w) => w.real_name || '', defaultDir: 'asc' },
+  { key: 'team', label: 'Team', className: 'manager-cell', accessor: (w) => w.team_nickname || w.real_name || '', defaultDir: 'asc' },
+  { key: 'gross', label: 'Gross Points', className: 'gross-points desktop-only', accessor: (w) => w.gross_points ?? 0, defaultDir: 'desc' },
+  { key: 'transfer', label: 'Transfer Cost', className: 'transfer-cost desktop-only', accessor: (w) => w.transfer_cost ?? 0, defaultDir: 'desc' },
+  { key: 'net', label: 'Net Total', className: 'net-points', accessor: (w) => w.net_points ?? 0, defaultDir: 'desc' }
+];
+
 export default function GWWinners({ season = null, seasonLabel = null, resetKey = 0, leagueId = null, seasonPicker = null } = {}) {
   const [winners, setWinners] = useState([]);
   const [activeGW, setActiveGW] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedGW, setSelectedGW] = useState(null);
+  // Clicking a "Top Winners" card filters the table below to just that manager's wins
+  // (click again, or the Clear button, to go back to everyone). Not a link to anywhere
+  // else -- the earlier always-on highlight on #1 implied the cards were clickable when
+  // they weren't; now they actually are, and only the one you've selected gets called
+  // out visually.
+  const [filterEntryId, setFilterEntryId] = useState(null);
 
   // Re-clicking the "GW Winners" nav tab while already on this page should return from
   // a gameweek's full listing back to the summary -- App.jsx bumps resetKey on every
@@ -88,13 +174,16 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
   // Standings' manager-squad view.
   useEffect(() => {
     setSelectedGW(null);
+    setFilterEntryId(null);
   }, [resetKey]);
 
   // Switching seasons via the dropdown while a gameweek's full listing is open would
   // otherwise keep showing that GW number under the newly-selected season -- close it
-  // back to the summary instead.
+  // back to the summary instead. Same for a manager filter -- entry_ids aren't
+  // guaranteed to mean the same manager across seasons.
   useEffect(() => {
     setSelectedGW(null);
+    setFilterEntryId(null);
   }, [season]);
 
   useEffect(() => {
@@ -137,26 +226,6 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
     return () => { cancelled = true; };
   }, [season, leagueId]);
 
-  if (loading) return <div className="loading">Loading weekly winners...</div>;
-
-  if (selectedGW) {
-    return (
-      <div className="gw-winners-page">
-        <div className="page-title-row">
-          <h2>Gameweek Winners</h2>
-          {seasonPicker}
-        </div>
-        {/* Same affordance as ManagerSquad's "Back to standings" button -- re-clicking
-            the GW Winners nav tab does the same thing (see the resetKey effect above),
-            but with no on-screen cue for that most people won't discover it. */}
-        <button type="button" className="winners-back-btn" onClick={() => setSelectedGW(null)}>
-          <span aria-hidden="true">&larr;</span> Back to GW Winners
-        </button>
-        <GWDetail gameweek={selectedGW} season={season} leagueId={leagueId} />
-      </div>
-    );
-  }
-
   const managerStats = {};
   winners.forEach(w => {
     if (!managerStats[w.entry_id]) {
@@ -175,10 +244,41 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
   const sortedStats = Object.values(managerStats)
     .sort((a, b) => b.wins - a.wins);
 
+  const filteredWinners = filterEntryId
+    ? winners.filter((w) => w.entry_id === filterEntryId)
+    : winners;
+
+  // Defaults to GW descending -- most recent gameweek on top, same order the "TIED"
+  // examples get spotted in most often (per direct feedback).
+  const { sorted: sortedWinners, sortKey, sortDir, onSort } =
+    useSortableRows(filteredWinners, WINNERS_COLUMNS, 'gameweek', 'desc');
+
+  if (loading) return <div className="loading">Loading weekly winners...</div>;
+
+  if (selectedGW) {
+    return (
+      <div className="gw-winners-page">
+        <div className="page-title-row">
+          <h2>GW Winners</h2>
+          {seasonPicker}
+        </div>
+        {/* Same affordance as ManagerSquad's "Back to standings" button -- re-clicking
+            the GW Winners nav tab does the same thing (see the resetKey effect above),
+            but with no on-screen cue for that most people won't discover it. */}
+        <button type="button" className="winners-back-btn" onClick={() => setSelectedGW(null)}>
+          <span aria-hidden="true">&larr;</span> Back to GW Winners
+        </button>
+        <GWDetail gameweek={selectedGW} season={season} leagueId={leagueId} />
+      </div>
+    );
+  }
+
+  const filteredManagerName = filterEntryId ? managerStats[filterEntryId]?.real_name : null;
+
   return (
     <div className="gw-winners-page">
       <div className="page-title-row">
-        <h2>Gameweek Winners</h2>
+        <h2>GW Winners</h2>
         {seasonPicker}
       </div>
 
@@ -186,37 +286,55 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
       <div className="winners-dashboard">
         <h3>Top Winners</h3>
         <div className="stats-grid">
-          {sortedStats.slice(0, 5).map((stat, idx) => (
-            <div key={stat.entry_id} className={`stat-card ${idx === 0 ? 'top-1' : ''}`}>
-              <div className="stat-rank">#{idx + 1}</div>
-              <div className="stat-team">{stat.real_name}</div>
-              {/* Historical seasons only have a real name on record, no team
-                  nickname -- team_nickname is null for those rows. */}
-              {stat.team_nickname && <div className="stat-manager">{stat.team_nickname}</div>}
-              <div className="stat-wins">{stat.wins} <span>wins</span></div>
-            </div>
-          ))}
+          {sortedStats.slice(0, 5).map((stat, idx) => {
+            const isActive = filterEntryId === stat.entry_id;
+            return (
+              <button
+                type="button"
+                key={stat.entry_id}
+                className={`stat-card ${isActive ? 'active' : ''}`}
+                aria-pressed={isActive}
+                onClick={() => setFilterEntryId((prev) => (prev === stat.entry_id ? null : stat.entry_id))}
+                title={`Show only ${stat.real_name}'s gameweek wins`}
+              >
+                <div className="stat-rank">#{idx + 1}</div>
+                <div className="stat-team">{stat.real_name}</div>
+                {/* Historical seasons only have a real name on record, no team
+                    nickname -- team_nickname is null for those rows. */}
+                {stat.team_nickname && <div className="stat-manager">{stat.team_nickname}</div>}
+                <div className="stat-wins">{stat.wins} <span>wins</span></div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Full Table View -- each row belongs to one gameweek; clicking it opens the
           full manager listing for that gameweek (GWDetail above), ranked by that
-          week's net points with the leader on top. */}
+          week's net points with the leader on top. Headers sort the table; clicking a
+          "Top Winners" card above filters it down to one manager. */}
       <div className="winners-table-section">
-        <h3>All Gameweek Winners</h3>
+        <div className="winners-table-heading">
+          <h3>All Gameweek Winners</h3>
+          {filterEntryId && (
+            <div className="winners-filter-banner">
+              <span>Showing wins by {filteredManagerName}</span>
+              <button type="button" className="winners-filter-clear" onClick={() => setFilterEntryId(null)}>
+                Show all
+              </button>
+            </div>
+          )}
+        </div>
         <table className="winners-table">
           <thead>
             <tr>
-              <th>GW</th>
-              <th className="desktop-only">Manager</th>
-              <th>Team</th>
-              <th className="desktop-only">Gross Points</th>
-              <th className="desktop-only">Transfer Cost</th>
-              <th>Net Total</th>
+              {WINNERS_COLUMNS.map((col) => (
+                <SortableTh key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {winners.map((w) => (
+            {sortedWinners.map((w) => (
               <tr
                 key={`${w.gameweek}-${w.entry_id}`}
                 className={`winners-row-link ${w.isTied ? 'winners-row-tied' : ''}`}
@@ -238,6 +356,10 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
             ))}
           </tbody>
         </table>
+
+        {filteredWinners.length === 0 && winners.length > 0 && (
+          <p className="no-data">No wins for this manager yet</p>
+        )}
       </div>
 
       {winners.length === 0 && (

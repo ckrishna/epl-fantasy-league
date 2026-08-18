@@ -188,7 +188,8 @@ export default function App() {
   // league shares a season (2026-08-14, multi-league foundation); null for the six
   // historical seasons with no league_id on record, which is correct -- there's nothing
   // to scope against for those, same as omitting the param entirely.
-  const viewingLeagueId = (seasons.find((s) => s.season === seasonLabel))?.league_id ?? null;
+  const viewingSeasonRow = seasons.find((s) => s.season === seasonLabel);
+  const viewingLeagueId = viewingSeasonRow?.league_id ?? null;
 
   // Season/league dropdown -- moved (task #177) from its own row under the app header
   // into each page's own title row instead, sitting right next to "League Standings" /
@@ -257,6 +258,15 @@ export default function App() {
               >
                 ⚽ EPL Fantasy League
               </button>
+              {/* Raw league ID, not the name -- an ID is guaranteed unique across
+                  leagues where a human-chosen name isn't (direct feedback). Same line,
+                  same font as the title (inherits .app-title's size/weight) rather than
+                  a smaller stacked subtitle -- confirmed there's room for it here.
+                  Hidden entirely once there's no league_id to show (six historical
+                  seasons predate real FPL league tracking -- see DATA_MODEL.md). */}
+              {viewingLeagueId != null && (
+                <span className="app-league-id">- {viewingLeagueId}</span>
+              )}
             </h1>
 
             <div className="app-header-top-right">
