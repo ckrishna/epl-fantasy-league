@@ -52,7 +52,15 @@ function teamsMock() {
     { season_id: 2, team_id: 3, name: 'Arsenal' },
     { season_id: 2, team_id: 43, name: 'Man City' },
     { season_id: 2, team_id: 8, name: 'Chelsea' },
-    { season_id: 2, team_id: 7, name: 'Aston Villa' },
+    // Aston Villa additionally carries strength/position/points fields (used by the
+    // fixture-detail-popup test below) -- every other team in this mock deliberately
+    // stays name-only, matching what the other tests actually exercise.
+    {
+      season_id: 2, team_id: 7, name: 'Aston Villa',
+      position: 9, points: 4,
+      strength_attack_home: 1180, strength_attack_away: 1120,
+      strength_defence_home: 1150, strength_defence_away: 1090
+    },
     { season_id: 2, team_id: 4, name: 'Newcastle' },
     { season_id: 2, team_id: 11, name: 'Everton' },
     { season_id: 2, team_id: 31, name: 'Crystal Palace' },
@@ -318,6 +326,53 @@ test('returns a "no_data" reason (a real gap) when the season has started but th
     assert.strictEqual(body.reason, 'no_data', 'Season is live but this manager genuinely has no picks recorded -- a real gap, not preseason');
   } finally {
     fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('fixture-detail popup data: current fixture carries kickoff time, opponent context, and last-5 form oldest-first', async () => {
+  const picks = buildPicks();
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    picksByGw: { '2026/27#728477#3': picks },
+    fixtures: [
+      // Aston Villa's last two results BEFORE gw3 -- used to compute their form
+      // "coming into" the gw3 fixture below, oldest (event1) first.
+      { event: 1, team_h: 7, team_a: 14, team_h_name: 'Aston Villa', team_a_name: 'Liverpool', team_h_difficulty: 4, team_a_difficulty: 2, status: 'FINISHED', team_h_score: 1, team_a_score: 3 },
+      { event: 2, team_h: 4, team_a: 7, team_h_name: 'Newcastle', team_a_name: 'Aston Villa', team_h_difficulty: 3, team_a_difficulty: 3, status: 'FINISHED', team_h_score: 1, team_a_score: 1 },
+      // Saka's club (Arsenal, team 3) hosts Aston Villa this gameweek -- not yet played.
+      { event: 3, team_h: 3, team_a: 7, team_h_name: 'Arsenal', team_a_name: 'Aston Villa', team_h_difficulty: 3, team_a_difficulty: 3, status: 'PENDING', kickoff_time: '2026-09-01T11:30:00Z' }
+    ],
+    standingsRow: { season_event: '2026/27#3', manager_id: 728477, transfer_cost: 0 }
+  }));
+
+  try {
+    // gw passed explicitly -- no bootstrap-static fetch needed to resolve it.
+    const response = await handleManagerSquad({ entry_id: '728477', gw: '3' }, CORS);
+    const body = JSON.parse(response.body);
+    assert.strictEqual(body.gameweek, 3);
+
+    const saka = body.players.find((p) => p.player_id === 5);
+    const current = saka.current_fixture;
+    assert.ok(current, 'Arsenal has a gw3 fixture, so current_fixture should not be null');
+    assert.strictEqual(current.opponent_code, 'AVL');
+    assert.strictEqual(current.is_home, true);
+    assert.strictEqual(current.status, 'PENDING');
+    assert.strictEqual(current.kickoff_time, '2026-09-01T11:30:00Z');
+    assert.strictEqual(current.team_h_score, null, 'No score yet on an unplayed fixture');
+
+    const opp = current.opponent;
+    assert.ok(opp, 'Opponent context should be populated from the teams table');
+    assert.strictEqual(opp.name, 'Aston Villa');
+    assert.strictEqual(opp.position, 9);
+    assert.strictEqual(opp.points, 4);
+    // Arsenal is home, so Aston Villa are playing AWAY -- their AWAY strength numbers
+    // are the correct venue-side figures for this fixture, not their home ones.
+    assert.strictEqual(opp.strength_attack, 1120);
+    assert.strictEqual(opp.strength_defence, 1090);
+    // Oldest first: event1 (Villa lost 1-3) then event2 (Villa drew 1-1) -- most
+    // recent result is last in the array, not first.
+    assert.deepStrictEqual(opp.form, ['L', 'D']);
+  } finally {
     dynamoMock.restore();
   }
 });

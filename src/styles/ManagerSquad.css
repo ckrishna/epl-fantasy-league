@@ -54,7 +54,14 @@
   padding: 16px 6px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /* Bumped from 12px -- when the white name/fixtures bubble's own padding was
+     trimmed (per direct feedback, to make it shorter), the row-to-row gap on the
+     pitch stayed the same in absolute px, which read as MORE cramped between rows
+     even though the number hadn't changed, since each row was now a shorter block.
+     This adds back roughly what the bubble gave up, so the space between cards
+     reads the same as before the bubble was trimmed, rather than the whole page
+     just getting shorter. */
+  gap: 20px;
 }
 
 /* Grid, not flex -- per direct feedback ("I need the total points in the middle"),
@@ -148,18 +155,23 @@
    all sit at the same consistent minimum width. As a flex item with no flex-grow,
    this shrink-wraps to its content (the num/chip children's own padding) rather than
    stretching. */
+/* Sized up per direct feedback -- this is the headline net-points number for the
+   whole card, so it should read as the clear focal point of the row rather than
+   sitting the same visual weight as the name text next to it. Room to grow comes
+   from the reserved (currently empty) advisor slot and the identity text's own
+   truncation -- see .squad-legend's comment -- not from shrinking anything else. */
 .squad-points-badge {
-  min-width: 56px;
-  border-radius: 8px;
+  min-width: 68px;
+  border-radius: 9px;
   overflow: hidden;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .squad-points-badge-num {
   background: linear-gradient(135deg, #5ad1ec, #6a7cf0);
-  padding: 5px 6px 3px;
+  padding: 7px 8px 5px;
   text-align: center;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 800;
   line-height: 1;
   color: #1a0f2e;
@@ -168,10 +180,10 @@
 .squad-points-badge-chip {
   background: #1a1224;
   color: #ffffff;
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 700;
   text-align: center;
-  padding: 2px 4px;
+  padding: 3px 5px;
 }
 
 /* Matches the app's existing "?" help-icon convention (App.jsx's app-help-link next to
@@ -334,15 +346,19 @@
 
 /* flex-wrap: nowrap is deliberate -- a valid FPL XI can put up to 5 in the DEF or MID
    row (and up to 3 in a FWD row, or 4 on the bench), so this row must never wrap
-   regardless of formation. gap is tuned per breakpoint below against that 5-across
-   worst case specifically (5 cards + 4 gaps has to fit inside squad-pitch's actual
-   available width, not just look like it roughly does) -- see the tablet breakpoint's
-   comment for the overflow this used to have. */
+   regardless of formation. justify-content: space-evenly (not a fixed gap) is what
+   makes a sparser row (3 forwards) read roomier than a packed one (5 defenders)
+   without the CARDS themselves changing size -- per direct feedback, the official
+   app keeps every card the same size and only the SPACING between them varies with
+   how many are in that row. Card width is still tuned (see .squad-player-card's own
+   breakpoints) against the worst case of 5 across actually fitting -- space-evenly
+   just distributes whatever's left over instead of a flat 3px/8px/14px gap eating
+   into it, so that worst case is exactly as tight as before, and every roomier case
+   now spreads out to fill the row instead of staying pinned to a fixed small gap. */
 .squad-position-row {
   display: flex;
   flex-wrap: nowrap;
-  justify-content: center;
-  gap: 3px;
+  justify-content: space-evenly;
 }
 
 /* No background/padding of its own anymore -- the jersey (squad-jersey-card) and the
@@ -435,6 +451,11 @@
    NEXT card instead of fitting inside this one. overflow: hidden is a second
    safety net so that even in the tightest case, any excess clips inside this pill's
    own rounded background rather than spilling past it. */
+/* Same gradient + ink text as the team-level points badge above the pitch
+   (.squad-points-badge-num), per direct feedback to keep every "points" readout on
+   this page (the team total up top, each player's own gameweek score down here) one
+   consistent color language instead of the team badge being the only one in this
+   blue/purple gradient while every player's own pill stayed a plain dark ink pill. */
 .squad-points-bar {
   display: flex;
   align-items: baseline;
@@ -443,7 +464,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  background: #1a1224;
+  background: linear-gradient(135deg, #5ad1ec, #6a7cf0);
   border-radius: 999px;
   padding: 2px 6px 3px;
 }
@@ -452,7 +473,7 @@
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
-  color: #ffffff;
+  color: #1a0f2e;
 }
 
 .squad-points-bar-label {
@@ -460,7 +481,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(26, 15, 46, 0.75);
 }
 
 /* Captain/vice-captain/hot-form/cold-form all share one plain black circle treatment
@@ -493,11 +514,12 @@
 
 /* The white block under the points bar -- name, then next-two-fixtures. No negative
    margin anymore: the points bar (not the jersey hem directly) sits flush above it
-   now, so there's nothing to tuck under. */
+   now, so there's nothing to tuck under. Padding trimmed top/bottom only (width is
+   untouched) per direct feedback to squeeze air out of this block's height. */
 .squad-jersey-info {
   background: #ffffff;
   border-radius: 8px;
-  padding: 3px 2px 5px;
+  padding: 2px 2px 3px;
   position: relative;
   z-index: 1;
 }
@@ -554,12 +576,12 @@
      needs to reserve extra height for an occasional wrapping long name -- every card
      in a row is the same height regardless of name length. min-width: 0 lets the
      ellipsis actually kick in on a flex child instead of the row just overflowing. */
-  min-height: 13px;
+  min-height: 12px;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 2px 0 4px;
+  margin: 1px 0 2px;
 }
 
 /* Bumped size/weight and darkened further per direct feedback ("names are not popping
@@ -610,8 +632,25 @@
   font-size: 7px;
   font-weight: 700;
   color: #ffffff;
-  padding: 1.5px 0;
+  padding: 1px 0;
   border-radius: 999px;
+}
+
+/* Fixture pills are now real <button> elements (see FixturePill) so they can open the
+   fixture-detail popup -- this only resets the button-specific UA defaults (border,
+   outline, font, cursor). Deliberately does NOT touch background/color/padding here:
+   those all come from the plain class-only rules above/below (.squad-fixture-pill,
+   .squad-fixture-easy, .squad-points-row .squad-fixture-pill, etc.), and a tag+class
+   selector like this one is MORE specific than those -- setting padding/background
+   here would silently win over every one of those rules instead of layering with
+   them. */
+button.squad-fixture-pill {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 /* Still flex: 1 + min-width: 0 (inherited from .squad-fixture-pill above) so this
@@ -671,17 +710,17 @@
   .squad-pitch {
     max-width: 560px;
     padding: 20px 14px 18px;
-    gap: 16px;
+    gap: 25px;
   }
 
-  /* Tightened from an earlier 10px gap / 100px card -- doing the math on a full
-     5-across DEF/MID row (5 cards + 4 gaps) against this breakpoint's actual
-     available width (max-width minus left/right padding) showed it overflowed by
-     8px, which either wrapped the row or forced horizontal scroll. These numbers
-     leave a real ~10px margin instead of running the row right up against (or past)
-     the edge. */
-  .squad-position-row { gap: 8px; }
-
+  /* No .squad-position-row gap override needed anymore -- justify-content:
+     space-evenly (set once, in the base rule) already distributes whatever width is
+     left over after 5 cards at THIS breakpoint's own width, so a fixed gap here
+     would only fight it. 98px (not an earlier 100px) is what leaves a full 5-across
+     DEF/MID row (5 cards, no gap of its own) a real ~10px of total spare against
+     this breakpoint's actual available width (max-width minus left/right padding)
+     instead of overflowing by 8px, which either wrapped the row or forced
+     horizontal scroll. */
   .squad-player-card { width: 98px; }
 
   .squad-club-badge {
@@ -709,15 +748,15 @@
 
   .squad-corner-badge svg { width: 9px; height: 9px; }
 
-  .squad-jersey-info { border-radius: 9px; padding: 4px 3px 6px; }
+  .squad-jersey-info { border-radius: 9px; padding: 3px 3px 4px; }
 
-  .squad-name-wrap { min-height: 17px; margin: 3px 0 5px; }
+  .squad-name-wrap { min-height: 15px; margin: 2px 0 3px; }
 
   .squad-player-name { font-size: 13px; font-weight: 700; line-height: 15px; }
 
   .squad-fixture-list { gap: 3px; }
 
-  .squad-fixture-pill { font-size: 9px; padding: 2px 0; }
+  .squad-fixture-pill { font-size: 9px; padding: 1.5px 0; }
 
   .squad-points-row { gap: 5px; }
   .squad-points-row .squad-fixture-pill { flex: 0 0 auto; font-size: 10px; padding: 3px 10px 4px; }
@@ -726,9 +765,9 @@
   .squad-legend-team { font-size: 17px; }
   .squad-legend-manager { font-size: 13px; }
 
-  .squad-points-badge { min-width: 66px; }
-  .squad-points-badge-num { font-size: 18px; padding: 6px 7px 4px; }
-  .squad-points-badge-chip { font-size: 8px; padding: 3px 4px; }
+  .squad-points-badge { min-width: 80px; }
+  .squad-points-badge-num { font-size: 22px; padding: 8px 9px 5px; }
+  .squad-points-badge-chip { font-size: 9px; padding: 3px 5px; }
 }
 
 /* Full desktop: matches the extra width most of this app's other pages already use.
@@ -742,10 +781,8 @@
   .squad-pitch {
     max-width: 760px;
     padding: 16px 18px 14px;
-    gap: 12px;
+    gap: 21px;
   }
-
-  .squad-position-row { gap: 14px; }
 
   .squad-player-card { width: 122px; }
 
@@ -770,15 +807,15 @@
 
   .squad-corner-badge svg { width: 10px; height: 10px; }
 
-  .squad-jersey-info { border-radius: 10px; padding: 4px 4px 7px; }
+  .squad-jersey-info { border-radius: 10px; padding: 3px 4px 5px; }
 
-  .squad-name-wrap { min-height: 20px; margin: 3px 0 6px; }
+  .squad-name-wrap { min-height: 18px; margin: 2px 0 4px; }
 
   .squad-player-name { font-size: 14px; font-weight: 700; line-height: 16px; }
 
   .squad-fixture-list { gap: 4px; }
 
-  .squad-fixture-pill { font-size: 10px; padding: 2.5px 0; }
+  .squad-fixture-pill { font-size: 10px; padding: 2px 0; }
 
   .squad-points-row { gap: 6px; }
   .squad-points-row .squad-fixture-pill { flex: 0 0 auto; font-size: 11px; padding: 3.5px 11px 4.5px; }
@@ -787,7 +824,147 @@
   .squad-legend-team { font-size: 18px; }
   .squad-legend-manager { font-size: 13.5px; }
 
-  .squad-points-badge { min-width: 76px; }
-  .squad-points-badge-num { font-size: 21px; padding: 7px 8px 5px; }
-  .squad-points-badge-chip { font-size: 9px; padding: 3px 4px; }
+  .squad-points-badge { min-width: 92px; }
+  .squad-points-badge-num { font-size: 26px; padding: 9px 10px 6px; }
+  .squad-points-badge-chip { font-size: 10px; padding: 4px 5px; }
+}
+
+/* ---- Fixture-detail popup (tapping any of the 3 fixture pills on a player card) ----
+   Same overlay (.squad-help-overlay, defined above) and general modal-card shape as
+   the "?" help modal, just a smaller max-width -- this is a compact fact sheet, not a
+   full illustrated legend, so it doesn't need the help modal's ~640px width. Uses the
+   app's normal theme tokens (var(--bg-surface) etc.), like the help modal already
+   does, since it's a floating overlay rather than part of the theme-fixed pitch. */
+.squad-fixture-modal {
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 340px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.squad-fixture-modal-teams {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.squad-fixture-modal-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ClubBadge is normally self-positioned (it doubles as the floating crest on the
+   jersey) -- inside this popup it just needs to sit inline like a plain image. */
+.squad-fixture-modal-team .squad-club-badge {
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
+  width: 34px;
+  height: 34px;
+}
+
+.squad-fixture-modal-vs {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.squad-fixture-modal-venue {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 2px 0 12px;
+}
+
+.squad-fixture-modal-final {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+}
+
+.squad-fixture-modal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 7px 0;
+  justify-content: space-between;
+}
+
+.squad-fixture-modal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: auto;
+}
+
+.squad-fixture-modal-row .squad-fixture-modal-dot {
+  margin-right: 0;
+}
+
+.squad-fixture-modal-divider {
+  border-top: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
+  margin: 6px 0;
+}
+
+.squad-fixture-modal-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.squad-fixture-modal-form {
+  padding: 7px 0;
+}
+
+.squad-fixture-modal-form-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.squad-form-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ffffff;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.squad-form-dot-w { background: #639922; }
+.squad-form-dot-d { background: #888780; }
+.squad-form-dot-l { background: #d85a30; }
+
+/* The most recent result reads larger, full-strength, and outlined -- per direct
+   feedback ("I don't know the order by looking at this, which is current and which
+   is last"), a plain oldest-to-newest row of same-size dots didn't make it obvious
+   which end was "now" without reading the label text every time. */
+.squad-form-dot-recent {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 3.5px var(--text-primary);
 }

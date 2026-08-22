@@ -92,6 +92,31 @@ function difficultyTier(d) {
   return 'neutral';
 }
 
+// "9th", "1st", "2nd", "3rd" -- used for the opponent's league position in the
+// fixture-detail popup. Handles the 11th/12th/13th "teenth" exception (which would
+// otherwise wrongly read "11st"/"12nd"/"13rd" under the plain last-digit rule).
+function ordinal(n) {
+  if (typeof n !== 'number') return null;
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  const suffix = ['th', 'st', 'nd', 'rd'][n % 10] || 'th';
+  return `${n}${suffix}`;
+}
+
+// FPL's own strength ratings run roughly 1000-1400 across the current league, with no
+// official "this is Weak/Average/Strong" scale published anywhere -- these cutoffs are
+// a reasonable estimate to turn the raw number into a plain-English read, per direct
+// feedback on "what kind of information can we show that makes sense". Not tuned
+// against real 2026/27 data yet since the season hasn't produced enough of it.
+function strengthLabel(value) {
+  if (typeof value !== 'number') return null;
+  if (value >= 1250) return 'Strong';
+  if (value >= 1120) return 'Average';
+  return 'Weak';
+}
+
+const FORM_RESULT_LABEL = { W: 'Win', D: 'Draw', L: 'Loss' };
+
 // Shortened to 2 letters (from FPL's usual 3-letter club code) so both fixture pills
 // fit on one row per direct feedback -- every club's own 3-letter code already has a
 // unique first-2-letter prefix across the current 20-team league (ARS/AVL/BOU/BRE/
@@ -99,7 +124,13 @@ function difficultyTier(d) {
 // second letter), so a plain slice needs no separate lookup table and stays correct as
 // long as that holds -- if a future promoted club ever collides on its first 2 letters
 // with an existing one, this would need a real disambiguation table instead.
-function FixturePill({ fixture }) {
+// `onClick`, when passed, turns this into a real button that opens the fixture-detail
+// popup (see FixtureDetailModal below) with this exact fixture -- per direct feedback,
+// this applies to all 3 fixture pills on a card (the current-gameweek one next to
+// points, plus the two upcoming ones). The help modal's own example pills are plain
+// squad-fixture-pill divs rendered directly (not through this component), so they stay
+// inert illustrations without needing a special case here.
+function FixturePill({ fixture, onClick }) {
   if (!fixture) return null;
   const label = `${fixture.opponent_code.slice(0, 2)}${fixture.is_home ? 'H' : 'A'}`;
   // Home/away used to only be readable from the trailing H/A letter buried in the
@@ -107,7 +138,14 @@ function FixturePill({ fixture }) {
   // underline only on away games (nothing extra on home games) makes venue scannable
   // at a glance without a second color or an extra element.
   const className = `squad-fixture-pill squad-fixture-${difficultyTier(fixture.difficulty)}${fixture.is_home ? '' : ' squad-fixture-away'}`;
-  return <div className={className}>{label}</div>;
+  if (!onClick) {
+    return <div className={className}>{label}</div>;
+  }
+  return (
+    <button type="button" className={className} onClick={() => onClick(fixture)} aria-haspopup="dialog" title="View fixture details">
+      {label}
+    </button>
+  );
 }
 
 // Shows the club's official crest image (from FPL's own crest CDN) inside the badge
@@ -138,7 +176,7 @@ function ClubBadge({ crestUrl, code }) {
 // only by letter, hot/cold only by icon + icon color, so there's a single visual
 // language for "something is flagged on this corner" instead of four different badge
 // colors competing with the jersey and each other.
-function JerseyBadge({ player }) {
+function JerseyBadge({ player, onOpenFixture }) {
   const colors = KIT_COLORS[player.team_code] || DEFAULT_KIT;
   // Unique per card (not just per club) since multiple copies of the same club's
   // jersey render on one page at once -- SVG clipPath ids must be unique in the DOM,
@@ -217,17 +255,17 @@ function JerseyBadge({ player }) {
             <span className="squad-points-bar-num">{player.gw_points}</span>
             <span className="squad-points-bar-label">PTS</span>
           </div>
-          <FixturePill fixture={player.current_fixture} />
+          <FixturePill fixture={player.current_fixture} onClick={(f) => onOpenFixture(player, f)} />
         </div>
       )}
     </div>
   );
 }
 
-function PlayerCard({ player }) {
+function PlayerCard({ player, onOpenFixture }) {
   return (
     <div className="squad-player-card">
-      <JerseyBadge player={player} />
+      <JerseyBadge player={player} onOpenFixture={onOpenFixture} />
       <div className="squad-jersey-info">
         {/* Names are truncated to one line (CSS text-overflow: ellipsis on
             .squad-player-name) rather than wrapping -- per direct feedback, a long
@@ -251,18 +289,20 @@ function PlayerCard({ player }) {
           </p>
         </div>
         <div className="squad-fixture-list">
-          {player.fixtures.map((f, i) => <FixturePill key={i} fixture={f} />)}
+          {player.fixtures.map((f, i) => (
+            <FixturePill key={i} fixture={f} onClick={(fx) => onOpenFixture(player, fx)} />
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-function PositionRow({ players }) {
+function PositionRow({ players, onOpenFixture }) {
   if (players.length === 0) return null;
   return (
     <div className="squad-position-row">
-      {players.map((p) => <PlayerCard key={p.player_id} player={p} />)}
+      {players.map((p) => <PlayerCard key={p.player_id} player={p} onOpenFixture={onOpenFixture} />)}
     </div>
   );
 }
@@ -339,12 +379,122 @@ function PlayerCardHelpModal({ onClose }) {
             <li><span className="squad-help-dot">1</span> Team badge, on the shirt &mdash; the player's own club</li>
             <li><span className="squad-help-dot">2</span> Player name &ndash; position (G, D, M, or F)</li>
             <li><span className="squad-help-dot">3</span> Points scored this gameweek</li>
-            <li><span className="squad-help-dot">4</span> This gameweek's fixture</li>
-            <li><span className="squad-help-dot">5</span> Next two fixtures &mdash; green / gray / red for easy / medium / hard difficulty, underlined for an away game</li>
+            <li><span className="squad-help-dot">4</span> This gameweek's fixture &mdash; tap it for kickoff time, difficulty, and opponent form</li>
+            <li><span className="squad-help-dot">5</span> Next two fixtures &mdash; green / gray / red for easy / medium / hard difficulty, underlined for an away game, and tappable just like the current one</li>
             <li><span className="squad-help-dot">6</span> Left corner &mdash; captain (C) or vice-captain (V)</li>
             <li><span className="squad-help-dot">7</span> Right corner &mdash; hot or cold form</li>
           </ol>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// The popup opened by tapping any of the 3 fixture pills on a player card (current
+// gameweek's, next two upcoming). Built from what the backend now supplies per pill
+// (see manager-squad.mjs's fixturesForPlayer): kickoff time, difficulty, and an
+// opponent object with league position/points, recent form, and venue-correct
+// attack/defence strength. Follows the same overlay/centered-card convention as the
+// "?" help modal above rather than inventing a new one.
+function FixtureDetailModal({ fixture, player, onClose }) {
+  if (!fixture) return null;
+  const opp = fixture.opponent;
+
+  // Converted client-side from the UTC kickoff_time FPL stores into whoever is
+  // actually looking at this popup's OWN local time -- per direct feedback ("would be
+  // good to have this local time to the user seeing this"), rather than a fixed UK
+  // kickoff time that reads wrong for anyone elsewhere.
+  const kickoff = fixture.kickoff_time ? new Date(fixture.kickoff_time) : null;
+  const kickoffLabel = kickoff && !Number.isNaN(kickoff.getTime())
+    ? kickoff.toLocaleString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    })
+    : null;
+
+  const diffTier = difficultyTier(fixture.difficulty);
+  const diffLabel = diffTier === 'easy' ? 'Easy' : diffTier === 'hard' ? 'Hard' : 'Medium';
+
+  // Which of the opponent's two strength numbers actually matters depends on what
+  // THIS player does, not the opponent's -- a defender (or keeper) cares how
+  // dangerous the opponent's attack is; a midfielder or forward cares how solid the
+  // opponent's defence is. The venue side (home vs away strength) is already
+  // resolved server-side against this exact fixture.
+  const usesAttack = player.position === 'GKP' || player.position === 'DEF';
+  const strengthValue = opp ? (usesAttack ? opp.strength_attack : opp.strength_defence) : null;
+  const strengthTag = usesAttack ? "Opponent's attack" : "Opponent's defence";
+
+  return (
+    <div className="squad-help-overlay" onClick={onClose}>
+      <div className="squad-fixture-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="squad-help-modal-header">
+          <h4>Gameweek {fixture.gw} fixture</h4>
+          <button type="button" className="squad-close-btn" onClick={onClose} aria-label="Close">&times;</button>
+        </div>
+
+        <div className="squad-fixture-modal-teams">
+          <div className="squad-fixture-modal-team">
+            <ClubBadge crestUrl={player.team_crest} code={player.team_code} />
+            <span>{player.team_code}</span>
+          </div>
+          <span className="squad-fixture-modal-vs">{fixture.is_home ? 'vs' : '@'}</span>
+          <div className="squad-fixture-modal-team">
+            <ClubBadge crestUrl={opp?.crest} code={fixture.opponent_code} />
+            <span>{fixture.opponent_code}</span>
+          </div>
+        </div>
+
+        <p className="squad-fixture-modal-venue">
+          {fixture.is_home ? 'Home' : 'Away'}
+          {kickoffLabel ? ` · ${kickoffLabel} (your local time)` : ''}
+        </p>
+
+        {fixture.status === 'FINISHED' && (
+          <p className="squad-fixture-modal-final">
+            Final score: {fixture.team_h_score}&ndash;{fixture.team_a_score}
+          </p>
+        )}
+
+        <div className="squad-fixture-modal-row">
+          <span className={`squad-fixture-modal-dot squad-fixture-${diffTier}`} aria-hidden="true" />
+          <span>{diffLabel} difficulty ({fixture.difficulty}/5)</span>
+        </div>
+
+        {opp && (
+          <>
+            <div className="squad-fixture-modal-divider" />
+
+            {typeof opp.position === 'number' && (
+              <div className="squad-fixture-modal-row">
+                <span className="squad-fixture-modal-label">League position</span>
+                <span>{ordinal(opp.position)}{typeof opp.points === 'number' ? ` · ${opp.points} pts` : ''}</span>
+              </div>
+            )}
+
+            {opp.form && opp.form.length > 0 && (
+              <div className="squad-fixture-modal-form">
+                <span className="squad-fixture-modal-label">Form (oldest &rarr; most recent)</span>
+                <div className="squad-fixture-modal-form-dots">
+                  {opp.form.map((r, i) => (
+                    <span
+                      key={i}
+                      className={`squad-form-dot squad-form-dot-${r.toLowerCase()}${i === opp.form.length - 1 ? ' squad-form-dot-recent' : ''}`}
+                      title={FORM_RESULT_LABEL[r] || r}
+                    >
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {strengthValue !== null && strengthValue !== undefined && (
+              <div className="squad-fixture-modal-row">
+                <span className="squad-fixture-modal-label">{strengthTag}</span>
+                <span>{strengthLabel(strengthValue)}</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -355,6 +505,11 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Which fixture-detail popup (if any) is open -- { player, fixture } together, since
+  // the popup needs both the fixture itself and the viewed player's own team/position
+  // (to pick attack vs defence strength, and to show the player's own crest).
+  const [activeFixture, setActiveFixture] = useState(null);
+  const openFixture = (player, fixture) => setActiveFixture({ player, fixture });
 
   useEffect(() => {
     setLoading(true);
@@ -440,13 +595,13 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
           </div>
 
           {POSITION_ORDER.map((pos) => (
-            <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} />
+            <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} onOpenFixture={openFixture} />
           ))}
 
           {bench.length > 0 && (
             <div className="squad-bench-section">
               <p className="squad-bench-label">Subs</p>
-              <PositionRow players={bench} />
+              <PositionRow players={bench} onOpenFixture={openFixture} />
             </div>
           )}
         </div>
@@ -461,6 +616,14 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
       )}
 
       {showHelp && <PlayerCardHelpModal onClose={() => setShowHelp(false)} />}
+
+      {activeFixture && (
+        <FixtureDetailModal
+          fixture={activeFixture.fixture}
+          player={activeFixture.player}
+          onClose={() => setActiveFixture(null)}
+        />
+      )}
     </div>
   );
 }

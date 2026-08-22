@@ -113,20 +113,72 @@ async function getFormMap(seasonId, gw) {
 // so there's no way to Query "every fixture from gameweek N onward" directly -- same
 // scan-and-filter shape as every other multi-row read against this table family (see
 // getOurLeaguePicks in genbi.mjs). 385 items total for a full season, so a full scan is
-// cheap.
-async function getUpcomingFixtures(seasonId, fromGw) {
+// cheap. Fetches the WHOLE season (not just from the active gameweek onward, like this
+// used to) -- the fixture-detail popup's "recent form" needs the already-PLAYED
+// fixtures too, and one full-season scan covers both needs instead of two separate
+// ones. Every raw field on each item (kickoff_time, status, team_h_score/team_a_score,
+// not just event/team_h/team_a/difficulty) is kept -- fixturesForPlayer below reads
+// more of them now than it used to.
+async function getSeasonFixtures(seasonId) {
   try {
     const result = await dynamodb.send(new ScanCommand({
       TableName: 'fpl_fixture_data',
-      FilterExpression: 'season_id = :sid AND #ev >= :gw',
-      ExpressionAttributeNames: { '#ev': 'event' },
-      ExpressionAttributeValues: { ':sid': seasonId, ':gw': fromGw }
+      FilterExpression: 'season_id = :sid',
+      ExpressionAttributeValues: { ':sid': seasonId }
     }));
     return (result.Items || []).sort((a, b) => a.event - b.event);
   } catch (err) {
-    console.error('getUpcomingFixtures error:', err);
+    console.error('getSeasonFixtures error:', err);
     return [];
   }
+}
+
+// Full team rows (not just the id -> name lookup getTeamNameMap already does) --
+// strength ratings, league position/points -- for the fixture-detail popup's opponent
+// context. Same table getTeamNameMap already queries, just keeping every field instead
+// of only `name`.
+async function getTeamsMap(seasonId) {
+  try {
+    const result = await dynamodb.send(new QueryCommand({
+      TableName: 'teams',
+      KeyConditionExpression: 'season_id = :sid',
+      ExpressionAttributeValues: { ':sid': seasonId }
+    }));
+    return (result.Items || []).reduce((acc, t) => {
+      acc[t.team_id] = t;
+      return acc;
+    }, {});
+  } catch (err) {
+    console.error('getTeamsMap error:', err);
+    return {};
+  }
+}
+
+// 'W' | 'D' | 'L' from teamId's own perspective, or null if the fixture hasn't
+// actually finished yet (no result to report) or teamId wasn't in it.
+function resultForTeam(fixture, teamId) {
+  if (fixture.status !== 'FINISHED') return null;
+  const isHome = fixture.team_h === teamId;
+  if (!isHome && fixture.team_a !== teamId) return null;
+  const gf = isHome ? fixture.team_h_score : fixture.team_a_score;
+  const ga = isHome ? fixture.team_a_score : fixture.team_h_score;
+  if (typeof gf !== 'number' || typeof ga !== 'number') return null;
+  if (gf > ga) return 'W';
+  if (gf < ga) return 'L';
+  return 'D';
+}
+
+// Last up to `count` FINISHED results for teamId, strictly before `beforeGw` (so every
+// fixture pill on the card -- current gameweek's included -- shows form "coming into"
+// that match, not form that includes it), oldest first so the frontend can lay them
+// out left-to-right ending at "most recent" without re-sorting.
+function recentFormForTeam(fixtures, teamId, beforeGw, count = 5) {
+  return fixtures
+    .filter((f) => f.event < beforeGw && (f.team_h === teamId || f.team_a === teamId))
+    .sort((a, b) => a.event - b.event)
+    .map((f) => resultForTeam(f, teamId))
+    .filter((r) => r !== null)
+    .slice(-count);
 }
 
 // Same table + fields Standings.jsx's net_points already reads (`fpl_league_standings`,
@@ -190,21 +242,51 @@ async function hasSeasonStarted() {
   }
 }
 
-// getUpcomingFixtures already scans from the current gameweek onward (event >= gw), so
-// the current gameweek's own fixture -- if this team has one; a blank gameweek means it
-// won't -- was actually already present in that result set. It just had no way to be
-// told apart from a genuinely future fixture once nextTwoFixtures flattened everything
-// into one "next two" list. Splitting it out here into its own `current` field is what
-// lets the frontend show it as a distinct pill next to the points tablet instead of it
-// silently occupying one of the two "upcoming" slots unlabeled.
-function fixturesForPlayer(fixtures, teamId, gw) {
+// getSeasonFixtures now returns the WHOLE season (not just from the active gameweek
+// onward, like this used to work), so the current gameweek's own fixture -- if this
+// team has one; a blank gameweek means it won't -- has to be picked out explicitly
+// with event === gw rather than just being whatever's first in the list. Splitting it
+// out into its own `current` field is what lets the frontend show it as a distinct
+// pill next to the points tablet instead of it silently occupying one of the two
+// "upcoming" slots unlabeled.
+//
+// Each pill also now carries everything the fixture-detail popup needs when a player
+// taps it: kickoff_time/status/scores straight off the fixture row, plus an `opponent`
+// object built from teamsMap -- league position/points, this opponent's attack/defence
+// strength for the SIDE THEY'RE ACTUALLY PLAYING ON in this fixture (their away
+// strength if the player's own team is at home, home strength otherwise -- not a
+// blanket "their strength" that ignores venue), and recent form (last 5 results,
+// oldest first) computed from every fixture strictly before the active gameweek so
+// it's the opponent's form coming INTO this match, not results that include it.
+// Labels like "Weak"/"Strong" for the raw strength numbers are left to the frontend,
+// same reasoning as difficulty tiers/colors already being a frontend concern -- this
+// just supplies the real numbers.
+function fixturesForPlayer(fixtures, teamId, gw, teamsMap, teamNames) {
   const toPill = (f) => {
     const isHome = f.team_h === teamId;
+    const opponentId = isHome ? f.team_a : f.team_h;
+    const opponentTeam = teamsMap[opponentId];
     return {
       gw: f.event,
       opponent_code: clubCode(isHome ? f.team_a_name : f.team_h_name),
       is_home: isHome,
-      difficulty: isHome ? f.team_h_difficulty : f.team_a_difficulty
+      difficulty: isHome ? f.team_h_difficulty : f.team_a_difficulty,
+      kickoff_time: f.kickoff_time || null,
+      status: f.status || 'PENDING',
+      team_h_score: typeof f.team_h_score === 'number' ? f.team_h_score : null,
+      team_a_score: typeof f.team_a_score === 'number' ? f.team_a_score : null,
+      opponent: opponentTeam ? {
+        name: teamNames[opponentId] || (isHome ? f.team_a_name : f.team_h_name),
+        code: clubCode(isHome ? f.team_a_name : f.team_h_name),
+        crest: clubCrestUrl(isHome ? f.team_a_name : f.team_h_name),
+        position: opponentTeam.position ?? null,
+        points: opponentTeam.points ?? null,
+        // Opponent is playing AWAY when the player's own team is at home, and vice
+        // versa -- these are already the correct venue-side numbers for THIS fixture.
+        strength_attack: (isHome ? opponentTeam.strength_attack_away : opponentTeam.strength_attack_home) ?? null,
+        strength_defence: (isHome ? opponentTeam.strength_defence_away : opponentTeam.strength_defence_home) ?? null,
+        form: recentFormForTeam(fixtures, opponentId, gw)
+      } : null
     };
   };
   const teamFixtures = fixtures
@@ -252,10 +334,11 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
     };
   }
 
-  const [formMap, teamNames, fixtures, transferCost, activeChip] = await Promise.all([
+  const [formMap, teamNames, teamsMap, fixtures, transferCost, activeChip] = await Promise.all([
     getFormMap(seasonId, gw),
     getTeamNameMap(seasonId),
-    getUpcomingFixtures(seasonId, gw),
+    getTeamsMap(seasonId),
+    getSeasonFixtures(seasonId),
     getTransferCost(season, gw, entryId),
     getActiveChip(season, entryId, gw)
   ]);
@@ -267,7 +350,7 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
   const players = picks
     .sort((a, b) => a.squad_position - b.squad_position)
     .map((p) => {
-      const { current, fixtures: upcoming } = fixturesForPlayer(fixtures, p.player_team, gw);
+      const { current, fixtures: upcoming } = fixturesForPlayer(fixtures, p.player_team, gw, teamsMap, teamNames);
       return {
         player_id: p.player_id,
         name: p.player_name,
