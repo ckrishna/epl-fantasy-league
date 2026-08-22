@@ -332,6 +332,19 @@ export default function Trends({ leagueId = null } = {}) {
 
                 {fieldChartData.length === 0 ? (
                   <p className="no-data">No games played yet this season — check back once it kicks off.</p>
+                ) : fieldChartData.length === 1 ? (
+                  // A "worm" graph needs at least two gameweeks to draw a line between --
+                  // with exactly one, Recharts still plots each manager's single point
+                  // (it can't draw NO line segment for a lone point even with dot={false}
+                  // forced), which renders as an odd-looking vertical stack of dots at one
+                  // x-position rather than a real trend line. Confirmed live 2026-08-21,
+                  // GW1: this isn't a bug in the data, just genuinely nothing to compare
+                  // across yet -- a plain explanatory message reads better than a chart
+                  // that looks broken for exactly one gameweek every season.
+                  <p className="no-data">
+                    Only GW{fieldChartData[0].gameweek} played so far — the worm graph will take
+                    shape once there's more than one gameweek to compare.
+                  </p>
                 ) : (
                   <>
                     <ResponsiveContainer width="100%" height={220}>
@@ -355,6 +368,12 @@ export default function Trends({ leagueId = null } = {}) {
                               key={idx}
                               type="monotone"
                               dataKey={`m${idx}`}
+                              // Without this, Recharts' default Tooltip falls back to the
+                              // raw dataKey string ("m0", "m1", ...) as the series label --
+                              // confirmed live 2026-08-21: the tooltip showed "m0 : 21, m1 :
+                              // 11, ..." instead of any manager's actual name. name is the
+                              // prop Tooltip actually reads for its per-series label.
+                              name={m.is_you ? 'You' : (m.team_nickname || m.real_name)}
                               stroke={stroke}
                               strokeWidth={highlighted ? 2.5 : 1.5}
                               dot={false}

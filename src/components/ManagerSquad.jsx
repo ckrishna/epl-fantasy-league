@@ -17,6 +17,20 @@ import '../styles/ManagerSquad.css';
 const POSITION_ORDER = ['GKP', 'DEF', 'MID', 'FWD'];
 const POSITION_LETTER = { GKP: 'G', DEF: 'D', MID: 'M', FWD: 'F' };
 
+// FPL's own chip identifiers (as stored on fpl_entry_gameweek.active_chip by
+// fpl-data-ingester) -- 'manager' is Assistant Manager, the newest chip (see
+// DATA_MODEL.md's historical-import notes for when this codebase first had to handle
+// it). Plain-English labels for the badge; emoji kept subtle/single, matching the
+// rest of this page's restrained icon use (form flame/snowflake are the only other
+// icons on a player card).
+const CHIP_LABELS = {
+  wildcard: 'Wildcard',
+  freehit: 'Free Hit',
+  bboost: 'Bench Boost',
+  '3xc': 'Triple Captain',
+  manager: 'Assistant Manager'
+};
+
 function difficultyTier(d) {
   if (d <= 2) return 'easy';
   if (d >= 4) return 'hard';
@@ -230,6 +244,19 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
               </div>
             )}
           </div>
+
+          {/* Chip played THIS gameweek, if any -- shown as its own banner rather than
+              squeezed into the legend row, since it changes how the whole squad should
+              be read (Bench Boost means the bench counts, Triple Captain means the
+              captain's tripled not doubled -- both already reflected in the numbers
+              above once active_chip is set) and deserves to be seen at a glance, not
+              discovered by noticing the math looks different. */}
+          {squad.active_chip && CHIP_LABELS[squad.active_chip] && (
+            <div className="squad-chip-banner">
+              <span className="squad-chip-icon" aria-hidden="true">🃏</span>
+              {CHIP_LABELS[squad.active_chip]} played this gameweek
+            </div>
+          )}
 
           {POSITION_ORDER.map((pos) => (
             <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} />

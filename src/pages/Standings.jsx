@@ -5,23 +5,30 @@ import ManagerSquad from '../components/ManagerSquad';
 import { computeLeagueFinances } from '../utils/leagueFinances';
 import '../styles/Standings.css';
 
-// Rounded to whole dollars -- these are already a projection (see the effect above), so
-// showing cents would read as more precise than the figure actually is. Clickable when
-// a breakdown is available (stopPropagation so tapping the badge doesn't also trigger
-// the row's own click-to-open-squad handler) -- "why is this number what it is" is
-// exactly the question a real-money feature needs to answer on demand, not just assert.
-function MoneyBadge({ net, onClick }) {
-  if (typeof net !== 'number') return null;
-  const rounded = Math.round(net);
-  const positive = rounded >= 0;
+// Shows WINNINGS ONLY (finance.totalWon: GW wins + projected season-end split), not
+// net-of-buy-in -- every manager already paid the buy-in to join, so a badge reading
+// "-$30" for someone who simply hasn't won anything YET reads as "you're down $30",
+// double-counting a cost they've already paid rather than showing what they've
+// actually earned. Confirmed live 2026-08-21 (GW1 in progress): every manager showed a
+// negative badge (-$19 to -$29) purely because nothing had been won yet, which looked
+// like a debt rather than an empty "winnings so far". totalWon is a sum of addWinnings
+// calls only (see leagueFinances.js) and can never go negative, so this badge no
+// longer needs a "negative" style at all -- $0 gets its own neutral treatment instead
+// of looking like a loss. The full net-of-buy-in figure is still shown in the
+// breakdown modal (click the badge) alongside the buy-in line item itself, where it
+// has the context to make sense.
+function MoneyBadge({ amount, onClick }) {
+  if (typeof amount !== 'number') return null;
+  const rounded = Math.round(amount);
+  const style = rounded > 0 ? 'money-badge-positive' : 'money-badge-zero';
   return (
     <button
       type="button"
-      className={`money-badge ${positive ? 'money-badge-positive' : 'money-badge-negative'}`}
+      className={`money-badge ${style}`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title="See how this was calculated"
     >
-      {positive ? '+' : '−'}${Math.abs(rounded)}
+      {rounded > 0 ? `+$${rounded}` : '$0'}
     </button>
   );
 }
@@ -89,7 +96,7 @@ function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
         </ul>
 
         <div className="money-breakdown-net-row">
-          <span>Net</span>
+          <span>Net (after buy-in)</span>
           <span className={net >= 0 ? 'money-breakdown-amount-positive' : 'money-breakdown-amount-negative'}>
             {net >= 0 ? '+' : '−'}${Math.abs(net)}
           </span>
@@ -285,7 +292,7 @@ useEffect(() => {
                     <span className="card-manager-name">{manager.team_nickname}</span>
                     {moneyConfig && (
                       <MoneyBadge
-                        net={finances.get(String(manager.manager_id))?.net}
+                        amount={finances.get(String(manager.manager_id))?.totalWon}
                         onClick={() => setBreakdownFor({
                           teamName: manager.real_name,
                           managerName: manager.team_nickname,

@@ -131,6 +131,30 @@
   opacity: 0.85;
 }
 
+/* Chip-played banner -- amber/gold rather than the green/blue/coral already used
+   elsewhere on this page (captain, form badges), so it reads as its own kind of
+   "special event" flag rather than blending into an existing color's meaning. Full
+   width under the legend row so it's seen immediately, not squeezed into a corner. */
+.squad-chip-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  margin: 0 4px 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.squad-chip-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
 /* Matches the app's existing "?" help-icon convention (App.jsx's app-help-link next to
    the page title) rather than inventing a new icon style just for this panel. */
 .squad-help-btn {
@@ -448,18 +472,27 @@
   margin: 5px 0 4px;
 }
 
+/* Bumped size/weight and darkened further per direct feedback ("names are not popping
+   enough -- I don't really know who I'm looking at") -- the name is the one thing on
+   this card that identifies a specific player, but at the old 8.5px/600-weight it read
+   at roughly the same visual strength as the gray position letter right next to it, so
+   neither one stood out. Now sized and weighted clearly above every other label on the
+   card (fixture pills, points chip, position letter), with the position letter itself
+   shrunk down explicitly (rather than inheriting the name's own size) so the contrast
+   between "this is the name" and "this is just metadata" is obvious at a glance. */
 .squad-player-name {
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-  line-height: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  line-height: 11px;
   margin: 0;
-  color: #1a1224;
+  color: #000000;
 }
 
 .squad-position-letter {
-  color: #79708f;
+  color: #979099;
   font-weight: 500;
+  font-size: 0.82em;
 }
 
 /* Deliberately a neutral dark ink pill rather than reaching for green/blue/coral --
@@ -548,9 +581,9 @@
 
   .squad-form-badge svg { width: 11px; height: 11px; }
 
-  .squad-name-wrap { min-height: 16px; margin: 6px 0 5px; }
+  .squad-name-wrap { min-height: 17px; margin: 6px 0 5px; }
 
-  .squad-player-name { font-size: 10.5px; line-height: 13px; }
+  .squad-player-name { font-size: 13px; font-weight: 700; line-height: 15px; }
 
   .squad-fixture-list { gap: 3px; }
 
@@ -596,9 +629,9 @@
 
   .squad-form-badge svg { width: 12px; height: 12px; }
 
-  .squad-name-wrap { min-height: 18px; margin: 8px 0 6px; }
+  .squad-name-wrap { min-height: 20px; margin: 8px 0 6px; }
 
-  .squad-player-name { font-size: 11.5px; line-height: 14px; }
+  .squad-player-name { font-size: 14px; font-weight: 700; line-height: 16px; }
 
   .squad-fixture-list { gap: 4px; }
 

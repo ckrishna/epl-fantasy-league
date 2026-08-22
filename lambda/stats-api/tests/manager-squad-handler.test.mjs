@@ -64,7 +64,7 @@ function teamsMock() {
   ];
 }
 
-function baseDynamoRouter({ picksByGw = {}, formItems = [], fixtures = [], standingsRow = null } = {}) {
+function baseDynamoRouter({ picksByGw = {}, formItems = [], fixtures = [], standingsRow = null, activeChip = undefined } = {}) {
   return (command) => {
     const table = command.input.TableName;
     const ctor = command.constructor.name;
@@ -95,6 +95,13 @@ function baseDynamoRouter({ picksByGw = {}, formItems = [], fixtures = [], stand
     // itself defaults to gameweek 1 when that happens.
     if (table === 'fpl_entry_gameweek' && ctor === 'ScanCommand') {
       return { Items: [] };
+    }
+    // getActiveChip()'s query -- undefined activeChip means "no row at all" (mirrors a
+    // real manager who hasn't played a chip that gameweek, same as the default null the
+    // handler falls back to), not merely "chip is null", so tests can distinguish "no
+    // data" from "queried, and the answer is no chip".
+    if (table === 'fpl_entry_gameweek' && ctor === 'QueryCommand') {
+      return { Items: activeChip !== undefined ? [{ active_chip: activeChip }] : [] };
     }
     return undefined;
   };
@@ -172,6 +179,56 @@ test('returns full squad with team totals, captain doubling, form tags, and cres
     assert.strictEqual(body.team_gw_points_gross, 76, 'Gross total should sum starters only, with captain already doubled');
     assert.strictEqual(body.transfer_cost, 4);
     assert.strictEqual(body.team_gw_points_net, 72, 'Net = gross minus transfer_cost (76 - 4)');
+    assert.strictEqual(body.active_chip, null, 'No chip played this gameweek in this mock');
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('Triple Captain triples the captain instead of the normal double', async () => {
+  const picks = buildPicks();
+  const fetchMock = bootstrapCurrentGw(1);
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    picksByGw: { '2026/27#728477#1': picks },
+    standingsRow: { season_event: '2026/27#1', manager_id: 728477, transfer_cost: 0 },
+    activeChip: '3xc'
+  }));
+
+  try {
+    const response = await handleManagerSquad({ entry_id: '728477' }, CORS);
+    const body = JSON.parse(response.body);
+
+    assert.strictEqual(body.active_chip, '3xc');
+    // Saka (captain) scored 9 -> tripled to 27, not doubled to 18.
+    const saka = body.players.find((p) => p.player_id === 5);
+    assert.strictEqual(saka.gw_points, 27, 'Triple Captain should triple the captain\'s raw points');
+    // Non-captain starters are unaffected -- same 76-total base as the no-chip test,
+    // minus Saka's old doubled contribution (18) plus the new tripled one (27).
+    assert.strictEqual(body.team_gw_points_gross, 76 - 18 + 27);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('Bench Boost counts the bench toward the team total instead of excluding it', async () => {
+  const picks = buildPicks();
+  const fetchMock = bootstrapCurrentGw(1);
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    picksByGw: { '2026/27#728477#1': picks },
+    standingsRow: { season_event: '2026/27#1', manager_id: 728477, transfer_cost: 0 },
+    activeChip: 'bboost'
+  }));
+
+  try {
+    const response = await handleManagerSquad({ entry_id: '728477' }, CORS);
+    const body = JSON.parse(response.body);
+
+    assert.strictEqual(body.active_chip, 'bboost');
+    // Bench players from buildPicks(): Pickford 3, defender 0, midfielder 1, forward 0
+    // -> +4 on top of the normal 76 starters-only total.
+    assert.strictEqual(body.team_gw_points_gross, 76 + 4, 'Bench Boost should add the bench\'s points, not just the starters');
   } finally {
     fetchMock.restore();
     dynamoMock.restore();

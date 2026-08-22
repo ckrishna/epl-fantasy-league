@@ -134,6 +134,27 @@ async function getUpcomingFixtures(seasonId, fromGw) {
 // instead of a fresh guess at fpl_entry_gameweek's own transfer_cost field, so "net"
 // here means exactly what Standings already calls net points, not a second slightly
 // different definition of the same idea.
+// Reads the chip played THIS gameweek (wildcard/freehit/bboost/3xc/manager, or null),
+// stored on fpl_entry_gameweek by fpl-data-ingester's storeGameweekSummary -- a
+// separate query this handler didn't previously make at all (see the note that used to
+// sit where this function is now called). Needed because a chip changes how the whole
+// squad should be read (bench boost means the bench counts too, triple captain triples
+// instead of doubles) and, at minimum, managers want to see it flagged on their own
+// squad view rather than only in the raw data.
+async function getActiveChip(season, entryId, gw) {
+  try {
+    const result = await dynamodb.send(new QueryCommand({
+      TableName: 'fpl_entry_gameweek',
+      KeyConditionExpression: 'season_entry = :se AND gameweek = :gw',
+      ExpressionAttributeValues: { ':se': `${season}#${entryId}`, ':gw': gw }
+    }));
+    return result.Items?.[0]?.active_chip || null;
+  } catch (err) {
+    console.error('getActiveChip error:', err);
+    return null;
+  }
+}
+
 async function getTransferCost(season, gw, entryId) {
   try {
     const result = await dynamodb.send(new QueryCommand({
@@ -219,12 +240,17 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
     };
   }
 
-  const [formMap, teamNames, fixtures, transferCost] = await Promise.all([
+  const [formMap, teamNames, fixtures, transferCost, activeChip] = await Promise.all([
     getFormMap(seasonId, gw),
     getTeamNameMap(seasonId),
     getUpcomingFixtures(seasonId, gw),
-    getTransferCost(season, gw, entryId)
+    getTransferCost(season, gw, entryId),
+    getActiveChip(season, entryId, gw)
   ]);
+
+  // Triple Captain (3xc) triples the captain's score instead of the normal double --
+  // everyone else's multiplier is unaffected by any chip.
+  const captainMultiplier = activeChip === '3xc' ? 3 : 2;
 
   const players = picks
     .sort((a, b) => a.squad_position - b.squad_position)
@@ -241,23 +267,25 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
       form: formMap[p.player_id] ?? null,
       form_tag: formTag(formMap[p.player_id]),
       fixtures: nextTwoFixtures(fixtures, p.player_team),
-      // Each player's own raw gameweek score (doubled for the captain), shown on every
-      // card including the bench -- a benched player's real score is exactly what
-      // #39 Phase 1 calls "bench points wasted" elsewhere in this app, so it's useful
-      // to see here too, not just hidden. What does NOT count is handled separately
-      // below (team totals sum starters only). Derived from is_captain rather than
-      // the stored `multiplier` field -- fpl-data-ingester writes
+      // Each player's own raw gameweek score (doubled for the captain, tripled if
+      // Triple Captain is active), shown on every card including the bench -- a
+      // benched player's real score is exactly what #39 Phase 1 calls "bench points
+      // wasted" elsewhere in this app, so it's useful to see here too, not just
+      // hidden. What does NOT count is handled separately below (team totals sum
+      // starters only, unless Bench Boost is active). Derived from is_captain rather
+      // than the stored `multiplier` field -- fpl-data-ingester writes
       // `multiplier: pick.multiplier || 1`, and FPL's bench multiplier is legitimately
       // 0, which that `|| 1` silently coerces back to 1, so it can't be trusted here.
-      gw_points: (p.points ?? 0) * (p.is_captain ? 2 : 1)
+      gw_points: (p.points ?? 0) * (p.is_captain ? captainMultiplier : 1)
     }));
 
-  // Gross total for the gameweek: sum of each STARTER's already-multiplied score.
-  // Deliberately excludes the bench (unlike gw_points above, which shows every card's
-  // own score) -- this doesn't yet account for an active bench-boost chip, which would
-  // need fpl_entry_gameweek's active_chip (a separate query this handler doesn't make).
+  // Gross total for the gameweek: sum of each STARTER's already-multiplied score --
+  // UNLESS Bench Boost is active, in which case the bench counts too (that's the whole
+  // point of the chip). Now that getActiveChip actually queries fpl_entry_gameweek
+  // (previously not fetched at all here), this accounts for it instead of always
+  // excluding the bench regardless of chip.
   const teamGwPointsGross = players
-    .filter((p) => !p.is_bench)
+    .filter((p) => activeChip === 'bboost' || !p.is_bench)
     .reduce((sum, p) => sum + p.gw_points, 0);
 
   // Net = gross minus the points lost to any paid transfers ("hits") that gameweek --
@@ -275,6 +303,7 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
       team_gw_points_gross: teamGwPointsGross,
       team_gw_points_net: teamGwPointsNet,
       transfer_cost: transferCost,
+      active_chip: activeChip,
       players
     })
   };

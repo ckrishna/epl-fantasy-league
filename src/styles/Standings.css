@@ -165,6 +165,14 @@
   color: var(--danger);
 }
 
+/* $0 winnings so far -- deliberately neutral, not danger-red. This isn't a loss, it's
+   just nothing won YET (see MoneyBadge's own comment in Standings.jsx for why the
+   badge stopped showing net-of-buy-in at all). */
+.money-badge-zero {
+  background: var(--bg-surface-alt-2);
+  color: var(--text-tertiary);
+}
+
 /* Winnings breakdown modal -- click a money badge to see the line items behind it
    (buy-in, each GW win, a forfeited-last-place reassignment, the season-end payout).
    Mirrors ManagerSquad.css's .squad-help-overlay/.squad-help-modal pattern (same

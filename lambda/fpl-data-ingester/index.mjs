@@ -239,8 +239,35 @@ async function getLiveGameweekStats(gw) {
   }
 }
 
-async function storeGameweekSummary(manager, picksData, gw, season) {
+async function storeGameweekSummary(manager, picksData, gw, season, livePoints = new Map()) {
   const entryHistory = picksData.entry_history;
+
+  // entryHistory.points/total_points come from FPL's own per-entry "picks" endpoint,
+  // which does NOT update live during a match -- confirmed live on 2026-08-21 (GW1
+  // kickoff day): entry_history.points sat at 0 for over 40 minutes into a match in
+  // which this entry's captain had already scored and picked up bonus points, while
+  // FPL's separate per-player `/event/{gw}/live/` endpoint (the same one
+  // getLiveGameweekStats/livePoints already pulls, and that storePicks below already
+  // uses for fpl_entry_picks.points) had the goal recorded within a couple of minutes
+  // of it happening. FPL only rolls entry_history up later (after full-time, sometimes
+  // only once bonus points are finalized) -- so any table sourced from entry_history
+  // alone (fpl_league_standings, gw-winners-cache, both downstream of this function's
+  // output) would show 0 for an entire live gameweek even as the Manager Squad view
+  // (which reads fpl_entry_picks.points directly) already shows the real score. Fixed
+  // by computing the gameweek score ourselves from the same live per-player feed,
+  // exactly the way handleManagerSquad already does (team_gw_points_gross): sum each
+  // STARTER's live points, doubled for the captain, bench excluded. This makes
+  // Standings/GW-Winners agree with Manager Squad in real time instead of only after
+  // FPL finishes its own rollup.
+  const pointsThisWeek = picksData.picks
+    .filter((p) => p.position <= 11)
+    .reduce((sum, p) => sum + (livePoints.get(p.element) ?? 0) * (p.is_captain ? 2 : 1), 0);
+
+  // total_points (season cumulative) has the same lag baked in, since it's just
+  // "previous total + this week's points" on FPL's side. Patched the same way: drop
+  // FPL's still-stale contribution for the current week and replace it with the
+  // live-computed one, leaving every already-settled prior week untouched.
+  const pointsTotal = (entryHistory.total_points || 0) - (entryHistory.points || 0) + pointsThisWeek;
 
   const item = {
     season_entry: `${season}#${manager.entry_id}`,
@@ -249,10 +276,10 @@ async function storeGameweekSummary(manager, picksData, gw, season) {
     season,
     real_name: manager.real_name,
     team_nickname: manager.team_nickname,
-    points_this_week: entryHistory.points || 0,
-    points_gross: entryHistory.points || 0,
+    points_this_week: pointsThisWeek,
+    points_gross: pointsThisWeek,
     transfer_cost: entryHistory.event_transfers_cost || 0,
-    points_total: entryHistory.total_points || 0,
+    points_total: pointsTotal,
     transfers_made: entryHistory.event_transfers || 0,
     transfers_remaining: entryHistory.transfers_left || 0,
     // active_chip lives on the TOP-LEVEL picks response (picksData.active_chip), not
@@ -489,7 +516,7 @@ export async function handler(event) {
           continue;
         }
 
-        await storeGameweekSummary(manager, picksData, gw, season);
+        await storeGameweekSummary(manager, picksData, gw, season, livePointsByGW.get(gw.id));
         dbWriteCount += 1;
 
         await storePicks(manager, picksData, playerMap, gw, season, livePointsByGW.get(gw.id));
