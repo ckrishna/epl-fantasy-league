@@ -693,9 +693,16 @@
 .squad-fixture-neutral { background: #888780; }
 .squad-fixture-hard { background: #d85a30; }
 
+/* margin-bottom on top of .app-content's own mobile bottom-padding (reserved for the
+   fixed bottom nav bar) -- that padding alone left the Subs row sitting right at the
+   edge of the nav bar with no visual breathing room, per direct feedback that it was
+   "tough to see" even scrolled all the way down. This is extra daylight specifically
+   for this last section, not a fix to the nav-clearance padding itself (that part was
+   already working). */
 .squad-bench-section {
   border-top: 1px dashed rgba(255, 255, 255, 0.4);
   padding-top: 10px;
+  margin-bottom: 20px;
 }
 
 .squad-bench-label {
