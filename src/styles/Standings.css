@@ -269,13 +269,17 @@
   font-weight: 700;
 }
 
+/* Totals the winnings-only line items above -- no buy-in involved anywhere in this
+   modal (see MoneyBreakdownModal's own comment for why that was dropped), so this
+   number always matches the badge the person just clicked exactly. */
 .money-breakdown-net-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 10px;
+  padding-top: 8px;
   margin-top: 4px;
+  border-top: 1px solid var(--border);
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);

@@ -70,9 +70,17 @@ function sortLineItems(items) {
 }
 
 function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
-  const items = sortLineItems(finance.breakdown || []);
+  // buy_in is deliberately excluded here -- per direct feedback, the badge and this
+  // whole breakdown are about WINNINGS only. Everyone already paid the buy-in to join
+  // (see MoneyBadge's own comment in this file), so showing it as a subtracted line
+  // item made the modal's bottom-line number ($45) look like it disagreed with the
+  // badge ($75) the person just clicked, when really they were just answering two
+  // different questions. leagueFinances.js still computes it internally (untouched,
+  // in case a future feature genuinely needs true profit/loss), it just isn't
+  // rendered anywhere in this UI anymore.
+  const items = sortLineItems(finance.breakdown || []).filter((i) => i.type !== 'buy_in');
   const hasReassigned = items.some((i) => i.type === 'gw_reassigned');
-  const net = Math.round(finance.net);
+  const totalWon = Math.round(finance.totalWon);
   return (
     <div className="money-breakdown-overlay" onClick={onClose}>
       <div className="money-breakdown-modal" onClick={(e) => e.stopPropagation()}>
@@ -95,11 +103,11 @@ function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
           ))}
         </ul>
 
+        {/* Sums exactly the line items shown above (no buy-in involved anywhere in this
+            view) -- always matches the badge the person just clicked. */}
         <div className="money-breakdown-net-row">
-          <span>Net (after buy-in)</span>
-          <span className={net >= 0 ? 'money-breakdown-amount-positive' : 'money-breakdown-amount-negative'}>
-            {net >= 0 ? '+' : '−'}${Math.abs(net)}
-          </span>
+          <span>Total winnings</span>
+          <span className="money-breakdown-amount-positive">+${Math.abs(totalWon)}</span>
         </div>
 
         {hasReassigned && (
@@ -349,7 +357,7 @@ useEffect(() => {
                       <span className="manager-name-text">{manager.team_nickname}</span>
                       {moneyConfig && (
                         <MoneyBadge
-                          net={finances.get(String(manager.manager_id))?.net}
+                          amount={finances.get(String(manager.manager_id))?.totalWon}
                           onClick={() => setBreakdownFor({
                             teamName: manager.real_name,
                             managerName: manager.team_nickname,

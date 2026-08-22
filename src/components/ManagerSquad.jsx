@@ -20,10 +20,20 @@ const POSITION_LETTER = { GKP: 'G', DEF: 'D', MID: 'M', FWD: 'F' };
 // FPL's own chip identifiers (as stored on fpl_entry_gameweek.active_chip by
 // fpl-data-ingester) -- 'manager' is Assistant Manager, the newest chip (see
 // DATA_MODEL.md's historical-import notes for when this codebase first had to handle
-// it). Plain-English labels for the badge; emoji kept subtle/single, matching the
-// rest of this page's restrained icon use (form flame/snowflake are the only other
-// icons on a player card).
-const CHIP_LABELS = {
+// it). Short 2-letter codes rather than full words -- this sits inline next to the
+// team nickname in the legend row, which already has to share space with the "?" help
+// icon and (on the advisor-mock-preview branch, not yet merged, but reserved for here
+// regardless per direct feedback) a center advisor icon. Full name is still available
+// via the badge's title attribute on hover.
+const CHIP_CODES = {
+  wildcard: 'WC',
+  freehit: 'FH',
+  bboost: 'BB',
+  '3xc': 'TC',
+  manager: 'AM'
+};
+
+const CHIP_NAMES = {
   wildcard: 'Wildcard',
   freehit: 'Free Hit',
   bboost: 'Bench Boost',
@@ -229,7 +239,25 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
 
             <div className="squad-legend-identity">
               <p className="squad-legend-team">{teamName}</p>
-              {managerName && <p className="squad-legend-manager">{managerName}</p>}
+              {managerName && (
+                <p className="squad-legend-manager">
+                  <span className="squad-legend-manager-text">{managerName}</span>
+                  {/* Chip played THIS gameweek, if any -- inline next to the team
+                      nickname rather than a full-width banner, so the legend row still
+                      has room for the "?" help icon plus a center advisor icon (a
+                      separate, not-yet-merged feature -- this just leaves it space,
+                      doesn't implement it). It changes how the whole squad should be
+                      read (Bench Boost means the bench counts, Triple Captain means
+                      the captain's tripled not doubled -- both already reflected in
+                      the numbers above once active_chip is set), so it's still shown
+                      up front, just compactly -- full name via the title tooltip. */}
+                  {squad.active_chip && CHIP_CODES[squad.active_chip] && (
+                    <span className="squad-chip-badge" title={CHIP_NAMES[squad.active_chip]}>
+                      {CHIP_CODES[squad.active_chip]}
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
 
             {typeof squad.team_gw_points_net === 'number' && (
@@ -244,19 +272,6 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
               </div>
             )}
           </div>
-
-          {/* Chip played THIS gameweek, if any -- shown as its own banner rather than
-              squeezed into the legend row, since it changes how the whole squad should
-              be read (Bench Boost means the bench counts, Triple Captain means the
-              captain's tripled not doubled -- both already reflected in the numbers
-              above once active_chip is set) and deserves to be seen at a glance, not
-              discovered by noticing the math looks different. */}
-          {squad.active_chip && CHIP_LABELS[squad.active_chip] && (
-            <div className="squad-chip-banner">
-              <span className="squad-chip-icon" aria-hidden="true">🃏</span>
-              {CHIP_LABELS[squad.active_chip]} played this gameweek
-            </div>
-          )}
 
           {POSITION_ORDER.map((pos) => (
             <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} />
