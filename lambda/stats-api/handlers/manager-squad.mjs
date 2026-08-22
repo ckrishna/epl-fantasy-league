@@ -190,19 +190,31 @@ async function hasSeasonStarted() {
   }
 }
 
-function nextTwoFixtures(fixtures, teamId) {
-  return fixtures
+// getUpcomingFixtures already scans from the current gameweek onward (event >= gw), so
+// the current gameweek's own fixture -- if this team has one; a blank gameweek means it
+// won't -- was actually already present in that result set. It just had no way to be
+// told apart from a genuinely future fixture once nextTwoFixtures flattened everything
+// into one "next two" list. Splitting it out here into its own `current` field is what
+// lets the frontend show it as a distinct pill next to the points tablet instead of it
+// silently occupying one of the two "upcoming" slots unlabeled.
+function fixturesForPlayer(fixtures, teamId, gw) {
+  const toPill = (f) => {
+    const isHome = f.team_h === teamId;
+    return {
+      gw: f.event,
+      opponent_code: clubCode(isHome ? f.team_a_name : f.team_h_name),
+      is_home: isHome,
+      difficulty: isHome ? f.team_h_difficulty : f.team_a_difficulty
+    };
+  };
+  const teamFixtures = fixtures
     .filter((f) => f.team_h === teamId || f.team_a === teamId)
-    .slice(0, 2)
-    .map((f) => {
-      const isHome = f.team_h === teamId;
-      return {
-        gw: f.event,
-        opponent_code: clubCode(isHome ? f.team_a_name : f.team_h_name),
-        is_home: isHome,
-        difficulty: isHome ? f.team_h_difficulty : f.team_a_difficulty
-      };
-    });
+    .sort((a, b) => a.event - b.event);
+  const current = teamFixtures.find((f) => f.event === gw);
+  return {
+    current: current ? toPill(current) : null,
+    fixtures: teamFixtures.filter((f) => f.event > gw).slice(0, 2).map(toPill)
+  };
 }
 
 // Powers the "click a manager in Standings" squad view: current picks (starters +
@@ -254,30 +266,37 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
 
   const players = picks
     .sort((a, b) => a.squad_position - b.squad_position)
-    .map((p) => ({
-      player_id: p.player_id,
-      name: p.player_name,
-      position: POSITION_LABELS[p.player_position] || '???',
-      team_code: clubCode(teamNames[p.player_team]),
-      team_crest: clubCrestUrl(teamNames[p.player_team]),
-      squad_position: p.squad_position,
-      is_captain: !!p.is_captain,
-      is_vice_captain: !!p.is_vice_captain,
-      is_bench: !!p.is_bench,
-      form: formMap[p.player_id] ?? null,
-      form_tag: formTag(formMap[p.player_id]),
-      fixtures: nextTwoFixtures(fixtures, p.player_team),
-      // Each player's own raw gameweek score (doubled for the captain, tripled if
-      // Triple Captain is active), shown on every card including the bench -- a
-      // benched player's real score is exactly what #39 Phase 1 calls "bench points
-      // wasted" elsewhere in this app, so it's useful to see here too, not just
-      // hidden. What does NOT count is handled separately below (team totals sum
-      // starters only, unless Bench Boost is active). Derived from is_captain rather
-      // than the stored `multiplier` field -- fpl-data-ingester writes
-      // `multiplier: pick.multiplier || 1`, and FPL's bench multiplier is legitimately
-      // 0, which that `|| 1` silently coerces back to 1, so it can't be trusted here.
-      gw_points: (p.points ?? 0) * (p.is_captain ? captainMultiplier : 1)
-    }));
+    .map((p) => {
+      const { current, fixtures: upcoming } = fixturesForPlayer(fixtures, p.player_team, gw);
+      return {
+        player_id: p.player_id,
+        name: p.player_name,
+        position: POSITION_LABELS[p.player_position] || '???',
+        team_code: clubCode(teamNames[p.player_team]),
+        team_crest: clubCrestUrl(teamNames[p.player_team]),
+        squad_position: p.squad_position,
+        is_captain: !!p.is_captain,
+        is_vice_captain: !!p.is_vice_captain,
+        is_bench: !!p.is_bench,
+        form: formMap[p.player_id] ?? null,
+        form_tag: formTag(formMap[p.player_id]),
+        // This gameweek's own fixture (null on a blank gameweek for this team), shown
+        // as its own pill next to the points tablet -- separate from `fixtures` below,
+        // which is strictly the two fixtures AFTER this one now that it's split out.
+        current_fixture: current,
+        fixtures: upcoming,
+        // Each player's own raw gameweek score (doubled for the captain, tripled if
+        // Triple Captain is active), shown on every card including the bench -- a
+        // benched player's real score is exactly what #39 Phase 1 calls "bench points
+        // wasted" elsewhere in this app, so it's useful to see here too, not just
+        // hidden. What does NOT count is handled separately below (team totals sum
+        // starters only, unless Bench Boost is active). Derived from is_captain rather
+        // than the stored `multiplier` field -- fpl-data-ingester writes
+        // `multiplier: pick.multiplier || 1`, and FPL's bench multiplier is legitimately
+        // 0, which that `|| 1` silently coerces back to 1, so it can't be trusted here.
+        gw_points: (p.points ?? 0) * (p.is_captain ? captainMultiplier : 1)
+      };
+    });
 
   // Gross total for the gameweek: sum of each STARTER's already-multiplied score --
   // UNLESS Bench Boost is active, in which case the bench counts too (that's the whole

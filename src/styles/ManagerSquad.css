@@ -265,73 +265,17 @@
   flex-shrink: 0;
 }
 
-/* One fixed size, not built from the responsive .squad-player-card breakpoints --
-   this card only ever renders inside this modal, so its six numbered callouts (below)
-   can use hardcoded pixel offsets that stay correct without needing to track three
-   different breakpoint sizes. */
+/* One fixed size, built from the SAME classes as a real jersey card (squad-jersey-
+   shirt, squad-points-row, squad-jersey-info, etc.) rather than a separate mock, so
+   this can't silently drift out of sync with the real card again the way the old
+   plain-white-card version did. Just a plain relative-positioned wrapper now -- no
+   background/padding of its own -- since the jersey and white info block underneath
+   already carry their own visuals exactly like they do on the real pitch. Fixed width
+   (not the responsive .squad-player-card breakpoints) so the numbered callouts below
+   can use hardcoded pixel offsets that stay put regardless of viewport size. */
 .squad-help-example-card {
   position: relative;
   width: 220px;
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 50px 16px 20px;
-  text-align: center;
-}
-
-.squad-club-badge.squad-help-example-crest {
-  width: 56px;
-  height: 56px;
-  top: -28px;
-}
-
-.squad-cap-badge.squad-help-example-cap {
-  width: 34px;
-  height: 34px;
-  top: 12px;
-  left: 12px;
-  font-size: 15px;
-}
-
-.squad-form-badge.squad-help-example-hot {
-  width: 34px;
-  height: 34px;
-  top: 12px;
-  right: 12px;
-}
-
-.squad-form-badge.squad-help-example-hot svg {
-  width: 16px;
-  height: 16px;
-}
-
-.squad-help-example-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin: 10px 0;
-}
-
-.squad-help-example-name {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a1224;
-}
-
-.squad-points-chip.squad-help-example-points {
-  font-size: 13px;
-  padding: 4px 12px;
-}
-
-.squad-help-example-fixtures {
-  display: flex;
-  gap: 8px;
-}
-
-.squad-help-example-fixtures .squad-fixture-pill {
-  padding: 4px 14px;
-  font-size: 12px;
 }
 
 /* Small numbered markers -- reused both floating on the example card (positioned per
@@ -351,9 +295,18 @@
   flex-shrink: 0;
 }
 
-.squad-help-dot-1 { position: absolute; top: -4px; left: calc(50% + 36px); }
-.squad-help-dot-5 { position: absolute; top: 50px; left: 12px; }
-.squad-help-dot-6 { position: absolute; top: 50px; right: 12px; }
+/* Positions are estimates against the real card's own proportions at this fixed
+   220px width (shirt ~114px tall at its 100:52 aspect ratio, points row just under
+   that, white info block below) -- not pixel-perfect against every breakpoint's own
+   corner-badge/crest sizing, but close enough for a pointer next to a legend entry
+   that already spells out what each number means. */
+.squad-help-dot-crest { position: absolute; top: 28px; left: calc(50% + 26px); }
+.squad-help-dot-cap { position: absolute; top: -8px; left: 22px; }
+.squad-help-dot-form { position: absolute; top: -8px; right: 22px; }
+.squad-help-dot-points { position: absolute; top: 112px; left: 4px; }
+.squad-help-dot-current { position: absolute; top: 112px; right: 4px; }
+.squad-help-dot-name { position: absolute; top: 150px; left: 8px; }
+.squad-help-dot-fixtures { position: absolute; top: 180px; left: 8px; }
 
 .squad-help-modal-list {
   list-style: none;
@@ -461,26 +414,49 @@
    score could straddle a narrow stripe boundary, legible on one half and not the
    other). Sized to its own content (not the full card width) per direct feedback --
    reads as a distinct chip rather than a flat divider bar. */
-.squad-points-bar {
-  align-self: center;
+/* Wraps the points tablet and (when this player's club has one) the current-gameweek
+   fixture tablet next to it, same row -- see JerseyBadge's own comment for why this
+   sits next to points instead of on its own row. justify-content: center means a
+   lone points tablet (no current fixture -- blank gameweek for this club) still ends
+   up dead-center same as before, rather than snapping to one side. */
+.squad-points-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
   gap: 3px;
-  background: #1a1224;
-  border-radius: 999px;
-  padding: 2px 10px 3px;
   margin: 2px 0;
 }
 
+/* flex: 1 + min-width: 0 (added when the current-fixture pill sharing this row was
+   introduced) is what makes the points tablet actually SHARE the card's width with
+   that pill instead of demanding its own full, unshrinkable size next to it -- without
+   it, the two tablets' combined natural width was wider than a mobile card (70px),
+   and with neither one able to shrink, they silently overflowed sideways into the
+   NEXT card instead of fitting inside this one. overflow: hidden is a second
+   safety net so that even in the tightest case, any excess clips inside this pill's
+   own rounded background rather than spilling past it. */
+.squad-points-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: #1a1224;
+  border-radius: 999px;
+  padding: 2px 6px 3px;
+}
+
 .squad-points-bar-num {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   color: #ffffff;
 }
 
 .squad-points-bar-label {
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -561,47 +537,10 @@
   font-weight: 600;
 }
 
-/* Only used standalone in the "?" help modal's fixed-size example card now -- the real
-   card's own captain/vice/form badges are .squad-corner-badge above. Black/white to
-   match, per direct feedback that all four corner badges should share one treatment. */
-.squad-cap-badge {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #000000;
-  color: #ffffff;
-  font-size: 9px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.squad-form-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #000000;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.squad-form-badge svg {
-  width: 9px;
-  height: 9px;
-}
-
-/* Shared by .squad-form-badge (help modal) and .squad-corner-badge (real card) -- black
-   background throughout, only the icon's own color (not the badge background) tells hot
-   from cold. */
+/* Black background throughout, only the icon's own color (not the badge background)
+   tells hot from cold -- shared by .squad-corner-badge, both on the real card and in
+   the help modal's example card, which now reuses that same class directly instead of
+   a separate .squad-cap-badge/.squad-form-badge pair that used to only exist here. */
 .squad-cold-badge {
   color: #4fa8e0;
 }
@@ -654,22 +593,6 @@
   font-size: 0.82em;
 }
 
-/* Deliberately a neutral dark ink pill rather than reaching for green/blue/coral --
-   every other color on this card already carries a specific meaning (club badge
-   purple, captain green, cold blue, hot coral, fixture difficulty red/gray/green), so
-   a "stat readout" color needed to read as its own thing rather than being mistaken
-   for one of those. */
-.squad-points-chip {
-  display: inline-block;
-  margin: 0 0 4px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #1a1224;
-  color: #ffffff;
-  font-size: 9px;
-  font-weight: 700;
-}
-
 /* Side by side rather than stacked -- per direct feedback, now that team codes are
    2 letters (see FixturePill's comment) both fixtures fit on one row. */
 .squad-fixture-list {
@@ -679,14 +602,37 @@
 }
 
 .squad-fixture-pill {
+  position: relative;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
   text-align: center;
   font-size: 7px;
   font-weight: 700;
   color: #ffffff;
   padding: 1.5px 0;
   border-radius: 999px;
+}
+
+/* Still flex: 1 + min-width: 0 (inherited from .squad-fixture-pill above) so this
+   pill genuinely SHARES the row with .squad-points-bar and shrinks with it -- an
+   earlier flex: 0 0 auto here kept it a fixed, unshrinkable size, and the two
+   tablets' combined natural width was wider than a mobile card (70px), so on the
+   narrowest phones they silently overflowed sideways into the NEXT card's jersey
+   instead of fitting inside this one. Just a smaller size than the fixture-list
+   pills below it, since it's a standalone tablet next to points rather than one of
+   two pills already splitting a row evenly. */
+.squad-points-row .squad-fixture-pill {
+  padding: 2px 6px 3px;
+  font-size: 8px;
+}
+
+/* Away-game marker -- see FixturePill's own comment. Underlines the whole label rather
+   than adding a separate element; text-underline-offset keeps the line from crowding
+   the small text at these font sizes. */
+.squad-fixture-away {
+  text-decoration: underline;
+  text-underline-offset: 1.5px;
 }
 
 .squad-fixture-easy { background: #639922; }
@@ -747,7 +693,11 @@
 
   .squad-jersey-crest { width: 25px; height: 25px; }
 
-  .squad-points-bar { padding: 3px 13px 4px; gap: 4px; }
+  /* Tablet/desktop have real room to spare, so restore the pre-mobile-fix behavior --
+     content-sized, not forced to evenly split the row with the current-fixture pill
+     next to it -- rather than carrying the mobile shrink-to-fit rule up to sizes that
+     never actually needed it. */
+  .squad-points-bar { flex: 0 0 auto; padding: 3px 13px 4px; gap: 4px; }
   .squad-points-bar-num { font-size: 16px; }
   .squad-points-bar-label { font-size: 9px; }
 
@@ -757,8 +707,7 @@
     font-size: 10px;
   }
 
-  .squad-corner-badge svg,
-  .squad-form-badge svg { width: 9px; height: 9px; }
+  .squad-corner-badge svg { width: 9px; height: 9px; }
 
   .squad-jersey-info { border-radius: 9px; padding: 4px 3px 6px; }
 
@@ -770,7 +719,8 @@
 
   .squad-fixture-pill { font-size: 9px; padding: 2px 0; }
 
-  .squad-points-chip { font-size: 10px; padding: 2.5px 8px; margin-bottom: 5px; }
+  .squad-points-row { gap: 5px; }
+  .squad-points-row .squad-fixture-pill { flex: 0 0 auto; font-size: 10px; padding: 3px 10px 4px; }
 
   .squad-legend { font-size: 13px; }
   .squad-legend-team { font-size: 17px; }
@@ -808,7 +758,7 @@
 
   .squad-jersey-crest { width: 30px; height: 30px; }
 
-  .squad-points-bar { padding: 4px 15px 5px; gap: 5px; }
+  .squad-points-bar { flex: 0 0 auto; padding: 4px 15px 5px; gap: 5px; }
   .squad-points-bar-num { font-size: 19px; }
   .squad-points-bar-label { font-size: 10px; }
 
@@ -818,8 +768,7 @@
     font-size: 11px;
   }
 
-  .squad-corner-badge svg,
-  .squad-form-badge svg { width: 10px; height: 10px; }
+  .squad-corner-badge svg { width: 10px; height: 10px; }
 
   .squad-jersey-info { border-radius: 10px; padding: 4px 4px 7px; }
 
@@ -831,7 +780,8 @@
 
   .squad-fixture-pill { font-size: 10px; padding: 2.5px 0; }
 
-  .squad-points-chip { font-size: 11px; padding: 3px 9px; margin-bottom: 6px; }
+  .squad-points-row { gap: 6px; }
+  .squad-points-row .squad-fixture-pill { flex: 0 0 auto; font-size: 11px; padding: 3.5px 11px 4.5px; }
 
   .squad-legend { font-size: 14px; }
   .squad-legend-team { font-size: 18px; }

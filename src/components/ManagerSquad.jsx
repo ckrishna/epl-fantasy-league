@@ -102,7 +102,12 @@ function difficultyTier(d) {
 function FixturePill({ fixture }) {
   if (!fixture) return null;
   const label = `${fixture.opponent_code.slice(0, 2)}${fixture.is_home ? 'H' : 'A'}`;
-  return <div className={`squad-fixture-pill squad-fixture-${difficultyTier(fixture.difficulty)}`}>{label}</div>;
+  // Home/away used to only be readable from the trailing H/A letter buried in the
+  // pill's own text -- per direct feedback that wasn't visually obvious enough. An
+  // underline only on away games (nothing extra on home games) makes venue scannable
+  // at a glance without a second color or an extra element.
+  const className = `squad-fixture-pill squad-fixture-${difficultyTier(fixture.difficulty)}${fixture.is_home ? '' : ' squad-fixture-away'}`;
+  return <div className={className}>{label}</div>;
 }
 
 // Shows the club's official crest image (from FPL's own crest CDN) inside the badge
@@ -198,10 +203,21 @@ function JerseyBadge({ player }) {
         </div>
       </div>
 
+      {/* Points and this gameweek's own fixture as two side-by-side tablets, same row
+          -- per direct feedback, a separate row just for the current fixture used too
+          much real estate; this fits it in the same space the points tablet already
+          occupied instead of growing the card. The current-fixture tablet reuses
+          FixturePill itself (same difficulty color + away dot as the two fixtures
+          below) rather than a one-off style, so "this is a fixture" reads the same
+          wherever a fixture pill appears on the card. null on a blank gameweek for
+          this player's club -- then it's just the points tablet, same as before. */}
       {typeof player.gw_points === 'number' && (
-        <div className="squad-points-bar">
-          <span className="squad-points-bar-num">{player.gw_points}</span>
-          <span className="squad-points-bar-label">PTS</span>
+        <div className="squad-points-row">
+          <div className="squad-points-bar">
+            <span className="squad-points-bar-num">{player.gw_points}</span>
+            <span className="squad-points-bar-label">PTS</span>
+          </div>
+          <FixturePill fixture={player.current_fixture} />
         </div>
       )}
     </div>
@@ -251,14 +267,18 @@ function PositionRow({ players }) {
   );
 }
 
-// The "?" button's popup -- one large, fixed-size example card (deliberately NOT built
-// from the real .squad-player-card responsive classes, so its six numbered callouts
-// can use hardcoded pixel positions that stay correct at exactly one size, instead of
-// needing to track three breakpoints). Shows a captain badge and a hot-form badge at
-// once purely for illustration -- a real card only ever shows one badge per corner --
-// since the legend still has to explain everything each corner can show: captain,
-// vice-captain, hot form, or cold form.
+// The "?" button's popup -- one large, fixed-size example card built from the SAME
+// jersey/points/fixture classes the real card uses (not the responsive
+// .squad-player-card sizing, so its numbered callouts can use hardcoded pixel
+// positions that stay correct at exactly one size, without tracking three
+// breakpoints). Rebuilt to actually look like a real jersey card -- this used to be a
+// leftover plain-white-card-plus-floating-crest mock from before the jersey redesign,
+// which had drifted out of sync with what the app actually shows. Shows a captain
+// badge and a hot-form badge at once purely for illustration -- a real card only ever
+// shows one badge per corner -- since the legend still has to explain everything each
+// corner can show: captain, vice-captain, hot form, or cold form.
 function PlayerCardHelpModal({ onClose }) {
+  const colors = KIT_COLORS.ARS;
   return (
     <div className="squad-help-overlay" onClick={onClose}>
       <div className="squad-help-modal" onClick={(e) => e.stopPropagation()}>
@@ -270,46 +290,59 @@ function PlayerCardHelpModal({ onClose }) {
         <div className="squad-help-modal-body">
           <div className="squad-help-pitch">
             <div className="squad-help-example-card">
-              <div className="squad-club-badge squad-help-example-crest">
-                <img src="/badges/t3.png" alt="ARS" />
-              </div>
-              <span className="squad-help-dot squad-help-dot-1">1</span>
+              <div className="squad-jersey-shirt squad-help-example-shirt">
+                <div className="squad-corner-badge squad-corner-left">C</div>
+                <span className="squad-help-dot squad-help-dot-cap">6</span>
 
-              <span className="squad-cap-badge squad-help-example-cap">C</span>
-              <span className="squad-help-dot squad-help-dot-5">5</span>
+                <div className="squad-corner-badge squad-corner-right squad-hot-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17a2.5 2.5 0 0 0 2.5-2.5c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5" /></svg>
+                </div>
+                <span className="squad-help-dot squad-help-dot-form">7</span>
 
-              <span className="squad-form-badge squad-hot-badge squad-help-example-hot">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17a2.5 2.5 0 0 0 2.5-2.5c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5" /></svg>
-              </span>
-              <span className="squad-help-dot squad-help-dot-6">6</span>
+                <svg className="squad-jersey-svg" viewBox="0 0 100 52" aria-hidden="true">
+                  <path d={JERSEY_PATH} fill={colors.primary} stroke={colors.trim} strokeWidth="2.5" />
+                  <path d={JERSEY_COLLAR_PATH} fill={colors.trim} />
+                </svg>
 
-              <div className="squad-help-example-row">
-                <span className="squad-help-dot">2</span>
-                <p className="squad-help-example-name">Player Name<span className="squad-position-letter">{'‑'}F</span></p>
-              </div>
-
-              <div className="squad-help-example-row">
-                <span className="squad-help-dot">3</span>
-                <div className="squad-points-chip squad-help-example-points">8 pts</div>
+                <div className="squad-jersey-crest squad-help-example-crest">
+                  <ClubBadge crestUrl="/badges/t3.png" code="ARS" />
+                </div>
+                <span className="squad-help-dot squad-help-dot-crest">1</span>
               </div>
 
-              <div className="squad-help-example-row">
-                <span className="squad-help-dot">4</span>
-                <div className="squad-help-example-fixtures">
-                  <div className="squad-fixture-pill squad-fixture-easy">BOU-H</div>
-                  <div className="squad-fixture-pill squad-fixture-hard">TOT-A</div>
+              {/* Points and this gameweek's own fixture, side by side -- matches the
+                  real card exactly, right down to reusing .squad-points-row so this
+                  never silently drifts out of sync with it again. */}
+              <div className="squad-points-row squad-help-example-points-row">
+                <div className="squad-points-bar">
+                  <span className="squad-points-bar-num">8</span>
+                  <span className="squad-points-bar-label">PTS</span>
+                </div>
+                <div className="squad-fixture-pill squad-fixture-easy">BOH</div>
+              </div>
+              <span className="squad-help-dot squad-help-dot-points">3</span>
+              <span className="squad-help-dot squad-help-dot-current">4</span>
+
+              <div className="squad-jersey-info squad-help-example-info">
+                <p className="squad-player-name">Player Name<span className="squad-position-letter">{'‑'}F</span></p>
+                <div className="squad-fixture-list">
+                  <div className="squad-fixture-pill squad-fixture-easy">BOH</div>
+                  <div className="squad-fixture-pill squad-fixture-hard squad-fixture-away">TOA</div>
                 </div>
               </div>
+              <span className="squad-help-dot squad-help-dot-name">2</span>
+              <span className="squad-help-dot squad-help-dot-fixtures">5</span>
             </div>
           </div>
 
           <ol className="squad-help-modal-list">
-            <li><span className="squad-help-dot">1</span> Team badge &mdash; the player's own club</li>
+            <li><span className="squad-help-dot">1</span> Team badge, on the shirt &mdash; the player's own club</li>
             <li><span className="squad-help-dot">2</span> Player name &ndash; position (G, D, M, or F)</li>
             <li><span className="squad-help-dot">3</span> Points scored this gameweek</li>
-            <li><span className="squad-help-dot">4</span> Next two fixtures &mdash; green / gray / red for easy / medium / hard difficulty, with H or A for home or away</li>
-            <li><span className="squad-help-dot">5</span> Left corner &mdash; captain (C) or vice-captain (V)</li>
-            <li><span className="squad-help-dot">6</span> Right corner &mdash; hot or cold form</li>
+            <li><span className="squad-help-dot">4</span> This gameweek's fixture</li>
+            <li><span className="squad-help-dot">5</span> Next two fixtures &mdash; green / gray / red for easy / medium / hard difficulty, underlined for an away game</li>
+            <li><span className="squad-help-dot">6</span> Left corner &mdash; captain (C) or vice-captain (V)</li>
+            <li><span className="squad-help-dot">7</span> Right corner &mdash; hot or cold form</li>
           </ol>
         </div>
       </div>
