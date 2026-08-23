@@ -31,9 +31,9 @@ import { handler } from '../index.mjs';
 
 const SAMPLE_MANAGER = { entry: 728477, entry_name: 'COYS', player_name: 'Chetan Bk' };
 
-function picksResponse(picks, entryHistoryOverrides = {}) {
+function picksResponse(picks, entryHistoryOverrides = {}, activeChip = null) {
   return jsonResponse({
-    active_chip: null,
+    active_chip: activeChip,
     entry_history: {
       // Mirrors the real GW1 incident: FPL's own rollup hasn't moved yet.
       points: 0,
@@ -114,6 +114,65 @@ test('[current bug] points_this_week comes from live per-player stats, not the s
     assert.strictEqual(gw1Write.points_this_week, 16, 'expected live-computed points, not entry_history.points (0)');
     assert.strictEqual(gw1Write.points_gross, 16);
     assert.strictEqual(gw1Write.points_total, 16, 'season total should reflect the same live-computed current-week points');
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('[current bug] Bench Boost counts the bench toward points_this_week instead of excluding it', async () => {
+  // Confirmed live 2026-08-22 (GW1, entry 1836232 "Da Movement"): FPL's own app showed
+  // 56 points with Bench Boost active; this function (before the fix) always excluded
+  // the bench regardless of chip, computing 34 -- a 22-point undercount matching that
+  // entry's bench contribution exactly.
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) return jsonResponse(buildBootstrapStatic({ events: buildMidSeasonEvents(1, 38), elements: [] }));
+    if (url.includes('leagues-classic')) return jsonResponse({ standings: { results: [SAMPLE_MANAGER] } });
+    if (url.includes('/event/1/live/')) return liveStatsResponse({ 26: 8, 418: 0, 529: 6 });
+    if (url.includes('/picks/')) {
+      return picksResponse([
+        { element: 26, position: 9, multiplier: 2, is_captain: true, is_vice_captain: false },
+        { element: 418, position: 2, multiplier: 1, is_captain: false, is_vice_captain: false },
+        { element: 529, position: 12, multiplier: 1, is_captain: false, is_vice_captain: false } // bench, Bench Boost active
+      ], {}, 'bboost');
+    }
+    return null;
+  });
+  const dynamoMock = installIngesterDynamoMock({ currentSeason: '2025/26' });
+
+  try {
+    await handler({});
+    const gw1Write = dynamoMock.gameweekWrites.find((w) => w.gameweek === 1);
+    // Captain's 8 doubled (16) + starter's 0 + bench's 6 (now counted) = 22.
+    assert.strictEqual(gw1Write.points_this_week, 22, 'Bench Boost should count the bench, not just starters');
+    assert.strictEqual(gw1Write.active_chip, 'bboost');
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('[current bug] Triple Captain triples the captain instead of the normal double', async () => {
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) return jsonResponse(buildBootstrapStatic({ events: buildMidSeasonEvents(1, 38), elements: [] }));
+    if (url.includes('leagues-classic')) return jsonResponse({ standings: { results: [SAMPLE_MANAGER] } });
+    if (url.includes('/event/1/live/')) return liveStatsResponse({ 26: 8 });
+    if (url.includes('/picks/')) {
+      return picksResponse(
+        [{ element: 26, position: 9, multiplier: 3, is_captain: true, is_vice_captain: false }],
+        {},
+        '3xc'
+      );
+    }
+    return null;
+  });
+  const dynamoMock = installIngesterDynamoMock({ currentSeason: '2025/26' });
+
+  try {
+    await handler({});
+    const gw1Write = dynamoMock.gameweekWrites.find((w) => w.gameweek === 1);
+    // Captain's 8 tripled (not doubled) = 24.
+    assert.strictEqual(gw1Write.points_this_week, 24, 'Triple Captain should triple the captain\'s live points');
   } finally {
     fetchMock.restore();
     dynamoMock.restore();

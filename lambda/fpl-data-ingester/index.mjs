@@ -242,6 +242,11 @@ async function getLiveGameweekStats(gw) {
 async function storeGameweekSummary(manager, picksData, gw, season, livePoints = new Map()) {
   const entryHistory = picksData.entry_history;
 
+  // active_chip lives on the TOP-LEVEL picks response (picksData.active_chip), read
+  // here (not just down in the `item` below) because the live-points computation right
+  // below ALSO needs to know it -- see the pointsThisWeek comment.
+  const activeChip = picksData.active_chip || null;
+
   // entryHistory.points/total_points come from FPL's own per-entry "picks" endpoint,
   // which does NOT update live during a match -- confirmed live on 2026-08-21 (GW1
   // kickoff day): entry_history.points sat at 0 for over 40 minutes into a match in
@@ -259,9 +264,18 @@ async function storeGameweekSummary(manager, picksData, gw, season, livePoints =
   // STARTER's live points, doubled for the captain, bench excluded. This makes
   // Standings/GW-Winners agree with Manager Squad in real time instead of only after
   // FPL finishes its own rollup.
+  //
+  // Chip-aware as of the fix below -- confirmed live 2026-08-22 (GW1, entry 1836232,
+  // "Da Movement"): FPL's own app showed 56 points with Bench Boost active, while this
+  // function's un-chip-aware version (bench always excluded, captain always just
+  // doubled) computed 34 -- a 22-point undercount exactly matching that entry's bench
+  // contribution. Bench Boost counts the bench too; Triple Captain triples the
+  // captain instead of doubling -- both already handled correctly in
+  // handleManagerSquad, just missing here until now.
+  const captainMultiplier = activeChip === '3xc' ? 3 : 2;
   const pointsThisWeek = picksData.picks
-    .filter((p) => p.position <= 11)
-    .reduce((sum, p) => sum + (livePoints.get(p.element) ?? 0) * (p.is_captain ? 2 : 1), 0);
+    .filter((p) => activeChip === 'bboost' || p.position <= 11)
+    .reduce((sum, p) => sum + (livePoints.get(p.element) ?? 0) * (p.is_captain ? captainMultiplier : 1), 0);
 
   // total_points (season cumulative) has the same lag baked in, since it's just
   // "previous total + this week's points" on FPL's side. Patched the same way: drop
