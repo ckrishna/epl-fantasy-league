@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "deploy": "bash scripts/deploy.sh"
   },
   "keywords": [],
   "author": "",

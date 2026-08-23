@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.400.0",
