@@ -82,14 +82,22 @@ function buildPaceChartData(pace) {
 // Recharts chart needs to plot every manager's line at once. Column index matches the
 // manager's index in the `field` array, kept consistent between this and the <Line>
 // elements themselves.
+//
+// A synthetic gameweek-0 row (everyone at 0) is prepended whenever there's at least one
+// real gameweek to show, purely so the chart always has two x-positions to draw a line
+// between -- with only one real gameweek played, Recharts otherwise has nothing to
+// connect and either draws no line or an odd lone dot. GW0 isn't a real gameweek, so its
+// axis tick is blanked below rather than labeled "GW0".
 function buildFieldChartData(field) {
   if (!field || field.length === 0) return [];
   const allGws = [...new Set(field.flatMap((m) => m.points.map((p) => p.gameweek)))].sort((a, b) => a - b);
-  return allGws.map((gw) => {
+  if (allGws.length === 0) return [];
+  const gws = allGws[0] === 0 ? allGws : [0, ...allGws];
+  return gws.map((gw) => {
     const row = { gameweek: gw };
     field.forEach((m, idx) => {
       const point = m.points.find((p) => p.gameweek === gw);
-      row[`m${idx}`] = point ? point.points : null;
+      row[`m${idx}`] = point ? point.points : (gw === 0 ? 0 : null);
     });
     return row;
   });
@@ -332,19 +340,6 @@ export default function Trends({ leagueId = null } = {}) {
 
                 {fieldChartData.length === 0 ? (
                   <p className="no-data">No games played yet this season — check back once it kicks off.</p>
-                ) : fieldChartData.length === 1 ? (
-                  // A "worm" graph needs at least two gameweeks to draw a line between --
-                  // with exactly one, Recharts still plots each manager's single point
-                  // (it can't draw NO line segment for a lone point even with dot={false}
-                  // forced), which renders as an odd-looking vertical stack of dots at one
-                  // x-position rather than a real trend line. Confirmed live 2026-08-21,
-                  // GW1: this isn't a bug in the data, just genuinely nothing to compare
-                  // across yet -- a plain explanatory message reads better than a chart
-                  // that looks broken for exactly one gameweek every season.
-                  <p className="no-data">
-                    Only GW{fieldChartData[0].gameweek} played so far — the worm graph will take
-                    shape once there's more than one gameweek to compare.
-                  </p>
                 ) : (
                   <>
                     <ResponsiveContainer width="100%" height={220}>
@@ -352,13 +347,17 @@ export default function Trends({ leagueId = null } = {}) {
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                         <XAxis
                           dataKey="gameweek"
-                          tickFormatter={(gw) => `GW${gw}`}
+                          tickFormatter={(gw) => (gw === 0 ? '' : `GW${gw}`)}
                           tick={axisTick}
                           axisLine={false}
                           tickLine={false}
                         />
                         <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} />
-                        <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelFormatter={(gw) => `Gameweek ${gw}`} />
+                        <Tooltip
+                          contentStyle={tooltipStyle}
+                          itemStyle={tooltipItemStyle}
+                          labelFormatter={(gw) => (gw === 0 ? 'Season start' : `Gameweek ${gw}`)}
+                        />
                         {fieldRenderOrder.map((idx) => {
                           const m = data.field[idx];
                           const highlighted = m.is_you || m.is_leader;
