@@ -26,10 +26,26 @@ aws events put-rule \
 #        handler's trigger-detection would misreport every one of these runs as
 #        "manual" in ingestion_runs instead of "scheduled". See the comment on
 #        recordIngestionRun in lambda/fpl-data-ingester/index.mjs.
+#    Using a JSON file rather than the inline --targets shorthand: the AWS CLI's
+#    shorthand parser trips over the nested double quotes in the Input value
+#    ("Expected: '=', received: '"'") on some CLI versions, regardless of shell.
+TARGETS_FILE=$(mktemp)
+cat > "$TARGETS_FILE" <<JSON
+[
+  {
+    "Id": "1",
+    "Arn": "$LAMBDA_ARN",
+    "Input": "{\"mode\":\"live-check\",\"source\":\"aws.events\"}"
+  }
+]
+JSON
+
 aws events put-targets \
   --rule $RULE_NAME \
-  --targets "Id=1,Arn=$LAMBDA_ARN,Input={\"mode\":\"live-check\",\"source\":\"aws.events\"}" \
+  --targets "file://$TARGETS_FILE" \
   --region $REGION
+
+rm -f "$TARGETS_FILE"
 
 # 3. Let EventBridge invoke it. Lambda resource policies scope permissions per source
 #    rule ARN, so even though fpl-data-ingester already has a permission statement for
