@@ -60,9 +60,10 @@ erDiagram
 
     live_player_event_stats {
         number season_id PK
-        string gameweek_player "SK: gw#player_id"
+        string gw_player_timestamp "SK: gw#player_id#timestamp"
         number bonus
         boolean bonus_finalized
+        number ttl "24h retention"
     }
 
     fpl_fixture_data {
@@ -180,25 +181,36 @@ Fields: `team_name` (current-bootstrap team — may not match the player's team 
 Why it exists: `player_event_stats` has known per-gameweek gaps for 2025/26 (see below), so summing it ourselves undercounts anyone caught in a gap week. This table instead stores FPL's own authoritative season-total, read from each current player's `history_past` entry — accurate regardless of our own ingestion gaps, but only covers players still in FPL's current player pool (anyone who's left the league since has no current element ID to look this up against).
 Read by: `genbi.mjs` (`getAuthoritativeSeasonTotals`) — preferred over the live `player_event_stats` aggregation whenever data exists for the requested season; falls back to the live aggregation otherwise.
 
-### `live_player_event_stats` (new, 2026-08-23)
-Partition key `season_id` (N), sort key `gameweek_player` (S, composite `"{gameweek}#{player_id}"`) — same key shape as `player_event_stats`, deliberately, so the two are interchangeable to any future reader.
+### `live_player_event_stats` (2026-02-17, ingestion wired up 2026-08-23)
+Partition key `season_id` (N), sort key `gw_player_timestamp` (S, composite `"{gameweek}#{player_id}#{ISO timestamp}"`).
+
+**The table already existed before any Lambda wrote to it** — created 2026-02-17, six months before this ingestion code, presumably from an earlier planning pass on GH issue #24 ("[Phase 2] Populate live_player_event_stats during active gameweeks") that got as far as provisioning the table and then stalled. This was discovered the hard way: the first version of this section (and the first version of `storeLiveGameweekPlayerStats`) assumed a made-up key name (`gameweek_player`, no timestamp — an overwrite-latest design copied from `player_event_stats`) and a `create-table` command that failed with `ResourceInUseException` when actually run. `aws dynamodb describe-table` on 2026-08-23 revealed the real key shape above, which matches issue #24's own spec exactly ("Key format: season_id#gameweek#player_id + timestamp SK", "keep last 24 hours only") — so the original design was right all along; the mistake was building against an assumption instead of checking the live table first. Code and tests were corrected to match.
 
 Written by `fpl-data-ingester`, as a side effect of a fetch it was already making. `getLiveGameweekStats` calls FPL's `/event/{gw}/live/` endpoint every run to compute manager points (see that function's own comment for why), and that response already carries full per-player detail — minutes, goals, assists, bonus, bps, ICT components, expected-stats, dreamteam/played flags — that used to get thrown away entirely except for `total_points`. `storeLiveGameweekPlayerStats` now persists all of it, joined against the same-run `bootstrap-static` fetch for identity (name/team/position/now_cost/selected_by_percent/form), no extra API call.
 
-Fields: same set as `player_event_stats` (see above) plus `bonus_finalized` (BOOL, from the live response's top-level `modified` flag) — FPL calculates bonus points from BPS roughly 1-2 hours after full time, not instantly at the final whistle, so this lets a reader tell "still live, bonus not settled" apart from "FPL has confirmed this gameweek's bonus" without having to reason about kickoff/full-time timing itself.
+Fields: same set as `player_event_stats` (see above) plus `bonus_finalized` (BOOL, from the live response's top-level `modified` flag) — FPL calculates bonus points from BPS roughly 1-2 hours after full time, not instantly at the final whistle, so this lets a reader tell "still live, bonus not settled" apart from "FPL has confirmed this gameweek's bonus" without having to reason about kickoff/full-time timing itself. Also `ttl` (N, epoch seconds, set to write-time + 24h).
 
 **Why a separate table instead of writing into `player_event_stats` directly:** that table is owned by a different, independent pipeline (`fpl-global-stats-weekly`, off a different endpoint — `element-summary`) and is the thing GenBI's season-wide aggregations scan wholesale; mixing a second writer into it risked exactly the kind of subtle identity/schema drift this doc keeps finding elsewhere. This table is explicitly the fresher-but-provisional view during/shortly after a gameweek — `player_event_stats` remains the long-term authoritative source once the weekly job catches up and overwrites with FPL's fully-settled values (usually the following Tuesday).
 
-**One row per player per gameweek, overwritten every run — not a timestamped history.** Every other table in this app works the same way (latest snapshot, not a time series), and it matches what a reader actually wants ("what's this player's live bonus right now"), not a minute-by-minute replay of how it changed over the day.
+**Append-only time series, not an overwrite-latest table** — every ingester run writes a NEW row per player (distinct timestamp in the sort key) rather than replacing the last one, matching the table's real, pre-existing design. This means it naturally captures how a player's live bonus/bps evolve over a match, not just their current value — genuinely useful once the ingester runs more than once a day (see the separate "run more often on game days" EventBridge task), since a live in-progress score, its post-match-but-pre-bonus value, and its final bonus-confirmed value all land as distinct rows instead of the middle one getting silently lost.
 
-**Not yet read anywhere** — this is purely the capture side (GH issue #24). Wiring it into GenBI's player context (bonus/BPS/ICT/xG/xA — task backlog item, GenBI foundation aggregates) is a separate, not-yet-built step.
+**24-hour retention via `ttl`.** Every item sets `ttl` at write-time + 24h, matching issue #24's original "keep last 24 hours only" spec — but this only actually expires anything once TTL is enabled on the table pointed at that attribute (one-time setup, not yet confirmed done):
+```
+aws dynamodb update-time-to-live \
+  --table-name live_player_event_stats \
+  --time-to-live-specification "Enabled=true, AttributeName=ttl" \
+  --region us-west-2
+```
+Until that's run, `ttl` is written on every row but nothing actually deletes old ones — the table will grow unbounded.
 
-**Requires manual table creation** — like every table in this doc, nothing in the four Lambdas creates a DynamoDB table for you. Create it once via:
+**Not yet read anywhere** — this is purely the capture side (GH issue #24). Wiring it into GenBI's player context (bonus/BPS/ICT/xG/xA — task backlog item, GenBI foundation aggregates) is a separate, not-yet-built step, and would need to account for multiple rows per player per gameweek (e.g. take the most recent by timestamp) rather than assuming one.
+
+Table already exists — no `create-table` step needed. If it's ever lost and needs recreating:
 ```
 aws dynamodb create-table \
   --table-name live_player_event_stats \
-  --attribute-definitions AttributeName=season_id,AttributeType=N AttributeName=gameweek_player,AttributeType=S \
-  --key-schema AttributeName=season_id,KeyType=HASH AttributeName=gameweek_player,KeyType=RANGE \
+  --attribute-definitions AttributeName=season_id,AttributeType=N AttributeName=gw_player_timestamp,AttributeType=S \
+  --key-schema AttributeName=season_id,KeyType=HASH AttributeName=gw_player_timestamp,KeyType=RANGE \
   --billing-mode PAY_PER_REQUEST \
   --region us-west-2
 ```

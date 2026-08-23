@@ -13,7 +13,10 @@
 // not season_string -- this codebase has hit that exact mixup before (see
 // getCurrentSeasonInfo's comment) so it's worth a standing regression test; (3) a
 // player missing from the bootstrap player map (edge case, shouldn't normally happen)
-// fails open with 'Unknown' rather than crashing the whole run.
+// fails open with 'Unknown' rather than crashing the whole run; (4) the sort key and
+// ttl match the table's REAL, pre-existing schema (`gw_player_timestamp`, confirmed
+// live via `aws dynamodb describe-table` on 2026-08-23 -- an earlier version of this
+// code assumed a different, made-up key name before that table was found).
 
 import { test } from 'node:test';
 import assert from 'node:assert';
@@ -114,7 +117,8 @@ test('captures the full per-player live detail (bonus, bps, ICT, expected-stats)
     const row = dynamoMock.liveStatsWrites.find((w) => w.player_id === 26);
     assert.ok(row, 'expected a live_player_event_stats row for player 26');
 
-    assert.strictEqual(row.gameweek_player, '1#26');
+    assert.match(row.gw_player_timestamp, /^1#26#\d{4}-\d{2}-\d{2}T/, 'sort key must be gw#player_id#ISO-timestamp');
+    assert.ok(Number.isInteger(row.ttl) && row.ttl > Math.floor(Date.now() / 1000), 'ttl should be a future epoch-seconds value');
     assert.strictEqual(row.name, 'Salah');
     assert.strictEqual(row.team_name, 'Liverpool');
     assert.strictEqual(row.position, 'Forward');
@@ -192,6 +196,41 @@ test('a player missing from the bootstrap player map fails open with "Unknown" i
     // identity match -- only the bootstrap-joined fields fall back.
     assert.strictEqual(row.total_points, 9);
     assert.strictEqual(row.bonus, 3);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('two runs for the same player+gameweek append two snapshot rows, not one overwritten row', async () => {
+  let bonusThisRun = 1;
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      return jsonResponse(buildBootstrapStatic({
+        events: buildMidSeasonEvents(1, 38),
+        elements: [{ id: 26, web_name: 'Salah', team: 14, element_type: 4 }],
+        teams: [{ id: 14, name: 'Liverpool' }],
+        element_types: [{ id: 4, singular_name: 'Forward' }]
+      }));
+    }
+    if (url.includes('leagues-classic')) return jsonResponse({ standings: { results: [SAMPLE_MANAGER] } });
+    if (url.includes('/event/1/live/')) return jsonResponse({ elements: [richLiveElement(26, { bonus: bonusThisRun })] });
+    if (url.includes('/picks/')) return jsonResponse(null, { ok: false, status: 404 });
+    return null;
+  });
+  const dynamoMock = installLiveStatsDynamoMock({ currentSeason: '2025/26' });
+
+  try {
+    await handler({});
+    bonusThisRun = 2; // simulates bonus getting confirmed/updated between two ingester runs
+    await handler({});
+
+    const rows = dynamoMock.liveStatsWrites.filter((w) => w.player_id === 26);
+    assert.strictEqual(rows.length, 2, 'expected two separate snapshot rows, one per run, not a single overwritten row');
+    const bonuses = rows.map((r) => r.bonus).sort();
+    assert.deepStrictEqual(bonuses, [1, 2], 'both snapshots -- the earlier and later bonus value -- should be preserved');
+    const keys = new Set(rows.map((r) => r.gw_player_timestamp));
+    assert.strictEqual(keys.size, 2, 'the two rows must have distinct sort keys (distinct timestamps)');
   } finally {
     fetchMock.restore();
     dynamoMock.restore();

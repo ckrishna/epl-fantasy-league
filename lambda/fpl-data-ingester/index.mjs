@@ -218,28 +218,43 @@ async function getManagerPicksForGW(entryId, gw, { retryOn429 = true } = {}) {
 // already happened for the points -- this is a pure side effect on data already in
 // hand, not a new fetch.
 //
-// Field names deliberately mirror `player_event_stats` (the weekly-authoritative table
-// fpl-global-stats-weekly writes from a completely different endpoint,
-// `element-summary`) so the two are interchangeable to any future reader. This table
-// is the fresher-but-provisional view during/shortly after a gameweek;
-// player_event_stats remains the long-term authoritative one once that weekly job
-// catches up and overwrites with FPL's fully-settled values. `bonus_finalized` (from
-// the live response's top-level `modified` flag) lets a reader tell "still live" apart
-// from "FPL has confirmed bonus" without needing to reason about kickoff/full-time
-// timing itself.
+// Field names (other than the key) deliberately mirror `player_event_stats` (the
+// weekly-authoritative table fpl-global-stats-weekly writes from a completely
+// different endpoint, `element-summary`) so the two are easy to compare. This table is
+// the fresher-but-provisional view during/shortly after a gameweek; player_event_stats
+// remains the long-term authoritative one once that weekly job catches up and
+// overwrites with FPL's fully-settled values. `bonus_finalized` (from the live
+// response's top-level `modified` flag) lets a reader tell "still live" apart from
+// "FPL has confirmed bonus" without needing to reason about kickoff/full-time timing
+// itself.
 //
-// One row per player per gameweek (season_id#gameweek#player_id), overwritten on every
-// run rather than kept as a timestamped history -- consistent with how every other
-// table in this app works, and what GenBI/any future reader actually wants ("what's
-// this player's live bonus right now"), not a minute-by-minute replay of how it
-// changed. Keyed by `season_id` (numeric), matching player_event_stats' own
-// convention for this reference-table family -- NOT `season_string`, see
-// getCurrentSeasonInfo's note on the two season fields.
+// Sort key is `gw_player_timestamp` (S, "{gw}#{player_id}#{ISO timestamp}") -- NOT
+// gameweek_player as an earlier version of this comment assumed. The table already
+// existed (created 2026-02-17, before this Lambda was ever written) with that exact
+// key shape, confirmed live via `aws dynamodb describe-table` on 2026-08-23: someone
+// had already built the time-series design GH issue #24 describes ("Key format:
+// season_id#gameweek#player_id + timestamp SK", "keep last 24 hours only"), just never
+// wrote the Lambda to populate it. So this is deliberately APPEND-only -- every run
+// adds new snapshot rows rather than overwriting the last one -- which also means it
+// naturally captures how a player's bonus/bps evolve over the course of a live match,
+// not just their current value. `ttl` (epoch seconds, now + 24h) is set on every item
+// so DynamoDB's own TTL can auto-expire old snapshots once enabled on the table (see
+// DATA_MODEL.md) -- keeps this bounded regardless of how often the ingester runs.
+// Keyed by `season_id` (numeric), matching player_event_stats' own convention for this
+// reference-table family -- NOT `season_string`, see getCurrentSeasonInfo's note on
+// the two season fields.
 async function storeLiveGameweekPlayerStats(gw, seasonId, elements, playerMap, teamMap, positionMap) {
   if (!seasonId) {
     logger.error('storeLiveGameweekPlayerStats skipped: no seasonId resolved', {});
     return;
   }
+
+  // Shared by every item in this run so a single ingestion run produces one coherent
+  // snapshot (same instant across all ~700 players) rather than a slightly different
+  // timestamp per item.
+  const snapshotTime = new Date();
+  const snapshotIso = snapshotTime.toISOString();
+  const ttl = Math.floor(snapshotTime.getTime() / 1000) + 24 * 60 * 60;
 
   const batch = [];
   for (const el of elements) {
@@ -250,7 +265,7 @@ async function storeLiveGameweekPlayerStats(gw, seasonId, elements, playerMap, t
       PutRequest: {
         Item: {
           season_id: seasonId,
-          gameweek_player: `${gw}#${el.id}`,
+          gw_player_timestamp: `${gw}#${el.id}#${snapshotIso}`,
           player_id: el.id,
           gameweek: gw,
           name: player ? player.web_name : 'Unknown',
@@ -290,7 +305,8 @@ async function storeLiveGameweekPlayerStats(gw, seasonId, elements, playerMap, t
           bonus_finalized: el.modified || false,
           selected_by_percent: player ? (player.selected_by_percent || 0) : 0,
           form: player ? (player.form || 0) : 0,
-          last_synced: new Date().toISOString()
+          ttl,
+          last_synced: snapshotIso
         }
       }
     });
