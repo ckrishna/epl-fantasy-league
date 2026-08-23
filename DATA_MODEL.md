@@ -58,6 +58,13 @@ erDiagram
         number total_points
     }
 
+    live_player_event_stats {
+        number season_id PK
+        string gameweek_player "SK: gw#player_id"
+        number bonus
+        boolean bonus_finalized
+    }
+
     fpl_fixture_data {
         string season_fixture PK "season_id#fixture_id"
         number event "SK: gameweek"
@@ -95,6 +102,7 @@ erDiagram
     seasons ||--o{ element_types : "season_id"
     seasons ||--o{ events : "season_id"
     seasons ||--o{ player_event_stats : "season_id"
+    seasons ||--o{ live_player_event_stats : "season_id"
     seasons ||--o{ fpl_fixture_data : "season_id (embedded in key)"
     seasons ||--o{ fpl_entry_gameweek : "season_string (embedded in key)"
     seasons ||--o{ fpl_entry_picks : "season_string (embedded in key)"
@@ -171,6 +179,29 @@ Partition key `season_string` (S, e.g. `"2025/26"`), sort key `player_name` (S).
 Fields: `team_name` (current-bootstrap team — may not match the player's team *during* that season if they've since transferred), `total_points`, `minutes`, `goals_scored`, `assists`, `element_code`, `last_synced`.
 Why it exists: `player_event_stats` has known per-gameweek gaps for 2025/26 (see below), so summing it ourselves undercounts anyone caught in a gap week. This table instead stores FPL's own authoritative season-total, read from each current player's `history_past` entry — accurate regardless of our own ingestion gaps, but only covers players still in FPL's current player pool (anyone who's left the league since has no current element ID to look this up against).
 Read by: `genbi.mjs` (`getAuthoritativeSeasonTotals`) — preferred over the live `player_event_stats` aggregation whenever data exists for the requested season; falls back to the live aggregation otherwise.
+
+### `live_player_event_stats` (new, 2026-08-23)
+Partition key `season_id` (N), sort key `gameweek_player` (S, composite `"{gameweek}#{player_id}"`) — same key shape as `player_event_stats`, deliberately, so the two are interchangeable to any future reader.
+
+Written by `fpl-data-ingester`, as a side effect of a fetch it was already making. `getLiveGameweekStats` calls FPL's `/event/{gw}/live/` endpoint every run to compute manager points (see that function's own comment for why), and that response already carries full per-player detail — minutes, goals, assists, bonus, bps, ICT components, expected-stats, dreamteam/played flags — that used to get thrown away entirely except for `total_points`. `storeLiveGameweekPlayerStats` now persists all of it, joined against the same-run `bootstrap-static` fetch for identity (name/team/position/now_cost/selected_by_percent/form), no extra API call.
+
+Fields: same set as `player_event_stats` (see above) plus `bonus_finalized` (BOOL, from the live response's top-level `modified` flag) — FPL calculates bonus points from BPS roughly 1-2 hours after full time, not instantly at the final whistle, so this lets a reader tell "still live, bonus not settled" apart from "FPL has confirmed this gameweek's bonus" without having to reason about kickoff/full-time timing itself.
+
+**Why a separate table instead of writing into `player_event_stats` directly:** that table is owned by a different, independent pipeline (`fpl-global-stats-weekly`, off a different endpoint — `element-summary`) and is the thing GenBI's season-wide aggregations scan wholesale; mixing a second writer into it risked exactly the kind of subtle identity/schema drift this doc keeps finding elsewhere. This table is explicitly the fresher-but-provisional view during/shortly after a gameweek — `player_event_stats` remains the long-term authoritative source once the weekly job catches up and overwrites with FPL's fully-settled values (usually the following Tuesday).
+
+**One row per player per gameweek, overwritten every run — not a timestamped history.** Every other table in this app works the same way (latest snapshot, not a time series), and it matches what a reader actually wants ("what's this player's live bonus right now"), not a minute-by-minute replay of how it changed over the day.
+
+**Not yet read anywhere** — this is purely the capture side (GH issue #24). Wiring it into GenBI's player context (bonus/BPS/ICT/xG/xA — task backlog item, GenBI foundation aggregates) is a separate, not-yet-built step.
+
+**Requires manual table creation** — like every table in this doc, nothing in the four Lambdas creates a DynamoDB table for you. Create it once via:
+```
+aws dynamodb create-table \
+  --table-name live_player_event_stats \
+  --attribute-definitions AttributeName=season_id,AttributeType=N AttributeName=gameweek_player,AttributeType=S \
+  --key-schema AttributeName=season_id,KeyType=HASH AttributeName=gameweek_player,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-west-2
+```
 
 ### `fpl_fixture_data`
 Partition key `season_fixture` (S, composite `"{season_id}#{fixture_id}"`), sort key `event` (N, the gameweek number). 385 items.

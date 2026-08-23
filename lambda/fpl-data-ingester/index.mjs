@@ -45,8 +45,10 @@ async function recordIngestionRun({ event, startedAt, status, season, summary, e
 // redeploy to fix -- moving it here means the next change is just a data update.
 // NOTE: the `seasons` table has two different season fields -- `season_id` (a numeric
 // internal ID used to tag reference tables like `teams`/`players`/`events` in the
-// fpl-bootstrap lambda) and `season_string` (the human-readable "2025/26" used as the
-// partition-key prefix here). This must return `season_string`, not `season_id`.
+// fpl-bootstrap lambda, and now also `live_player_event_stats` below) and
+// `season_string` (the human-readable "2025/26" used as the partition-key prefix for
+// league tables like `fpl_entry_gameweek`). Both live on the same row, so returning
+// both here is free -- callers just need to remember which family they're writing to.
 async function getCurrentSeasonInfo() {
   const result = await dynamodb.send(new ScanCommand({
     TableName: 'seasons',
@@ -62,7 +64,7 @@ async function getCurrentSeasonInfo() {
     throw new Error(`Current season row (${item.season_string}) has no league_id set -- add it to the ` +
       `seasons table before running the ingester.`);
   }
-  return { season: item.season_string, leagueId: item.league_id };
+  return { season: item.season_string, seasonId: item.season_id, leagueId: item.league_id };
 }
 
 async function getLeagueManagers(leagueId) {
@@ -207,6 +209,106 @@ async function getManagerPicksForGW(entryId, gw, { retryOn429 = true } = {}) {
   }
 }
 
+// Persists the FULL per-player detail FPL's live endpoint returns (minutes, goals,
+// assists, bonus, bps, ICT components, expected-stats, dreamteam/played flags) --
+// getLiveGameweekStats below used to throw all of this away and keep only
+// total_points, which is all our own manager-points math needs. Everything else is
+// genuinely useful (GenBI player context, GH issue #24 "live_player_event_stats never
+// got an ingestion Lambda") and costs nothing extra to capture, since the API call
+// already happened for the points -- this is a pure side effect on data already in
+// hand, not a new fetch.
+//
+// Field names deliberately mirror `player_event_stats` (the weekly-authoritative table
+// fpl-global-stats-weekly writes from a completely different endpoint,
+// `element-summary`) so the two are interchangeable to any future reader. This table
+// is the fresher-but-provisional view during/shortly after a gameweek;
+// player_event_stats remains the long-term authoritative one once that weekly job
+// catches up and overwrites with FPL's fully-settled values. `bonus_finalized` (from
+// the live response's top-level `modified` flag) lets a reader tell "still live" apart
+// from "FPL has confirmed bonus" without needing to reason about kickoff/full-time
+// timing itself.
+//
+// One row per player per gameweek (season_id#gameweek#player_id), overwritten on every
+// run rather than kept as a timestamped history -- consistent with how every other
+// table in this app works, and what GenBI/any future reader actually wants ("what's
+// this player's live bonus right now"), not a minute-by-minute replay of how it
+// changed. Keyed by `season_id` (numeric), matching player_event_stats' own
+// convention for this reference-table family -- NOT `season_string`, see
+// getCurrentSeasonInfo's note on the two season fields.
+async function storeLiveGameweekPlayerStats(gw, seasonId, elements, playerMap, teamMap, positionMap) {
+  if (!seasonId) {
+    logger.error('storeLiveGameweekPlayerStats skipped: no seasonId resolved', {});
+    return;
+  }
+
+  const batch = [];
+  for (const el of elements) {
+    const stats = el.stats || {};
+    const player = playerMap ? playerMap[el.id] : null;
+
+    batch.push({
+      PutRequest: {
+        Item: {
+          season_id: seasonId,
+          gameweek_player: `${gw}#${el.id}`,
+          player_id: el.id,
+          gameweek: gw,
+          name: player ? player.web_name : 'Unknown',
+          team_id: player ? player.team : null,
+          team_name: player ? ((teamMap && teamMap[player.team]) || '') : '',
+          position: player ? ((positionMap && positionMap[player.element_type]) || '') : '',
+          now_cost: player ? (player.now_cost || 0) : 0,
+          total_points: stats.total_points || 0,
+          minutes: stats.minutes || 0,
+          goals_scored: stats.goals_scored || 0,
+          assists: stats.assists || 0,
+          clean_sheets: stats.clean_sheets || 0,
+          goals_conceded: stats.goals_conceded || 0,
+          own_goals: stats.own_goals || 0,
+          penalties_saved: stats.penalties_saved || 0,
+          penalties_missed: stats.penalties_missed || 0,
+          yellow_cards: stats.yellow_cards || 0,
+          red_cards: stats.red_cards || 0,
+          saves: stats.saves || 0,
+          bonus: stats.bonus || 0,
+          bps: stats.bps || 0,
+          influence: stats.influence || '0',
+          creativity: stats.creativity || '0',
+          threat: stats.threat || '0',
+          ict_index: stats.ict_index || '0',
+          clearances_blocks_interceptions: stats.clearances_blocks_interceptions || 0,
+          recoveries: stats.recoveries || 0,
+          tackles: stats.tackles || 0,
+          defensive_contribution: stats.defensive_contribution || 0,
+          starts: stats.starts || 0,
+          expected_goals: stats.expected_goals || '0',
+          expected_assists: stats.expected_assists || '0',
+          expected_goal_involvements: stats.expected_goal_involvements || '0',
+          expected_goals_conceded: stats.expected_goals_conceded || '0',
+          in_dreamteam: stats.in_dreamteam || false,
+          played: stats.played || false,
+          bonus_finalized: el.modified || false,
+          selected_by_percent: player ? (player.selected_by_percent || 0) : 0,
+          form: player ? (player.form || 0) : 0,
+          last_synced: new Date().toISOString()
+        }
+      }
+    });
+  }
+
+  for (let i = 0; i < batch.length; i += 25) {
+    try {
+      await dynamodb.send(new BatchWriteCommand({
+        RequestItems: { 'live_player_event_stats': batch.slice(i, i + 25) }
+      }));
+    } catch (err) {
+      logger.error('Failed to store live_player_event_stats batch', err);
+    }
+  }
+
+  logger.metric('live_player_event_stats_stored', batch.length, 'players');
+}
+
 // FPL's `/entry/{id}/event/{gw}/picks/` endpoint -- the one storePicks() reads from --
 // never includes a per-pick `points` field. It only ever has `element`, `position`,
 // `multiplier`, `is_captain`, `is_vice_captain`. Per-player gameweek points live on a
@@ -216,7 +318,12 @@ async function getManagerPicksForGW(entryId, gw, { retryOn429 = true } = {}) {
 // -- confirmed against live data for both GW20 and GW38 of 2025/26 (every one of 3,144
 // scanned rows had points: 0). This is a single per-gameweek fetch (not per-manager),
 // so it's called once per gameweek in gwsToFetch, not once per manager per gameweek.
-async function getLiveGameweekStats(gw) {
+//
+// `liveContext` (seasonId/playerMap/teamMap/positionMap) is optional and only used for
+// the storeLiveGameweekPlayerStats side effect above -- callers that don't pass it
+// (e.g. older/simpler tests) still get the points-only behavior this function always
+// had.
+async function getLiveGameweekStats(gw, liveContext = {}) {
   try {
     const response = await fetch(`${FPL_API}/event/${gw}/live/`, {
       headers: {
@@ -230,6 +337,12 @@ async function getLiveGameweekStats(gw) {
     for (const el of data.elements || []) {
       pointsByElement.set(el.id, el.stats?.total_points || 0);
     }
+
+    const { seasonId, playerMap, teamMap, positionMap } = liveContext;
+    if (seasonId) {
+      await storeLiveGameweekPlayerStats(gw, seasonId, data.elements || [], playerMap, teamMap, positionMap);
+    }
+
     return pointsByElement;
   } catch (err) {
     logger.error(`Failed to fetch live stats for GW ${gw}`, err);
@@ -422,8 +535,9 @@ export async function handler(event) {
     // truth: the shared `seasons` table), so a season rollover or league-ID change is
     // a data change, not a redeploy.
     let leagueId;
-    ({ season, leagueId } = await getCurrentSeasonInfo());
-    logger.info('Resolved current season', { season, leagueId });
+    let seasonId;
+    ({ season, seasonId, leagueId } = await getCurrentSeasonInfo());
+    logger.info('Resolved current season', { season, seasonId, leagueId });
 
     // Fetch bootstrap
     const bootstrap = await getBootstrapStatic();
@@ -432,6 +546,17 @@ export async function handler(event) {
     const playerMap = {};
     for (const player of bootstrap.elements) {
       playerMap[player.id] = player;
+    }
+    // team_id -> name and element_type -> position label, same lookups
+    // fpl-global-stats-weekly already builds for player_event_stats -- needed here so
+    // storeLiveGameweekPlayerStats can stamp the same identity fields onto its rows.
+    const teamMap = {};
+    for (const team of bootstrap.teams) {
+      teamMap[team.id] = team.name;
+    }
+    const positionMap = {};
+    for (const pos of bootstrap.element_types) {
+      positionMap[pos.id] = pos.singular_name;
     }
     const gameweeks = bootstrap.events;
 
@@ -460,10 +585,12 @@ export async function handler(event) {
     // this is the same handful of gameweeks regardless of how many managers there are,
     // and the per-manager loop below would otherwise redundantly re-fetch it for every
     // single manager). See getLiveGameweekStats for why this call exists at all: the
-    // picks endpoint itself never carries a points field.
+    // picks endpoint itself never carries a points field. Passing seasonId/playerMap/
+    // teamMap/positionMap lets it also persist the full per-player detail via
+    // storeLiveGameweekPlayerStats as a side effect of this same fetch.
     const livePointsByGW = new Map();
     for (const gw of gwsToFetch) {
-      livePointsByGW.set(gw.id, await getLiveGameweekStats(gw.id));
+      livePointsByGW.set(gw.id, await getLiveGameweekStats(gw.id, { seasonId, playerMap, teamMap, positionMap }));
       apiCallCount += 1;
     }
 
