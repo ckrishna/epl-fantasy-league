@@ -16,6 +16,15 @@ const FPL_FETCH_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; 
 // change. Falls back to a text-only badge (first 3 letters, uppercased, no crest URL)
 // for any club not in this list, so a mid-season name we haven't seen yet still
 // renders something reasonable instead of crashing.
+// Burnley/West Ham/Wolves are kept here even though they're NOT in the live 2026/27
+// top flight (confirmed live 2026-08-23 against bootstrap-static: this season's 20
+// clubs are Arsenal/Aston Villa/Bournemouth/Brentford/Brighton/Chelsea/Coventry City/
+// Crystal Palace/Everton/Fulham/Hull City/Ipswich Town/Leeds/Liverpool/Man City/
+// Man Utd/Newcastle/Nott'm Forest/Spurs/Sunderland -- Burnley, West Ham, and Wolves
+// were all relegated, replaced by the three newly-promoted clubs added below) --
+// removing them would break crests/kit colors for anyone browsing a PAST season (the
+// season dropdown, task #14) where those three clubs were still in the league. Only
+// ADD promoted clubs here, never remove a relegated one.
 const CLUB_INFO = {
   'Arsenal': { short: 'ARS', code: 3 }, 'Aston Villa': { short: 'AVL', code: 7 },
   'Bournemouth': { short: 'BOU', code: 91 }, 'Brentford': { short: 'BRE', code: 94 },
@@ -26,7 +35,11 @@ const CLUB_INFO = {
   'Man City': { short: 'MCI', code: 43 }, 'Man Utd': { short: 'MUN', code: 1 },
   'Newcastle': { short: 'NEW', code: 4 }, "Nott'm Forest": { short: 'NFO', code: 17 },
   'Sunderland': { short: 'SUN', code: 56 }, 'Spurs': { short: 'TOT', code: 6 },
-  'West Ham': { short: 'WHU', code: 21 }, 'Wolves': { short: 'WOL', code: 39 }
+  'West Ham': { short: 'WHU', code: 21 }, 'Wolves': { short: 'WOL', code: 39 },
+  // Promoted for 2026/27 -- code/short_name verified live against bootstrap-static's
+  // own teams array on 2026-08-23.
+  'Coventry City': { short: 'COV', code: 9 }, 'Hull City': { short: 'HUL', code: 88 },
+  'Ipswich Town': { short: 'IPS', code: 40 }
 };
 
 function clubCode(name) {
@@ -242,6 +255,40 @@ async function hasSeasonStarted() {
   }
 }
 
+// Player availability (doubtful/injured/suspended/unavailable, plus FPL's own
+// chance-of-playing percentages and free-text team news) fetched LIVE from
+// bootstrap-static rather than read from the `players` DynamoDB table -- deliberately
+// the same choice as getSeasonFixtures's kickoff_time-over-status lesson: `players` is
+// only written by fpl-bootstrap, which runs once a WEEK, but a player's fitness/news
+// can change daily (sometimes hourly close to a deadline). Reading it from a
+// once-a-week-refreshed table would silently show stale "doubtful" or "fully fit"
+// status for days. bootstrap-static itself is one lightweight call (same endpoint
+// hasSeasonStarted already hits), so this fetches it fresh on every request instead.
+// Fails "open" (empty map, meaning every player reads as available) on any fetch
+// error -- a transient FPL outage shouldn't make every single player wrongly show a
+// red/yellow flag.
+async function getAvailabilityMap() {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const map = new Map();
+    for (const el of data.elements || []) {
+      map.set(el.id, {
+        status: el.status || 'a',
+        chance_of_playing_this_round: typeof el.chance_of_playing_this_round === 'number' ? el.chance_of_playing_this_round : null,
+        chance_of_playing_next_round: typeof el.chance_of_playing_next_round === 'number' ? el.chance_of_playing_next_round : null,
+        news: el.news || null,
+        news_added: el.news_added || null
+      });
+    }
+    return map;
+  } catch (err) {
+    console.error('getAvailabilityMap error:', err);
+    return new Map();
+  }
+}
+
 // getSeasonFixtures now returns the WHOLE season (not just from the active gameweek
 // onward, like this used to work), so the current gameweek's own fixture -- if this
 // team has one; a blank gameweek means it won't -- has to be picked out explicitly
@@ -334,13 +381,14 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
     };
   }
 
-  const [formMap, teamNames, teamsMap, fixtures, transferCost, activeChip] = await Promise.all([
+  const [formMap, teamNames, teamsMap, fixtures, transferCost, activeChip, availabilityMap] = await Promise.all([
     getFormMap(seasonId, gw),
     getTeamNameMap(seasonId),
     getTeamsMap(seasonId),
     getSeasonFixtures(seasonId),
     getTransferCost(season, gw, entryId),
-    getActiveChip(season, entryId, gw)
+    getActiveChip(season, entryId, gw),
+    getAvailabilityMap()
   ]);
 
   // Triple Captain (3xc) triples the captain's score instead of the normal double --
@@ -351,6 +399,11 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
     .sort((a, b) => a.squad_position - b.squad_position)
     .map((p) => {
       const { current, fixtures: upcoming } = fixturesForPlayer(fixtures, p.player_team, gw, teamsMap, teamNames);
+      // Defaults to fully available ('a', no percentages, no news) when the live
+      // bootstrap-static fetch failed or this player_id genuinely isn't in it (a data
+      // mismatch) -- same "fail open, don't wrongly flag everyone" reasoning as
+      // getAvailabilityMap's own fallback.
+      const availability = availabilityMap.get(p.player_id) || { status: 'a', chance_of_playing_this_round: null, chance_of_playing_next_round: null, news: null, news_added: null };
       return {
         player_id: p.player_id,
         name: p.player_name,
@@ -363,6 +416,14 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
         is_bench: !!p.is_bench,
         form: formMap[p.player_id] ?? null,
         form_tag: formTag(formMap[p.player_id]),
+        // FPL's own single-letter code: 'a' available, 'd' doubtful, 'i' injured,
+        // 's' suspended, 'u' unavailable (e.g. left the club), 'n' not available for
+        // some other reason. Frontend treats anything other than 'a' as worth
+        // flagging -- see availabilityTier in ManagerSquad.jsx.
+        availability_status: availability.status,
+        chance_of_playing_this_round: availability.chance_of_playing_this_round,
+        chance_of_playing_next_round: availability.chance_of_playing_next_round,
+        news: availability.news,
         // This gameweek's own fixture (null on a blank gameweek for this team), shown
         // as its own pill next to the points tablet -- separate from `fixtures` below,
         // which is strictly the two fixtures AFTER this one now that it's split out.

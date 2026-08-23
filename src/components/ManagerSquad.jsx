@@ -74,7 +74,16 @@ const KIT_COLORS = {
   SUN: { primary: '#E32219', trim: '#FFFFFF', pattern: 'stripes', accent: '#FFFFFF' },
   TOT: { primary: '#FFFFFF', trim: '#131319' },
   WHU: { primary: '#7A263A', trim: '#1BB1E7', pattern: 'sleeve-contrast', accent: '#1BB1E7' },
-  WOL: { primary: '#FDB913', trim: '#231F20' }
+  WOL: { primary: '#FDB913', trim: '#231F20' },
+  // Promoted for 2026/27 (confirmed live against bootstrap-static's teams array on
+  // 2026-08-23, replacing Burnley/West Ham/Wolves -- see CLUB_INFO's own comment in
+  // manager-squad.mjs for why those three stay in this map rather than being removed).
+  // Hull's real home kit really is amber/black vertical stripes (their long-standing
+  // "Tigers" identity), Coventry's is a plain sky blue ("Sky Blues"), Ipswich's is
+  // royal blue with white sleeves.
+  COV: { primary: '#78BFE6', trim: '#FFFFFF' },
+  HUL: { primary: '#F18A00', trim: '#000000', pattern: 'stripes', accent: '#000000' },
+  IPS: { primary: '#0044A9', trim: '#FFFFFF', pattern: 'sleeve-contrast', accent: '#FFFFFF' }
 };
 const DEFAULT_KIT = { primary: '#4b5563', trim: '#ffffff' };
 
@@ -91,6 +100,28 @@ function difficultyTier(d) {
   if (d >= 4) return 'hard';
   return 'neutral';
 }
+
+// FPL's own single-letter availability code -> which color treatment (if any) the
+// player's name band gets. 'a' (available) and anything unrecognized both mean "don't
+// flag this" -- per direct instruction, an available player's name stays completely
+// plain, not just visually quiet, so there's never a dead/no-op click target on a
+// normal card. 'd' (doubtful) reads as a heads-up (yellow); 'i'/'s'/'u'/'n' (injured,
+// suspended, unavailable, or some other reason FPL doesn't play them) all read as "not
+// playing" (red) -- the manager cares that they're out, not exactly which of those
+// four reasons, at a glance on the pitch view (the popup spells out the exact one).
+function availabilityTier(status) {
+  if (status === 'd') return 'doubtful';
+  if (status === 'i' || status === 's' || status === 'u' || status === 'n') return 'unavailable';
+  return null;
+}
+
+const AVAILABILITY_STATUS_LABEL = {
+  d: 'Doubtful',
+  i: 'Injured',
+  s: 'Suspended',
+  u: 'Unavailable',
+  n: 'Not available'
+};
 
 // "9th", "1st", "2nd", "3rd" -- used for the opponent's league position in the
 // fixture-detail popup. Handles the 11th/12th/13th "teenth" exception (which would
@@ -278,7 +309,11 @@ function JerseyBadge({ player, onOpenFixture }) {
   );
 }
 
-function PlayerCard({ player, onOpenFixture }) {
+function PlayerCard({ player, onOpenFixture, onOpenAvailability }) {
+  // null for a fully available player -- per direct instruction, that player's name
+  // stays completely plain (no tint, not clickable) rather than just visually quiet,
+  // so there's no dead click target on the vast majority of normal cards.
+  const tier = availabilityTier(player.availability_status);
   return (
     <div className="squad-player-card">
       <JerseyBadge player={player} onOpenFixture={onOpenFixture} />
@@ -291,18 +326,31 @@ function PlayerCard({ player, onOpenFixture }) {
             "Tarkowski-D" with the "D" stranded alone before truncation replaced
             wrapping entirely -- the non-breaking hyphen (U+2011) below is left in
             place since it's harmless and keeps the name+letter glued together in the
-            one line that's still shown. */}
-        <div className="squad-name-wrap">
-          <p className="squad-player-name" title={player.name}>
-            {player.name}
-            {/* The starting XI is already grouped into GKP/DEF/MID/FWD rows on the
-                pitch, so the position letter is redundant there -- only the bench
-                (one mixed-position row) still needs it to tell a benched defender
-                from a benched forward at a glance. */}
-            {player.is_bench && (
-              <span className="squad-position-letter">{'‑'}{POSITION_LETTER[player.position] || '?'}</span>
-            )}
-          </p>
+            one line that's still shown.
+
+            Only the name's OWN row gets tinted for a doubtful/injured/suspended
+            player -- per direct feedback, NOT the whole white info block (that would
+            also tint the fixture pills below it, which is unrelated information). */}
+        <div className={`squad-name-wrap${tier ? ` squad-name-wrap-${tier}` : ''}`}>
+          {tier ? (
+            <button type="button" className="squad-player-name squad-player-name-btn" title={player.name} onClick={() => onOpenAvailability(player)}>
+              {player.name}
+              {player.is_bench && (
+                <span className="squad-position-letter">{'‑'}{POSITION_LETTER[player.position] || '?'}</span>
+              )}
+            </button>
+          ) : (
+            <p className="squad-player-name" title={player.name}>
+              {player.name}
+              {/* The starting XI is already grouped into GKP/DEF/MID/FWD rows on the
+                  pitch, so the position letter is redundant there -- only the bench
+                  (one mixed-position row) still needs it to tell a benched defender
+                  from a benched forward at a glance. */}
+              {player.is_bench && (
+                <span className="squad-position-letter">{'‑'}{POSITION_LETTER[player.position] || '?'}</span>
+              )}
+            </p>
+          )}
         </div>
         <div className="squad-fixture-list">
           {player.fixtures.map((f, i) => (
@@ -314,11 +362,13 @@ function PlayerCard({ player, onOpenFixture }) {
   );
 }
 
-function PositionRow({ players, onOpenFixture }) {
+function PositionRow({ players, onOpenFixture, onOpenAvailability }) {
   if (players.length === 0) return null;
   return (
     <div className="squad-position-row">
-      {players.map((p) => <PlayerCard key={p.player_id} player={p} onOpenFixture={onOpenFixture} />)}
+      {players.map((p) => (
+        <PlayerCard key={p.player_id} player={p} onOpenFixture={onOpenFixture} onOpenAvailability={onOpenAvailability} />
+      ))}
     </div>
   );
 }
@@ -516,6 +566,60 @@ function FixtureDetailModal({ fixture, player, onClose }) {
   );
 }
 
+// Opened by tapping a doubtful/injured/suspended player's name (see PlayerCard --
+// only rendered as a clickable button in the first place when availabilityTier finds
+// something to flag). Follows the same overlay/card convention as the other two
+// modals on this page.
+function AvailabilityDetailModal({ player, onClose }) {
+  const tier = availabilityTier(player.availability_status);
+  const statusLabel = AVAILABILITY_STATUS_LABEL[player.availability_status] || 'Doubtful';
+
+  // FPL stops updating chance_of_playing_this_round once that gameweek's deadline has
+  // passed, so it's commonly null well before "next round" also goes null -- shown
+  // separately (not folded into one combined line) so whichever one FPL still has an
+  // opinion on is never hidden by the other already being blank.
+  const hasThisRound = typeof player.chance_of_playing_this_round === 'number';
+  const hasNextRound = typeof player.chance_of_playing_next_round === 'number';
+
+  return (
+    <div className="squad-help-overlay" onClick={onClose}>
+      <div className="squad-fixture-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="squad-help-modal-header">
+          <h4>{player.name}</h4>
+          <button type="button" className="squad-close-btn" onClick={onClose} aria-label="Close">&times;</button>
+        </div>
+
+        <div className="squad-fixture-modal-row" style={{ paddingTop: 0 }}>
+          <span className={`squad-availability-pill squad-availability-${tier}`}>{statusLabel}</span>
+        </div>
+
+        {player.news && (
+          <div className="squad-fixture-modal-form">
+            <span className="squad-fixture-modal-label">Team news</span>
+            <p className="squad-availability-news">{player.news}</p>
+          </div>
+        )}
+
+        {(hasThisRound || hasNextRound) && <div className="squad-fixture-modal-divider" />}
+
+        {hasThisRound && (
+          <div className="squad-fixture-modal-row">
+            <span className="squad-fixture-modal-label">This gameweek</span>
+            <span>{player.chance_of_playing_this_round}%</span>
+          </div>
+        )}
+
+        {hasNextRound && (
+          <div className="squad-fixture-modal-row">
+            <span className="squad-fixture-modal-label">Next gameweek</span>
+            <span>{player.chance_of_playing_next_round}%</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ManagerSquad({ entryId, teamName, managerName, onClose }) {
   const [squad, setSquad] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -526,6 +630,10 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
   // (to pick attack vs defence strength, and to show the player's own crest).
   const [activeFixture, setActiveFixture] = useState(null);
   const openFixture = (player, fixture) => setActiveFixture({ player, fixture });
+  // Which player's availability popup (if any) is open -- just the player itself,
+  // unlike activeFixture, since availability isn't tied to a specific fixture pill.
+  const [activeAvailability, setActiveAvailability] = useState(null);
+  const openAvailability = (player) => setActiveAvailability(player);
 
   useEffect(() => {
     setLoading(true);
@@ -611,13 +719,18 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
           </div>
 
           {POSITION_ORDER.map((pos) => (
-            <PositionRow key={pos} players={starters.filter((p) => p.position === pos)} onOpenFixture={openFixture} />
+            <PositionRow
+              key={pos}
+              players={starters.filter((p) => p.position === pos)}
+              onOpenFixture={openFixture}
+              onOpenAvailability={openAvailability}
+            />
           ))}
 
           {bench.length > 0 && (
             <div className="squad-bench-section">
               <p className="squad-bench-label">Subs</p>
-              <PositionRow players={bench} onOpenFixture={openFixture} />
+              <PositionRow players={bench} onOpenFixture={openFixture} onOpenAvailability={openAvailability} />
             </div>
           )}
         </div>
@@ -638,6 +751,13 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose }
           fixture={activeFixture.fixture}
           player={activeFixture.player}
           onClose={() => setActiveFixture(null)}
+        />
+      )}
+
+      {activeAvailability && (
+        <AvailabilityDetailModal
+          player={activeAvailability}
+          onClose={() => setActiveAvailability(null)}
         />
       )}
     </div>

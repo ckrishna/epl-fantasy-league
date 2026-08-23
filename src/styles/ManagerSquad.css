@@ -641,6 +641,61 @@
   font-size: 0.82em;
 }
 
+/* Only the name's own row is tinted for a doubtful/injured/suspended player -- per
+   direct feedback, NOT the whole white info block (that would also tint the fixture
+   pills below it, unrelated information). Same yellow/red pairing as elsewhere on
+   this page (the app's existing "heads up" amber, and a plain red distinct from the
+   fixture-difficulty orange-red so the two don't read as the same signal). */
+.squad-name-wrap-doubtful,
+.squad-name-wrap-unavailable {
+  border-radius: 6px;
+  padding: 1px 4px;
+}
+
+.squad-name-wrap-doubtful {
+  background: #fbbf24;
+}
+
+.squad-name-wrap-doubtful .squad-player-name {
+  color: #451a03;
+}
+
+.squad-name-wrap-doubtful .squad-position-letter {
+  color: #7c5b0f;
+}
+
+.squad-name-wrap-unavailable {
+  background: #dc2626;
+}
+
+.squad-name-wrap-unavailable .squad-player-name {
+  color: #ffffff;
+}
+
+.squad-name-wrap-unavailable .squad-position-letter {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Only present when the name is clickable (a doubtful/injured/suspended player --
+   see availabilityTier) -- an available player's name stays a plain <p>, never this
+   button, so there's no dead click target on the vast majority of cards. Resets only
+   the browser's own button chrome; font-size/weight/color/truncation all still come
+   from .squad-player-name itself (or its tinted-state overrides above), same as
+   button.squad-fixture-pill does for the fixture pills. */
+button.squad-player-name-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  display: block;
+  width: 100%;
+}
+
 /* Side by side rather than stacked -- per direct feedback, now that team codes are
    2 letters (see FixturePill's comment) both fixtures fit on one row. */
 .squad-fixture-list {
@@ -778,6 +833,7 @@ button.squad-fixture-pill {
   .squad-jersey-info { border-radius: 9px; padding: 3px 3px 4px; }
 
   .squad-name-wrap { min-height: 15px; margin: 2px 0 3px; }
+  .squad-name-wrap-doubtful, .squad-name-wrap-unavailable { padding: 1px 6px; }
 
   .squad-player-name { font-size: 13px; font-weight: 700; line-height: 15px; }
 
@@ -838,6 +894,7 @@ button.squad-fixture-pill {
   .squad-jersey-info { border-radius: 10px; padding: 3px 4px 5px; }
 
   .squad-name-wrap { min-height: 18px; margin: 2px 0 4px; }
+  .squad-name-wrap-doubtful, .squad-name-wrap-unavailable { padding: 1px 7px; }
 
   .squad-player-name { font-size: 14px; font-weight: 700; line-height: 16px; }
 
@@ -995,4 +1052,35 @@ button.squad-fixture-pill {
   font-size: 11px;
   opacity: 1;
   box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 3.5px var(--text-primary);
+}
+
+/* ---- Availability popup (tapping a doubtful/injured/suspended player's name) ----
+   Reuses .squad-fixture-modal/.squad-help-modal-header/.squad-fixture-modal-row/etc.
+   from the fixture-detail popup above -- same overlay/card convention, just a
+   different set of rows inside it. Same yellow/red pairing as the name-band tint
+   itself (see .squad-name-wrap-doubtful/-unavailable) so the popup and the card that
+   opened it visually agree. */
+.squad-availability-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+.squad-availability-doubtful {
+  background: #fbbf24;
+  color: #451a03;
+}
+
+.squad-availability-unavailable {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.squad-availability-news {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin: 6px 0 0;
 }

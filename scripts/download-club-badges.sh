@@ -17,7 +17,11 @@ set -euo pipefail
 OUT_DIR="public/badges"
 mkdir -p "$OUT_DIR"
 
-# name:code pairs, one per Premier League club (2025/26 season roster)
+# name:code pairs. Includes both the live 2026/27 roster AND the three clubs relegated
+# out of it (burnley/west-ham/wolves) -- those three are kept here (and in CLUB_INFO)
+# so crests still resolve when browsing a past season via the season dropdown, since
+# they were in the top flight then. Coventry/hull/ipswich were added 2026-08-23 after
+# being confirmed live against bootstrap-static as this season's promoted clubs.
 CLUBS=(
   "arsenal:3"
   "aston-villa:7"
@@ -26,9 +30,12 @@ CLUBS=(
   "brighton:36"
   "burnley:90"
   "chelsea:8"
+  "coventry:9"
   "crystal-palace:31"
   "everton:11"
   "fulham:54"
+  "hull:88"
+  "ipswich:40"
   "leeds:2"
   "liverpool:14"
   "man-city:43"
@@ -60,7 +67,7 @@ done
 
 echo ""
 if [ ${#FAILED[@]} -eq 0 ]; then
-  echo "All 20 crests downloaded successfully into $OUT_DIR/"
+  echo "All ${#CLUBS[@]} crests downloaded successfully into $OUT_DIR/"
 else
   echo "Done, but ${#FAILED[@]} crest(s) failed to download:"
   printf '  - %s\n' "${FAILED[@]}"

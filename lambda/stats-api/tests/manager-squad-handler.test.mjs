@@ -332,6 +332,14 @@ test('returns a "no_data" reason (a real gap) when the season has started but th
 
 test('fixture-detail popup data: current fixture carries kickoff time, opponent context, and last-5 form oldest-first', async () => {
   const picks = buildPicks();
+  // getAvailabilityMap() now fetches bootstrap-static on every request (see its own
+  // comment in manager-squad.mjs), so every test that reaches past the empty-picks
+  // early return needs a route for it now, even ones (like this one) that pass gw
+  // explicitly and otherwise wouldn't need bootstrap-static at all.
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) return jsonResponse(buildBootstrapStatic({ elements: [] }));
+    return null;
+  });
   const dynamoMock = installDynamoMock(baseDynamoRouter({
     picksByGw: { '2026/27#728477#3': picks },
     fixtures: [
@@ -373,6 +381,76 @@ test('fixture-detail popup data: current fixture carries kickoff time, opponent 
     // recent result is last in the array, not first.
     assert.deepStrictEqual(opp.form, ['L', 'D']);
   } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('availability: doubtful/injured status, chance-of-playing, and news come from a live bootstrap-static fetch, not the players table', async () => {
+  const picks = buildPicks();
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) {
+      return jsonResponse(buildBootstrapStatic({
+        elements: [
+          // Saka (player_id 5): doubtful, 75% next round.
+          { id: 5, status: 'd', chance_of_playing_this_round: 75, chance_of_playing_next_round: 75, news: 'Knee knock - 75% chance of playing', news_added: '2026-08-20T10:00:00Z' },
+          // Salah (player_id 6): injured, ruled out.
+          { id: 6, status: 'i', chance_of_playing_this_round: 0, chance_of_playing_next_round: 0, news: 'Hamstring injury - Expected back 15 Sep' }
+          // Every other player_id deliberately absent -- exercises the "not in the
+          // live feed at all" fallback, not just the "explicitly status: a" case.
+        ]
+      }));
+    }
+    return null;
+  });
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    picksByGw: { '2026/27#728477#1': picks },
+    standingsRow: { season_event: '2026/27#1', manager_id: 728477, transfer_cost: 0 }
+  }));
+
+  try {
+    const response = await handleManagerSquad({ entry_id: '728477', gw: '1' }, CORS);
+    const body = JSON.parse(response.body);
+
+    const saka = body.players.find((p) => p.player_id === 5);
+    assert.strictEqual(saka.availability_status, 'd');
+    assert.strictEqual(saka.chance_of_playing_next_round, 75);
+    assert.strictEqual(saka.news, 'Knee knock - 75% chance of playing');
+
+    const salah = body.players.find((p) => p.player_id === 6);
+    assert.strictEqual(salah.availability_status, 'i');
+    assert.strictEqual(salah.chance_of_playing_next_round, 0);
+
+    // Not present in the mocked live feed at all -- should fail open to fully
+    // available rather than crash or show a false flag.
+    const saliba = body.players.find((p) => p.player_id === 4);
+    assert.strictEqual(saliba.availability_status, 'a');
+    assert.strictEqual(saliba.chance_of_playing_next_round, null);
+    assert.strictEqual(saliba.news, null);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('availability fetch failure fails open: everyone reads as available rather than crashing', async () => {
+  const picks = buildPicks();
+  const fetchMock = installFetchMock((url) => {
+    if (url.includes('bootstrap-static')) return jsonResponse({}, { ok: false, status: 500 });
+    return null;
+  });
+  const dynamoMock = installDynamoMock(baseDynamoRouter({
+    picksByGw: { '2026/27#728477#1': picks },
+    standingsRow: { season_event: '2026/27#1', manager_id: 728477, transfer_cost: 0 }
+  }));
+
+  try {
+    const response = await handleManagerSquad({ entry_id: '728477', gw: '1' }, CORS);
+    assert.strictEqual(response.statusCode, 200);
+    const body = JSON.parse(response.body);
+    assert.ok(body.players.every((p) => p.availability_status === 'a'), 'A failed availability fetch should never leave any player wrongly flagged');
+  } finally {
+    fetchMock.restore();
     dynamoMock.restore();
   }
 });
