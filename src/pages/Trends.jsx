@@ -126,6 +126,41 @@ const tooltipStyle = {
 // mode. itemStyle forces every line to the same readable color instead.
 const tooltipItemStyle = { color: 'var(--text-primary)' };
 
+// dataKeys (m0, m1, ...) for whichever managers are drawn highlighted (you and/or the
+// leader) -- lets the "vs field" tooltip skip every muted "everyone else" line and show
+// only the one or two rows that actually matter.
+function highlightedFieldKeys(field) {
+  const keys = new Set();
+  (field || []).forEach((m, idx) => {
+    if (m.is_you || m.is_leader) keys.add(`m${idx}`);
+  });
+  return keys;
+}
+
+// Recharts' default Tooltip has no built-in way to filter which series it lists -- it
+// always renders one row per Line in the chart, which meant every manager in the league
+// showed up on hover even though only "you" and "the leader" are visually highlighted.
+// This custom content function (passed via Tooltip's `content` prop) filters `payload`
+// down to just those highlighted dataKeys before rendering, replicating tooltipStyle
+// manually since `content` overrides Recharts' own contentStyle/itemStyle handling.
+function FieldTooltip({ active, payload, label, highlightKeys }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const shown = payload.filter((p) => highlightKeys.has(p.dataKey));
+  if (shown.length === 0) return null;
+  return (
+    <div style={{ ...tooltipStyle, padding: '8px 10px' }}>
+      <p style={{ margin: '0 0 4px', fontWeight: 500 }}>
+        {label === 0 ? 'Season start' : `Gameweek ${label}`}
+      </p>
+      {shown.map((p) => (
+        <p key={p.dataKey} style={{ margin: 0, color: p.color }}>
+          {p.name} : {p.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 const axisTick = { fontSize: 11, fill: 'var(--text-muted)' };
 
 export default function Trends({ leagueId = null } = {}) {
@@ -191,6 +226,7 @@ export default function Trends({ leagueId = null } = {}) {
     if (!data?.field) return [];
     return data.field.map((m, idx) => idx).sort((a, b) => fieldLinePriority(data.field[a]) - fieldLinePriority(data.field[b]));
   }, [data]);
+  const fieldHighlightKeys = useMemo(() => highlightedFieldKeys(data?.field), [data]);
 
   const fieldSummary = useMemo(() => {
     if (!data?.field || data.field.length === 0 || !data.current_gameweek) return null;
@@ -353,11 +389,7 @@ export default function Trends({ leagueId = null } = {}) {
                           tickLine={false}
                         />
                         <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} />
-                        <Tooltip
-                          contentStyle={tooltipStyle}
-                          itemStyle={tooltipItemStyle}
-                          labelFormatter={(gw) => (gw === 0 ? 'Season start' : `Gameweek ${gw}`)}
-                        />
+                        <Tooltip content={<FieldTooltip highlightKeys={fieldHighlightKeys} />} />
                         {fieldRenderOrder.map((idx) => {
                           const m = data.field[idx];
                           const highlighted = m.is_you || m.is_leader;
