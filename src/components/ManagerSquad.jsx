@@ -178,6 +178,17 @@ function JerseyBadge({ player, onOpenFixture }) {
   // and two players sharing a club would otherwise silently clip against whichever
   // <defs> happened to render last.
   const clipId = `jersey-clip-${player.player_id}`;
+  // Whether to actually show this gameweek's points number, or leave the bubble blank
+  // because the game hasn't kicked off yet. Deliberately keyed on kickoff_time (a
+  // fixed schedule set well in advance, effectively never stale) rather than the
+  // fixture's own `status` field -- status only gets refreshed by a separate, once-a-
+  // WEEK job (fpl-global-stats-weekly), so on a normal Sunday it can still read
+  // 'PENDING' for a match that kicked off and finished the day before, blanking every
+  // card's real score. kickoff_time needs no such refresh to stay accurate. No
+  // current_fixture at all (a blank gameweek for this club) or no kickoff_time on it
+  // both fall back to "show the points" -- there's nothing pending to wait for.
+  const kickoffTime = player.current_fixture?.kickoff_time;
+  const hasKickedOff = !kickoffTime || new Date(kickoffTime) <= new Date();
   return (
     <div className="squad-jersey-card">
       {/* Shirt scaled down to ~75% per direct feedback -- a dedicated points bar
@@ -246,9 +257,19 @@ function JerseyBadge({ player, onOpenFixture }) {
           this player's club -- then it's just the points tablet, same as before. */}
       {typeof player.gw_points === 'number' && (
         <div className="squad-points-row">
-          <div className="squad-points-bar">
-            <span className="squad-points-bar-num">{player.gw_points}</span>
-            <span className="squad-points-bar-label">PTS</span>
+          {/* "TBD" rather than "0 PTS" when this player's own fixture hasn't kicked
+              off yet -- a 0 there reads as "played and scored nothing", which isn't
+              true yet. Same bubble, same size either way -- just a different label
+              inside it, not an empty or missing one. */}
+          <div className={`squad-points-bar${hasKickedOff ? '' : ' squad-points-bar-pending'}`}>
+            {hasKickedOff ? (
+              <>
+                <span className="squad-points-bar-num">{player.gw_points}</span>
+                <span className="squad-points-bar-label">PTS</span>
+              </>
+            ) : (
+              <span className="squad-points-bar-tbd">TBD</span>
+            )}
           </div>
           <FixturePill fixture={player.current_fixture} onClick={(f) => onOpenFixture(player, f)} />
         </div>

@@ -464,7 +464,12 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  background: linear-gradient(135deg, #5ad1ec, #6a7cf0);
+  /* A few shades lighter than the team badge's own gradient (.squad-points-badge-num)
+     per direct feedback -- still the same blue/purple family so the two stay part of
+     one consistent "points" color language, just lighter here since this pill is
+     blank more often (before kickoff) and shouldn't read as heavy as the always-
+     populated team badge up top. */
+  background: linear-gradient(135deg, #7bdaf0, #8896f3);
   border-radius: 999px;
   padding: 2px 6px 3px;
 }
@@ -482,6 +487,27 @@
   letter-spacing: 0.04em;
   line-height: 1;
   color: rgba(26, 15, 46, 0.75);
+}
+
+/* Pending state (fixture hasn't kicked off): the bubble's own fill and text colors
+   are swapped rather than reaching for a new hue -- background becomes the dark ink
+   that's normally the TEXT color (.squad-points-bar-num), and the text becomes a
+   solid pulled from the gradient that's normally the BACKGROUND. Neither an amber
+   warning color nor a lighter/darker tweak of the existing pairing tried a "stands
+   out but doesn't feel like a different color language" balance as well as this did
+   -- still the same blue/purple points family, just inverted, so it reads as "this
+   one's different" without introducing a color that means something else elsewhere
+   on the card (amber already means "hot form" via .squad-hot-badge). */
+.squad-points-bar-pending {
+  background: #1a0f2e;
+}
+
+.squad-points-bar-tbd {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  color: #7bdaf0;
 }
 
 /* Captain/vice-captain/hot-form/cold-form all share one plain black circle treatment
@@ -739,6 +765,7 @@ button.squad-fixture-pill {
   .squad-points-bar { flex: 0 0 auto; padding: 3px 13px 4px; gap: 4px; }
   .squad-points-bar-num { font-size: 16px; }
   .squad-points-bar-label { font-size: 9px; }
+  .squad-points-bar-tbd { font-size: 12px; }
 
   .squad-corner-badge {
     width: 17px;
@@ -798,6 +825,7 @@ button.squad-fixture-pill {
   .squad-points-bar { flex: 0 0 auto; padding: 4px 15px 5px; gap: 5px; }
   .squad-points-bar-num { font-size: 19px; }
   .squad-points-bar-label { font-size: 10px; }
+  .squad-points-bar-tbd { font-size: 14px; }
 
   .squad-corner-badge {
     width: 20px;
