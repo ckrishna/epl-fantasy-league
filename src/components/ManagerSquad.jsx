@@ -117,13 +117,6 @@ function strengthLabel(value) {
 
 const FORM_RESULT_LABEL = { W: 'Win', D: 'Draw', L: 'Loss' };
 
-// Shortened to 2 letters (from FPL's usual 3-letter club code) so both fixture pills
-// fit on one row per direct feedback -- every club's own 3-letter code already has a
-// unique first-2-letter prefix across the current 20-team league (ARS/AVL/BOU/BRE/
-// BHA/BUR/CHE/CRY/EVE/FUL/LEE/LIV/MCI/MUN/NEW/NFO/SUN/TOT/WHU/WOL all differ by their
-// second letter), so a plain slice needs no separate lookup table and stays correct as
-// long as that holds -- if a future promoted club ever collides on its first 2 letters
-// with an existing one, this would need a real disambiguation table instead.
 // `onClick`, when passed, turns this into a real button that opens the fixture-detail
 // popup (see FixtureDetailModal below) with this exact fixture -- per direct feedback,
 // this applies to all 3 fixture pills on a card (the current-gameweek one next to
@@ -132,11 +125,13 @@ const FORM_RESULT_LABEL = { W: 'Win', D: 'Draw', L: 'Loss' };
 // inert illustrations without needing a special case here.
 function FixturePill({ fixture, onClick }) {
   if (!fixture) return null;
-  const label = `${fixture.opponent_code.slice(0, 2)}${fixture.is_home ? 'H' : 'A'}`;
-  // Home/away used to only be readable from the trailing H/A letter buried in the
-  // pill's own text -- per direct feedback that wasn't visually obvious enough. An
-  // underline only on away games (nothing extra on home games) makes venue scannable
-  // at a glance without a second color or an extra element.
+  // Full 3-letter club code (ARS, AVL, ...) rather than a 2-letter-plus-H/A-suffix
+  // shorthand -- that shorthand only existed because home/away used to be readable
+  // ONLY from a trailing H/A letter buried in the pill's own text. Now that venue is
+  // shown via the underline below (away games only, nothing extra on home games),
+  // there's no reason to sacrifice a real letter of the club code for it, and the
+  // real code is more recognizable at a glance than a truncated one.
+  const label = fixture.opponent_code;
   const className = `squad-fixture-pill squad-fixture-${difficultyTier(fixture.difficulty)}${fixture.is_home ? '' : ' squad-fixture-away'}`;
   if (!onClick) {
     return <div className={className}>{label}</div>;
@@ -358,7 +353,7 @@ function PlayerCardHelpModal({ onClose }) {
                   <span className="squad-points-bar-num">8</span>
                   <span className="squad-points-bar-label">PTS</span>
                 </div>
-                <div className="squad-fixture-pill squad-fixture-easy">BOH</div>
+                <div className="squad-fixture-pill squad-fixture-easy">BOU</div>
               </div>
               <span className="squad-help-dot squad-help-dot-points">3</span>
               <span className="squad-help-dot squad-help-dot-current">4</span>
@@ -366,8 +361,8 @@ function PlayerCardHelpModal({ onClose }) {
               <div className="squad-jersey-info squad-help-example-info">
                 <p className="squad-player-name">Player Name<span className="squad-position-letter">{'‑'}F</span></p>
                 <div className="squad-fixture-list">
-                  <div className="squad-fixture-pill squad-fixture-easy">BOH</div>
-                  <div className="squad-fixture-pill squad-fixture-hard squad-fixture-away">TOA</div>
+                  <div className="squad-fixture-pill squad-fixture-easy">BOU</div>
+                  <div className="squad-fixture-pill squad-fixture-hard squad-fixture-away">TOT</div>
                 </div>
               </div>
               <span className="squad-help-dot squad-help-dot-name">2</span>
