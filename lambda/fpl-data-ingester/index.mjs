@@ -14,7 +14,14 @@ const logger = {
 // Writes one row per invocation to ingestion_runs -- see fpl-bootstrap/index.mjs for
 // the full rationale. `trigger` is derived from the Lambda event shape: EventBridge's
 // scheduled invocations always carry `source: "aws.events"` (this is the
-// `fpl-nightly-pull` rule specifically for this function).
+// `fpl-nightly-pull` rule specifically for this function) -- UNLESS the rule specifies
+// a custom Input JSON (as the hourly live-check rule does, to pass the `mode` flag
+// used below), in which case that custom JSON *completely replaces* the event
+// EventBridge would otherwise send, `source` included. The live-check rule's Input
+// must therefore explicitly include `"source": "aws.events"` itself, or every one of
+// its runs would silently misreport as `trigger: "manual"` in ingestion_runs. See
+// scripts/automate_fpl_livecheck_hourly.sh for where that's set (same gotcha,
+// documented the same way, in lambda/fpl-global-stats-weekly/index.mjs).
 async function recordIngestionRun({ event, startedAt, status, season, summary, errorMessage }) {
   try {
     await dynamodb.send(new PutCommand({
@@ -149,6 +156,55 @@ async function getRegisteredLeagueIds(season, primaryLeagueId) {
   } catch (err) {
     logger.error('Failed to fetch registered leagues, falling back to primary league only', err);
     return [primaryLeagueId];
+  }
+}
+
+// Computes today's live-fixture window from OUR OWN already-ingested fpl_fixture_data
+// -- a local DynamoDB Scan, zero FPL API calls -- so the hourly live-check rule (see
+// the `mode === 'live-check'` gate in the handler below) can decide whether to bother
+// running at all before it ever touches FPL's API. Window is [earliest kickoff today +
+// 30 min, latest kickoff today + 4 hours]: the 30-minute head start avoids checking
+// before any game has even kicked off, and the 4-hour tail covers a ~105-minute match
+// plus the 1-2 hour lag before FPL finalizes bonus points, so even the last match of
+// the day has time to settle before the window closes. Returns null if there are no
+// fixtures today at all (the common case most days).
+//
+// fpl_fixture_data's partition key is season_fixture ("{season_id}#{fixture_id}"), not
+// something a Query can range over by date -- but the table is tiny (385 items for a
+// full season), so a Scan filtered by season_id is cheap and simpler than adding a GSI
+// just for this.
+//
+// Fails OPEN, not closed: if the scan itself errors, this returns an always-passes
+// window rather than silently skipping what might be a real game day -- same
+// resilience convention used everywhere else in this codebase (see
+// getAvailabilityMap in stats-api for another example). A live-check run that
+// couldn't determine the window just behaves like a normal, ungated run instead.
+async function getTodaysFixtureWindow(seasonId) {
+  try {
+    const result = await dynamodb.send(new ScanCommand({
+      TableName: 'fpl_fixture_data',
+      FilterExpression: 'season_id = :sid',
+      ExpressionAttributeValues: { ':sid': seasonId }
+    }));
+
+    const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD', UTC
+    const todaysKickoffs = (result.Items || [])
+      .map((item) => item.kickoff_time)
+      .filter((kt) => typeof kt === 'string' && kt.slice(0, 10) === todayStr)
+      .map((kt) => new Date(kt).getTime())
+      .filter((t) => !Number.isNaN(t));
+
+    if (todaysKickoffs.length === 0) return null;
+
+    const earliest = Math.min(...todaysKickoffs);
+    const latest = Math.max(...todaysKickoffs);
+    return {
+      start: earliest + 30 * 60 * 1000,
+      end: latest + 4 * 60 * 60 * 1000
+    };
+  } catch (err) {
+    logger.error('Failed to compute today\'s fixture window -- failing open, will run normally', err);
+    return { start: -Infinity, end: Infinity };
   }
 }
 
@@ -555,6 +611,23 @@ export async function handler(event) {
     ({ season, seasonId, leagueId } = await getCurrentSeasonInfo());
     logger.info('Resolved current season', { season, seasonId, leagueId });
 
+    // live-check mode (the hourly rule, distinct from the unconditional nightly one)
+    // -- bail out here, before any FPL API call, if today isn't a game day or we're
+    // outside today's fixture window. See getTodaysFixtureWindow's own comment for
+    // the window math. Checked before getBootstrapStatic() specifically so a genuine
+    // off-day costs one local DynamoDB Scan and nothing else -- no FPL calls at all.
+    if (event?.mode === 'live-check') {
+      const window = await getTodaysFixtureWindow(seasonId);
+      const now = Date.now();
+      if (!window || now < window.start || now > window.end) {
+        const reason = window ? 'outside_fixture_window' : 'no_fixtures_today';
+        logger.info('live-check: skipping run', { reason, window });
+        await recordIngestionRun({ event, startedAt, status: 'success', season, summary: { mode: 'live-check', skipped: true, reason } });
+        return { statusCode: 200, body: JSON.stringify({ success: true, skipped: true, reason, timestamp: new Date().toISOString() }) };
+      }
+      logger.info('live-check: inside fixture window, proceeding', { window });
+    }
+
     // Fetch bootstrap
     const bootstrap = await getBootstrapStatic();
     apiCallCount += 1;
@@ -834,6 +907,7 @@ logger.info('Standings calculated and stored', { count: standingsCount });
       status: 'success',
       season,
       summary: {
+        mode: event?.mode === 'live-check' ? 'live-check' : 'full',
         api_calls: apiCallCount,
         db_writes: dbWriteCount,
         managers: managers.length,

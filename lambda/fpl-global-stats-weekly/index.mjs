@@ -12,7 +12,13 @@ const logger = {
 
 // Writes one row per invocation to ingestion_runs -- see fpl-bootstrap/index.mjs for
 // the full rationale. `trigger` is derived from the Lambda event shape: EventBridge's
-// scheduled invocations always carry `source: "aws.events"`.
+// scheduled invocations always carry `source: "aws.events"` -- UNLESS the rule
+// specifies a custom Input JSON (as the fixtures-only daily rule does, to pass the
+// `mode` flag below), in which case that custom JSON *completely replaces* the event
+// EventBridge would otherwise send, `source` included. The fixtures-only rule's Input
+// must therefore explicitly include `"source": "aws.events"` itself, or every one of
+// its runs would silently misreport as `trigger: "manual"` in ingestion_runs.
+// See scripts/automate_fpl_fixtures_daily.sh for where that's set.
 async function recordIngestionRun({ event, startedAt, status, summary, errorMessage }) {
   try {
     await dynamodb.send(new PutCommand({
@@ -236,11 +242,21 @@ async function storeFixtures(bootstrap, seasonId) {
   }
 }
 
+// `event.mode === 'fixtures-only'` skips storePlayerGameweekData entirely -- added so
+// a second, daily EventBridge rule can keep fpl_fixture_data's kickoff_time fresh
+// (fixtures sometimes get rescheduled mid-week, and this table previously only
+// refreshed on the Tuesday weekly cron, up to a 6-day staleness window) WITHOUT also
+// re-running the expensive per-player element-summary loop, which doesn't need
+// daily freshness and would otherwise add ~700 extra FPL API calls a day for no
+// benefit. The existing Tuesday weekly rule keeps invoking with no mode (or any value
+// other than 'fixtures-only'), so it's unaffected and still runs the full job exactly
+// as before.
 export async function handler(event) {
   const startTime = Date.now();
   const startedAt = new Date(startTime).toISOString();
+  const fixturesOnly = event?.mode === 'fixtures-only';
 
-  logger.info('Starting weekly global stats ingestion');
+  logger.info(fixturesOnly ? 'Starting fixtures-only refresh' : 'Starting weekly global stats ingestion');
 
   try {
     // Get current season_id
@@ -255,13 +271,19 @@ export async function handler(event) {
     logger.info('Fetched completed gameweeks', { count: completedGWs.length });
 
     // Populate tables with new schema
-    const playerStatsResult = await storePlayerGameweekData(bootstrap.elements, bootstrap, seasonId);
+    const playerStatsResult = fixturesOnly
+      ? { processedCount: 0, itemsStored: 0, errorCount: 0 }
+      : await storePlayerGameweekData(bootstrap.elements, bootstrap, seasonId);
+    if (fixturesOnly) {
+      logger.info('Skipped player gameweek data fetch (fixtures-only mode)');
+    }
     const fixturesResult = await storeFixtures(bootstrap, seasonId);
 
     const duration = Date.now() - startTime;
     logger.metric('ingestion_duration_ms', duration);
 
     const summary = {
+      mode: fixturesOnly ? 'fixtures-only' : 'full',
       season_id: seasonId,
       player_event_stats_stored: playerStatsResult.itemsStored,
       player_event_stats_errors: playerStatsResult.errorCount,
