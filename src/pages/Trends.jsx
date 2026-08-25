@@ -228,6 +228,13 @@ export default function Trends({ leagueId = null } = {}) {
   }, [data]);
   const fieldHighlightKeys = useMemo(() => highlightedFieldKeys(data?.field), [data]);
 
+  // Returns a plain-object description (not JSX) so it stays a memoized value rather
+  // than a fresh element on every render -- rendered into the same trends-positive/
+  // trends-negative <strong> treatment the Pace callout below already uses, just with
+  // "leading"/"behind" as the two states instead of "ahead"/"behind" of your own
+  // average. Only the rank+gap fragment is bolded, matching the Pace callout's own
+  // restraint (numbers like "67 pts" and "(71)" stay plain there too) -- bolding
+  // everything would make nothing stand out.
   const fieldSummary = useMemo(() => {
     if (!data?.field || data.field.length === 0 || !data.current_gameweek) return null;
     const withLatest = data.field
@@ -239,11 +246,11 @@ export default function Trends({ leagueId = null } = {}) {
     const you = withLatest[youIdx];
     const rank = youIdx + 1;
     if (rank === 1) {
-      return `GW${data.current_gameweek}: you're leading with ${you.latest} pts.`;
+      return { leading: true, points: you.latest };
     }
     const leader = withLatest[0];
     const gap = leader.latest - you.latest;
-    return `GW${data.current_gameweek}: you're ${ordinal(rank)}, ${gap} pt${gap === 1 ? '' : 's'} behind ${leader.team_nickname || leader.real_name}.`;
+    return { leading: false, rank, gap, leaderName: leader.team_nickname || leader.real_name };
   }, [data]);
 
   return (
@@ -424,7 +431,23 @@ export default function Trends({ leagueId = null } = {}) {
                       <span><i className="trends-legend-swatch band" /> Everyone else</span>
                     </div>
 
-                    {fieldSummary && <div className="trends-callout">{fieldSummary}</div>}
+                    {fieldSummary && (
+                      <div className="trends-callout">
+                        GW{data.current_gameweek}: you're{' '}
+                        {fieldSummary.leading ? (
+                          <strong className="trends-positive">leading with {fieldSummary.points} pts</strong>
+                        ) : (
+                          <>
+                            {ordinal(fieldSummary.rank)},{' '}
+                            <strong className="trends-negative">
+                              {fieldSummary.gap} pt{fieldSummary.gap === 1 ? '' : 's'} behind
+                            </strong>{' '}
+                            {fieldSummary.leaderName}
+                          </>
+                        )}
+                        .
+                      </div>
+                    )}
                   </>
                 )}
               </div>
