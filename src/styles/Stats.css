@@ -23,13 +23,22 @@
      content needs, followed by the answer panel taking essentially all remaining space.
      The old 2-column layout gave the mostly-static ask panel up to half the page even
      though the actual reason someone's here -- the answer, which now regularly includes
-     wide markdown tables -- lived in the other half. */
+     wide markdown tables -- lived in the other half.
+     No fixed `height` here (2026-08-24 fix, direct feedback) -- this used to be a hard
+     `height: 85vh`, which combined with .stats-right's old `flex: 1; overflow-y: auto`
+     turned any answer taller than ~85% of the viewport into its own separately-scrolling
+     box nested inside the normal page scroll -- a "scrolling inside the layout" feel
+     that's confusing once GenBI answers regularly run to multiple sections/tables.
+     min-height on .stats-right below (not here) keeps the same "fills most of the
+     screen while empty" look this container had before; the difference is it can now
+     grow taller than that instead of clipping, exactly matching how the <=1024px
+     override already behaved (see that media query below, now mostly redundant with
+     this but left in place for its own slightly smaller floor). */
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   max-width: 1400px;
   margin: 0 auto;
-  height: 85vh;
 }
 
 /* Ask Bar (was "Left Panel" back when this was a 2-column grid) */
@@ -224,13 +233,17 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  overflow-y: auto;
-  /* Grows to absorb essentially all of .stats-container's height, since .stats-left
-     above is flex-shrink: 0 (sized to its own compact content). min-height: 0 lets a
-     flex child actually shrink/scroll internally instead of forcing the page taller
-     than the viewport. */
-  flex: 1;
-  min-height: 0;
+  /* Was `flex: 1; min-height: 0; overflow-y: auto` against a fixed-height
+     .stats-container -- that combination is exactly what makes a flex child scroll
+     INTERNALLY instead of the page scrolling normally (min-height:0 lets it shrink
+     below content size, overflow-y:auto then clips + scrollbars it there). Direct
+     feedback: a long answer shouldn't live in its own separately-scrolling box nested
+     inside the page. min-height (not height/flex) gives the same "fills most of the
+     screen" look before any question is asked, but lets the box grow taller than that
+     and become part of the normal page scroll once an answer is longer, matching how
+     the <=1024px override already worked (min-height there is 60vh -- kept as-is,
+     slightly smaller for mobile's tighter canvas). */
+  min-height: 65vh;
   /* Same reasoning as .stats-left -- the answer-box table's horizontal-scroll
      fallback has the same min-content-forces-the-container-wider risk. */
   min-width: 0;
@@ -570,14 +583,13 @@
 }
 
 /* Responsive -- the base rules above already give every viewport the same compact
-   single-column layout (ask bar + answer panel), so what's left here is just fine-
-   tuning: swap the fixed-vh container height for a natural auto-height page below
-   1024px (mobile viewport-height units shift as the browser chrome shows/hides,
-   which fighting a fixed height doesn't handle well), with .stats-right keeping a
-   min-height floor so the answer panel still has real presence even when empty. */
+   single-column layout (ask bar + answer panel) with no fixed height anywhere now
+   (2026-08-24 fix, see .stats-container/.stats-right above), so what's left here is
+   just fine-tuning: a smaller gap and a shorter min-height floor for .stats-right's
+   empty/loading state, since 65vh (the desktop floor) reads as too tall once mobile
+   viewport-height units shrink for a smaller screen. */
 @media (max-width: 1024px) {
   .stats-container {
-    height: auto;
     gap: 1rem;
   }
 
