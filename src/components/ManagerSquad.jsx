@@ -482,10 +482,30 @@ function AdvisorMoveBody({ move }) {
 // tagged `preview: true` so the card header can flag it honestly now that the transfer
 // card next to it is real (buildTransferMove below). Filters the mock transfer entry
 // back out since a real one takes its place as moves[0] once fetched/loaded.
-function mockPreviewMoves() {
+//
+// `usedChips` (real data, from the /manager-squad/advisor response's `used_chips`)
+// overrides the Chip Watch row specifically -- added after direct feedback that the
+// mock content is identical for every manager, and a concrete case where that's
+// actively wrong, not just generic: a manager who's already played Bench Boost this
+// season would otherwise see it "recommended" again, which isn't illustrative, it's
+// impossible (FPL doesn't let you replay a used chip). Captain Pick and Differential
+// Pick stay fully generic -- there's no equally cheap, equally certain check for those
+// (whether a captain suggestion is "wrong" depends on projections, not a fact already
+// on record the way chip usage is).
+function mockPreviewMoves(usedChips = []) {
   return MOCK_ADVISOR.moves
     .filter((m) => m.kind !== 'transfer')
-    .map((m) => ({ ...m, preview: true }));
+    .map((m) => {
+      if (m.kind === 'chip' && usedChips.includes(m.chipKey)) {
+        return {
+          ...m,
+          preview: true,
+          teaser: 'Already used',
+          reason: `You've already played ${m.name} this season, so this specific suggestion no longer applies. Picking the best of your remaining chips isn't wired up yet -- for now this card only checks whether the illustrative pick above is still available to you.`
+        };
+      }
+      return { ...m, preview: true };
+    });
 }
 
 // The dev-only /__advisor-preview page (isMockPreview) has no real entryId to query --
@@ -564,11 +584,21 @@ function AdvisorModal({ onClose, entryId, gw, isMockPreview }) {
   const [expanded, setExpanded] = useState(null);
   const [transferMove, setTransferMove] = useState(isMockPreview ? mockTransferMove() : null);
   const [transferError, setTransferError] = useState(false);
+  // Chips this manager has actually played this season -- real data (used_chips on the
+  // getSquadAdvisor response), used only to keep the still-mock Chip Watch row from
+  // recommending something provably already spent. Defaults to none-used, matching
+  // both the dev preview page (no real entryId to check) and the loading window before
+  // the real response arrives -- worst case it briefly shows the same default content
+  // it always used to, never a false "already used" claim.
+  const [usedChips, setUsedChips] = useState([]);
 
   useEffect(() => {
     if (isMockPreview) return;
     getSquadAdvisor(entryId, gw)
-      .then((data) => setTransferMove(buildTransferMove(data.transfer)))
+      .then((data) => {
+        setTransferMove(buildTransferMove(data.transfer));
+        setUsedChips(data.used_chips || []);
+      })
       .catch((err) => {
         console.error('getSquadAdvisor failed:', err.message);
         setTransferError(true);
@@ -579,7 +609,7 @@ function AdvisorModal({ onClose, entryId, gw, isMockPreview }) {
     ? { kind: 'transfer', title: 'Squad Change', teaser: "Couldn't load", delta: null, noSuggestion: true, reason: "Couldn't load a transfer suggestion right now. Try again in a moment." }
     : (transferMove || { kind: 'transfer', title: 'Squad Change', teaser: 'Loading…', delta: null, loading: true });
 
-  const moves = [resolvedTransferMove, ...mockPreviewMoves()];
+  const moves = [resolvedTransferMove, ...mockPreviewMoves(usedChips)];
 
   return (
     <div className="squad-help-overlay" onClick={onClose}>
@@ -592,11 +622,10 @@ function AdvisorModal({ onClose, entryId, gw, isMockPreview }) {
           <button type="button" className="squad-close-btn" onClick={onClose} aria-label="Close">&times;</button>
         </div>
 
-        <p className="squad-advisor-subtitle">
-          {isMockPreview
-            ? 'Preview -- illustrative suggestions, not wired to real projections yet.'
-            : 'Squad Change below is live, using real FPL data. Captain, chip, and differential picks are still an illustrative preview.'}
-        </p>
+        {/* No modal-wide "preview" subtitle here -- dropped per direct feedback that
+            it was redundant once every still-mock row already carries its own
+            "PREVIEW" tag (see rowIcon/mockPreviewMoves above). Saying it twice added
+            clutter, not clarity. */}
 
         <div className="squad-advisor-list">
           {moves.map((move) => {

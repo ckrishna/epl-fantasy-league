@@ -562,6 +562,35 @@ async function getBankTenths(season, entryId, gw) {
   }
 }
 
+// Which chips (wildcard/freehit/bboost/3xc/manager) this manager has ALREADY played
+// this season -- added after direct feedback that the Advisor modal's still-mock Chip
+// Watch card (see MOCK_ADVISOR in ManagerSquad.jsx) suggested Bench Boost to a manager
+// who'd already played it, which isn't just "illustrative", it's provably impossible
+// advice. This doesn't make Chip Watch real (it still doesn't know WHICH of a
+// manager's remaining chips to recommend, or when) -- it only gives the frontend
+// enough real data to avoid recommending a chip that's already spent. Queries the
+// WHOLE season (no gameweek filter -- KeyConditionExpression only constrains the
+// partition key), since a chip played in any past gameweek this season can't be played
+// again. Fails open to an empty array -- worst case, the mock card falls back to
+// behaving exactly as it did before this existed (always shows its default content).
+async function getUsedChips(season, entryId) {
+  try {
+    const result = await dynamodb.send(new QueryCommand({
+      TableName: 'fpl_entry_gameweek',
+      KeyConditionExpression: 'season_entry = :se',
+      ExpressionAttributeValues: { ':se': `${season}#${entryId}` }
+    }));
+    const chips = new Set();
+    for (const row of result.Items || []) {
+      if (row.active_chip) chips.add(row.active_chip);
+    }
+    return [...chips];
+  } catch (err) {
+    console.error('getUsedChips error:', err);
+    return [];
+  }
+}
+
 // FPL's own single-letter availability code -> a short, user-facing reason clause.
 // Mirrors AVAILABILITY_STATUS_LABEL in ManagerSquad.jsx (kept as a separate constant
 // here rather than shared/imported -- this is backend response text, that one's
@@ -687,9 +716,13 @@ export function suggestTransfer(picks, poolMap, bankTenths) {
 // ManagerSquad.jsx). Deliberately a SEPARATE endpoint from /manager-squad rather than
 // an extra field bolted onto that response -- the advisor needs its own live
 // bootstrap-static fetch (full player pool, not just this manager's 15) and its own
-// fpl_entry_gameweek query (bank), neither of which the plain squad view needs, so
-// folding them in would make every ordinary squad-view load pay for work only the
-// advisor modal actually uses.
+// fpl_entry_gameweek queries (bank, used chips), neither of which the plain squad view
+// needs, so folding them in would make every ordinary squad-view load pay for work
+// only the advisor modal actually uses.
+//
+// used_chips is fetched regardless of whether picks were found -- chip usage isn't
+// tied to a specific gameweek's picks the way the transfer suggestion is, so there's
+// no reason to gate it behind the same early return.
 export async function handleSquadAdvisor(queryParams, corsHeaders) {
   const entryId = parseInt(queryParams.entry_id, 10);
   if (!entryId) {
@@ -699,6 +732,7 @@ export async function handleSquadAdvisor(queryParams, corsHeaders) {
   const season = await getCurrentSeason();
   const requestedGw = queryParams.gw ? parseInt(queryParams.gw, 10) : await getActiveGameweek();
   const { gw, picks } = await resolvePicksForEntry(season, entryId, requestedGw);
+  const usedChips = await getUsedChips(season, entryId);
 
   if (!picks || picks.length === 0) {
     const seasonStarted = await hasSeasonStarted();
@@ -709,7 +743,8 @@ export async function handleSquadAdvisor(queryParams, corsHeaders) {
         season,
         gameweek: gw,
         entry_id: entryId,
-        transfer: { found: false, reason: seasonStarted ? 'no_data' : 'season_not_started' }
+        transfer: { found: false, reason: seasonStarted ? 'no_data' : 'season_not_started' },
+        used_chips: usedChips
       })
     };
   }
@@ -724,6 +759,6 @@ export async function handleSquadAdvisor(queryParams, corsHeaders) {
   return {
     statusCode: 200,
     headers: corsHeaders,
-    body: JSON.stringify({ season, gameweek: gw, entry_id: entryId, transfer })
+    body: JSON.stringify({ season, gameweek: gw, entry_id: entryId, transfer, used_chips: usedChips })
   };
 }

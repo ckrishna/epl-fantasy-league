@@ -190,7 +190,7 @@ test('suggestTransfer: delta_pts and reason reflect the actual ep_next gap and b
 
 // ---- handleSquadAdvisor (I/O wrapper) ----
 
-function dynamoRouter({ picksByGw = {}, bankByGw = {} } = {}) {
+function dynamoRouter({ picksByGw = {}, bankByGw = {}, chipsByEntry = {} } = {}) {
   return (command) => {
     const table = command.input.TableName;
     const ctor = command.constructor.name;
@@ -205,8 +205,15 @@ function dynamoRouter({ picksByGw = {}, bankByGw = {} } = {}) {
     if (table === 'fpl_entry_gameweek' && ctor === 'QueryCommand') {
       const se = command.input.ExpressionAttributeValues[':se'];
       const gw = command.input.ExpressionAttributeValues[':gw'];
-      const bank = bankByGw[`${se}#${gw}`];
-      return { Items: typeof bank === 'number' ? [{ bank }] : [] };
+      // getBankTenths queries a single gameweek (':gw' present); getUsedChips queries
+      // the whole season (no ':gw' at all) -- same table, distinguished by which
+      // ExpressionAttributeValues the real KeyConditionExpression actually bound.
+      if (gw !== undefined) {
+        const bank = bankByGw[`${se}#${gw}`];
+        return { Items: typeof bank === 'number' ? [{ bank }] : [] };
+      }
+      const chips = chipsByEntry[se] || [];
+      return { Items: chips.map((active_chip) => ({ active_chip })) };
     }
     return undefined;
   };
@@ -250,6 +257,7 @@ test('handleSquadAdvisor: no picks + preseason returns transfer.reason "season_n
     const body = JSON.parse(response.body);
     assert.strictEqual(body.transfer.found, false);
     assert.strictEqual(body.transfer.reason, 'season_not_started');
+    assert.deepStrictEqual(body.used_chips, [], 'used_chips is fetched independently of picks, and should still come back (empty here)');
   } finally {
     fetchMock.restore();
     dynamoMock.restore();
@@ -288,7 +296,8 @@ test('handleSquadAdvisor: full success -- fetches live pool + bank and returns a
   ]);
   const dynamoMock = installDynamoMock(dynamoRouter({
     picksByGw: { '2026/27#728477#5': picks },
-    bankByGw: { '2026/27#728477#5': 5 } // £0.5m bank -> 5 tenths
+    bankByGw: { '2026/27#728477#5': 5 }, // £0.5m bank -> 5 tenths
+    chipsByEntry: { '2026/27#728477': ['bboost'] }
   }));
 
   try {
@@ -301,6 +310,68 @@ test('handleSquadAdvisor: full success -- fetches live pool + bank and returns a
     assert.strictEqual(body.transfer.out.player_id, 5, 'Saka has the coldest form (1.0) of the two -- should be the OUT candidate');
     assert.strictEqual(body.transfer.in.player_id, 50, 'ReplacementMid is the only affordable, unowned MID candidate');
     assert.ok(body.transfer.delta_pts > 0);
+    assert.deepStrictEqual(body.used_chips, ['bboost']);
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('handleSquadAdvisor: used_chips collects distinct chips played across every gameweek this season', async () => {
+  const picks = [
+    { player_id: 5, player_name: 'Saka', player_position: 3, squad_position: 5, player_team: 3 }
+  ];
+  const fetchMock = bootstrapFetchMock([
+    { id: 5, web_name: 'Saka', element_type: 3, now_cost: 100, form: '5.0', ep_next: '5.0', status: 'a' }
+  ]);
+  const dynamoMock = installDynamoMock(dynamoRouter({
+    picksByGw: { '2026/27#728477#5': picks },
+    // Same chip appearing on more than one row (e.g. a re-synced row) should still
+    // dedupe to a single entry -- 'wildcard' repeated plus '3xc' once should give
+    // exactly 2 distinct chips back, not 3.
+    chipsByEntry: { '2026/27#728477': ['wildcard', 'wildcard', '3xc'] }
+  }));
+
+  try {
+    const response = await handleSquadAdvisor({ entry_id: '728477', gw: '5' }, CORS);
+    const body = JSON.parse(response.body);
+    assert.strictEqual(body.used_chips.length, 2, 'Should dedupe the repeated wildcard entry');
+    assert.ok(body.used_chips.includes('wildcard'));
+    assert.ok(body.used_chips.includes('3xc'));
+  } finally {
+    fetchMock.restore();
+    dynamoMock.restore();
+  }
+});
+
+test('handleSquadAdvisor: used_chips fails open to an empty array if the chip-history query errors', async () => {
+  const picks = [
+    { player_id: 5, player_name: 'Saka', player_position: 3, squad_position: 5, player_team: 3 }
+  ];
+  const fetchMock = bootstrapFetchMock([
+    { id: 5, web_name: 'Saka', element_type: 3, now_cost: 100, form: '5.0', ep_next: '5.0', status: 'a' }
+  ]);
+  const dynamoMock = installDynamoMock((command) => {
+    const table = command.input.TableName;
+    const ctor = command.constructor.name;
+    if (table === 'seasons' && ctor === 'ScanCommand') return { Items: [SEASON_ROW] };
+    if (table === 'fpl_entry_picks' && ctor === 'QueryCommand') {
+      const key = command.input.ExpressionAttributeValues[':k'];
+      return { Items: key === '2026/27#728477#5' ? picks : [] };
+    }
+    if (table === 'fpl_entry_gameweek' && ctor === 'QueryCommand') {
+      const gw = command.input.ExpressionAttributeValues[':gw'];
+      if (gw !== undefined) return { Items: [] }; // bank query -- fine
+      throw new Error('DynamoDB unavailable'); // used-chips query -- simulate a failure
+    }
+    return undefined;
+  });
+
+  try {
+    const response = await handleSquadAdvisor({ entry_id: '728477', gw: '5' }, CORS);
+    assert.strictEqual(response.statusCode, 200, 'A failed chip-history query should never surface as a 500');
+    const body = JSON.parse(response.body);
+    assert.deepStrictEqual(body.used_chips, []);
   } finally {
     fetchMock.restore();
     dynamoMock.restore();
