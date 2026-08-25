@@ -98,24 +98,29 @@ const JERSEY_COLLAR_PATH = 'M38 1 Q50 10 62 1 L57 9 Q50 14 43 9 Z';
 // MOCK CONTENT -- GH #44 ("Advisor: suggest squad moves using league + global FPL
 // data"). Four categories, redesigned 2026-08-24 per direct feedback on the original
 // one-card-at-a-time layout ("not intuitive") into a short, scannable list -- see
-// AdvisorModal below. Squad Change is now REAL (see getSquadAdvisor/buildTransferMove
-// -- direct instruction scoped the first real pass to exactly this, sourced from the
-// full player pool, not just the manager's own bench). Captain Pick, Chip Watch, and
-// Differential Pick are still this hand-written placeholder content -- AdvisorModal
-// marks them `preview: true` so nobody mistakes them for real advice now that Squad
-// Change genuinely is. Differential is scoped to "top 100 overall FPL ranks" per direct
-// instruction, not our own league's ownership (which we DO already compute for GenBI,
-// via computeOwnershipAggregates -- deliberately not reused here, since FPL exposes no
-// top-100-overall ownership feed, so this stays hand-written either way for now).
+// AdvisorModal below. Two of the four are now REAL: Squad Change (getSquadAdvisor/
+// buildTransferMove, sourced from the full player pool, not just the manager's own
+// bench) and Chip Watch (getSquadAdvisor/buildChipMove -- task #218's ranked
+// comparison across all 4 timing chips, replacing what used to always default to
+// Bench Boost with a hand-written reason). Captain Pick and Differential Pick are
+// still this hand-written placeholder content -- AdvisorModal marks them `preview:
+// true` so nobody mistakes them for real advice. Differential is scoped to "top 100
+// overall FPL ranks" per direct instruction, not our own league's ownership (which we
+// DO already compute for GenBI, via computeOwnershipAggregates -- deliberately not
+// reused here, since FPL exposes no top-100-overall ownership feed, so this stays
+// hand-written either way for now).
 // Uses a real current player's name (not a generic placeholder like "Low-owned
-// Midfielder") for Captain Pick/Chip Watch/Differential Pick's `name` field, per direct
-// feedback that a fake-sounding placeholder read as confusing rather than obviously
+// Midfielder") for Captain Pick/Differential Pick's `name` field, per direct feedback
+// that a fake-sounding placeholder read as confusing rather than obviously
 // illustrative -- a user asked "who is the low owned midfielder?" expecting a real
 // answer. The stat attached to it (e.g. "4% owned, top 100") is still illustrative, not
-// computed -- the `preview: true` tag + subtitle are what actually communicate that,
-// not the name itself.
-// The 'transfer' entry below is kept only as the source for the dev-only
-// /__advisor-preview page (see mockTransferMove), which has no real entryId to query.
+// computed -- the `preview: true` tag is what actually communicates that, not the name
+// itself.
+// The 'transfer' and 'chip' entries below are kept only as the source for the dev-only
+// /__advisor-preview page (see mockTransferMove/mockChipMove), which has no real
+// entryId to query. The 'chip' entry's own reason text is the original hand-written
+// version (including the since-fixed "Jordan Pickford" line) -- left as-is since it's
+// dev-preview-only now, never shown to a real manager.
 const MOCK_ADVISOR = {
   moves: [
     {
@@ -448,16 +453,17 @@ function SparkleIcon({ size = 20 }) {
 
 // One move's actual content -- kept separate from the stepper chrome below so adding a
 // new `kind` later (e.g. "chip") only means adding a case here, not touching navigation.
-// The transfer move now has two extra states a mock move never had: `loading` (still
-// waiting on getSquadAdvisor) and `noSuggestion` (the real backend came back with
-// found: false -- e.g. no affordable upgrade, or no picks data yet) -- both render as
-// plain text instead of the OUT/IN boxes, which only make sense once there's an actual
-// pair of players to show.
+// `loading` (still waiting on getSquadAdvisor) is checked first regardless of kind --
+// both the transfer move and the chip move (buildChipMove's null-response case) can be
+// in this state. `noSuggestion` (the real backend came back with found: false -- e.g.
+// no affordable upgrade, or no picks data yet) is transfer-only and renders nothing
+// instead of the OUT/IN boxes, which only make sense once there's an actual pair of
+// players to show.
 function AdvisorMoveBody({ move }) {
+  if (move.loading) {
+    return <p className="squad-advisor-transfer-name">Fetching a live suggestion&hellip;</p>;
+  }
   if (move.kind === 'transfer') {
-    if (move.loading) {
-      return <p className="squad-advisor-transfer-name">Fetching a live suggestion&hellip;</p>;
-    }
     if (move.noSuggestion) {
       return null;
     }
@@ -483,29 +489,17 @@ function AdvisorMoveBody({ move }) {
 // card next to it is real (buildTransferMove below). Filters the mock transfer entry
 // back out since a real one takes its place as moves[0] once fetched/loaded.
 //
-// `usedChips` (real data, from the /manager-squad/advisor response's `used_chips`)
-// overrides the Chip Watch row specifically -- added after direct feedback that the
-// mock content is identical for every manager, and a concrete case where that's
-// actively wrong, not just generic: a manager who's already played Bench Boost this
-// season would otherwise see it "recommended" again, which isn't illustrative, it's
-// impossible (FPL doesn't let you replay a used chip). Captain Pick and Differential
-// Pick stay fully generic -- there's no equally cheap, equally certain check for those
-// (whether a captain suggestion is "wrong" depends on projections, not a fact already
-// on record the way chip usage is).
-function mockPreviewMoves(usedChips = []) {
+// Captain Pick and Differential Pick are still MOCK_ADVISOR's fully hand-written
+// content -- there's no equally cheap, equally certain check for those the way chip
+// usage and a manager's own bench/starters are (whether a captain suggestion is
+// "wrong" depends on projections, not a fact already on record). Chip Watch is
+// filtered OUT here -- it's built for real by buildChipMove below, same treatment as
+// Squad Change, ever since evaluateChipOptions (task #218) replaced the single
+// always-Bench-Boost mock with a real ranked comparison across all 4 timing chips.
+function mockPreviewMoves() {
   return MOCK_ADVISOR.moves
-    .filter((m) => m.kind !== 'transfer')
-    .map((m) => {
-      if (m.kind === 'chip' && usedChips.includes(m.chipKey)) {
-        return {
-          ...m,
-          preview: true,
-          teaser: 'Already used',
-          reason: `You've already played ${m.name} this season, so this specific suggestion no longer applies. Picking the best of your remaining chips isn't wired up yet -- for now this card only checks whether the illustrative pick above is still available to you.`
-        };
-      }
-      return { ...m, preview: true };
-    });
+    .filter((m) => m.kind !== 'transfer' && m.kind !== 'chip')
+    .map((m) => ({ ...m, preview: true }));
 }
 
 // The dev-only /__advisor-preview page (isMockPreview) has no real entryId to query --
@@ -514,6 +508,68 @@ function mockPreviewMoves(usedChips = []) {
 function mockTransferMove() {
   const mock = MOCK_ADVISOR.moves.find((m) => m.kind === 'transfer');
   return { ...mock, preview: true };
+}
+
+// Same idea as mockTransferMove, for the dev-only preview page's Chip Watch row.
+function mockChipMove() {
+  const mock = MOCK_ADVISOR.moves.find((m) => m.kind === 'chip');
+  return { ...mock, preview: true };
+}
+
+// Builds the real Chip Watch row from /manager-squad/advisor's `chip_recommendation`
+// (task #218) -- a ranked comparison across all 4 timing chips (Bench Boost, Triple
+// Captain, Free Hit, Wildcard) the manager hasn't already played, replacing the old
+// behavior of always defaulting to Bench Boost regardless of which chip's signal was
+// actually strongest. Not tagged `preview: true` -- same reasoning as Squad Change:
+// every value shown is computed from this manager's real squad/fixtures, not
+// hand-written. The one honest limitation left (nothing to hide, just worth knowing)
+// is that Assistant Manager is never considered, and none of the four heuristic
+// "worth it" bars are tuned against real outcome data yet -- see DATA_MODEL.md.
+//
+// Called only AFTER the getSquadAdvisor fetch resolves (the `loading` state is handled
+// separately by resolvedChipMove below, same split as the transfer move) -- so a falsy
+// `chipRecommendation` here specifically means the response came back without that
+// field at all, not "still waiting". That happens if the deployed backend Lambda
+// predates task #218 (old response shape) or the field genuinely failed to serialize --
+// either way it's an honest "couldn't load" state, not silently pretending every chip's
+// been used.
+function buildChipMove(chipRecommendation) {
+  if (!chipRecommendation) {
+    return {
+      kind: 'chip',
+      title: 'Chip Watch',
+      teaser: "Couldn't load",
+      name: "Couldn't load chip recommendations",
+      reason: "Chip Watch's live recommendation isn't available right now. Try again in a moment, or refresh if this persists."
+    };
+  }
+  const { best, chips } = chipRecommendation;
+  if (best) {
+    return {
+      kind: 'chip',
+      title: 'Chip Watch',
+      chipKey: best.chip,
+      teaser: CHIP_NAMES[best.chip] || best.chip,
+      name: CHIP_NAMES[best.chip] || best.chip,
+      reason: best.reason
+    };
+  }
+  if (!chips || chips.length === 0) {
+    return {
+      kind: 'chip',
+      title: 'Chip Watch',
+      teaser: 'All chips used',
+      name: 'All chips already used',
+      reason: "You've already played every chip this season -- nothing left to consider here."
+    };
+  }
+  return {
+    kind: 'chip',
+    title: 'Chip Watch',
+    teaser: 'Hold for now',
+    name: 'No standout play this week',
+    reason: "None of your available chips look like a clear play this week -- worth holding onto all of them for now."
+  };
 }
 
 // FPL's own single-letter availability codes don't appear here -- getSquadAdvisor's
@@ -577,39 +633,50 @@ function buildTransferMove(transfer) {
 // toggles) -- keeps the modal from growing tall with everything open at once, and
 // matches "grab your attention, click each to get more info" -- one focus at a time.
 //
-// Squad Change is real (GH #44's first non-mock piece, fetched live from
-// getSquadAdvisor); Captain Pick/Chip Watch/Differential Pick are still
-// MOCK_ADVISOR's hand-written content, each tagged `preview: true` in its row.
+// Squad Change and Chip Watch are both real now (fetched live from getSquadAdvisor --
+// Squad Change was GH #44's first non-mock piece, Chip Watch followed via task #218's
+// ranked chip comparison). Captain Pick/Differential Pick are still MOCK_ADVISOR's
+// hand-written content, tagged `preview: true` in their rows.
 function AdvisorModal({ onClose, entryId, gw, isMockPreview }) {
   const [expanded, setExpanded] = useState(null);
   const [transferMove, setTransferMove] = useState(isMockPreview ? mockTransferMove() : null);
-  const [transferError, setTransferError] = useState(false);
-  // Chips this manager has actually played this season -- real data (used_chips on the
-  // getSquadAdvisor response), used only to keep the still-mock Chip Watch row from
-  // recommending something provably already spent. Defaults to none-used, matching
-  // both the dev preview page (no real entryId to check) and the loading window before
-  // the real response arrives -- worst case it briefly shows the same default content
-  // it always used to, never a false "already used" claim.
-  const [usedChips, setUsedChips] = useState([]);
+  const [fetchError, setFetchError] = useState(false);
+  // Chip Watch's real "which chip should you be considering" row -- built (via
+  // buildChipMove, not stored raw) the same way transferMove is: once getSquadAdvisor
+  // resolves, this always holds a COMPLETE row object, never partial data, so the
+  // `loading` state below is purely "haven't heard back yet" and can never be confused
+  // with "heard back, and the response just didn't include chip_recommendation" (that
+  // case is buildChipMove's own "Couldn't load" fallback, handled once the real data --
+  // or lack of it -- is in hand).
+  const [chipMove, setChipMove] = useState(isMockPreview ? mockChipMove() : null);
 
   useEffect(() => {
     if (isMockPreview) return;
     getSquadAdvisor(entryId, gw)
       .then((data) => {
         setTransferMove(buildTransferMove(data.transfer));
-        setUsedChips(data.used_chips || []);
+        setChipMove(buildChipMove(data.chip_recommendation));
       })
       .catch((err) => {
         console.error('getSquadAdvisor failed:', err.message);
-        setTransferError(true);
+        setFetchError(true);
       });
   }, [entryId, gw, isMockPreview]);
 
-  const resolvedTransferMove = transferError
+  const resolvedTransferMove = fetchError
     ? { kind: 'transfer', title: 'Squad Change', teaser: "Couldn't load", delta: null, noSuggestion: true, reason: "Couldn't load a transfer suggestion right now. Try again in a moment." }
     : (transferMove || { kind: 'transfer', title: 'Squad Change', teaser: 'Loading…', delta: null, loading: true });
 
-  const moves = [resolvedTransferMove, ...mockPreviewMoves(usedChips)];
+  const resolvedChipMove = fetchError
+    ? { kind: 'chip', title: 'Chip Watch', teaser: "Couldn't load", name: "Couldn't load chip recommendations", reason: "Chip Watch's live recommendation isn't available right now. Try again in a moment." }
+    : (chipMove || { kind: 'chip', title: 'Chip Watch', teaser: 'Loading…', name: 'Chip Watch', reason: null, loading: true });
+  const previewMoves = mockPreviewMoves();
+  const captainMove = previewMoves.find((m) => m.kind === 'captain');
+  const differentialMove = previewMoves.find((m) => m.kind === 'differential');
+  // Fixed order -- Squad Change, Captain Pick, Chip Watch, Differential Pick --
+  // matches MOCK_ADVISOR's original ordering rather than however mockPreviewMoves
+  // happens to return its (now chip-less) subset.
+  const moves = [resolvedTransferMove, captainMove, resolvedChipMove, differentialMove];
 
   return (
     <div className="squad-help-overlay" onClick={onClose}>

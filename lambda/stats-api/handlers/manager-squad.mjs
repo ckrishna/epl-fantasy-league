@@ -528,7 +528,21 @@ async function getFullPlayerPool() {
         // primary suggestion signal (see suggestTransfer) precisely because it's
         // forward-looking, unlike `form` which is a backward-looking rolling average.
         ep_next: el.ep_next,
-        status: el.status || 'a'
+        status: el.status || 'a',
+        // Underlying-performance signals (task #207) -- ict_index is FPL's own blended
+        // Influence/Creativity/Threat season total; expected_goal_involvements_per_90
+        // is xG+xA normalized per 90 minutes (so a part-time player with a genuinely
+        // high underlying rate isn't penalized just for fewer minutes than a nailed
+        // starter, the way a raw season total would be). Both used as a secondary
+        // signal in suggestTransfer's candidate ranking, alongside ep_next/form -- form
+        // and ep_next can both be noisy over a short run, and these two catch a player
+        // whose underlying numbers say "this form dip won't last" (or vice versa, a
+        // player whose points have been lucky rather than earned). Neither field is
+        // guaranteed present for every element (goalkeepers in particular often have no
+        // meaningful xGI), so downstream code treats a missing/unparseable value as 0,
+        // same fallback convention as every other stat in this pool.
+        ict_index: el.ict_index,
+        xgi_per_90: el.expected_goal_involvements_per_90
       });
     }
     return pool;
@@ -591,6 +605,309 @@ async function getUsedChips(season, entryId) {
   }
 }
 
+// ---- Fixture-window helpers (task #209/#210) ----
+// Both pure -- take an already-fetched fixtures array (handleSquadAdvisor fetches
+// getSeasonFixtures ONCE and passes the same array to both, rather than each doing
+// its own live-DB fetch -- two independent Scans of fpl_fixture_data per request
+// would be wasteful, same "don't double-fetch" reasoning as genbi.mjs's own
+// bootstrap-static dedupe). Neither throws -- an empty/malformed fixtures array
+// (e.g. getSeasonFixtures itself failed open to []) just produces an empty Map/[]
+// result, same fail-open convention as the rest of this file.
+
+// Average fixture difficulty per team across gameweeks [fromGw, fromGw+numGws-1] --
+// feeds suggestTransfer's candidate ranking (task #209) so a player behind a
+// genuinely easy or hard multi-gameweek run is weighted accordingly, not just their
+// single next fixture (which ep_next already leans on). A team with no fixtures
+// anywhere in the window (a blank) is simply absent from the returned Map, which
+// suggestTransfer's fixtureRunBonus reads as "no adjustment" rather than guessing.
+export function getFixtureRunMap(fixtures, fromGw, numGws = 4) {
+  const toGw = fromGw + numGws - 1;
+  const totals = new Map(); // team_id -> { sum, count }
+  for (const f of fixtures || []) {
+    if (f.event < fromGw || f.event > toGw) continue;
+    const add = (teamId, difficulty) => {
+      if (typeof difficulty !== 'number') return;
+      const entry = totals.get(teamId) || { sum: 0, count: 0 };
+      entry.sum += difficulty;
+      entry.count += 1;
+      totals.set(teamId, entry);
+    };
+    add(f.team_h, f.team_h_difficulty);
+    add(f.team_a, f.team_a_difficulty);
+  }
+  const result = new Map();
+  for (const [teamId, { sum, count }] of totals) {
+    if (count > 0) result.set(teamId, sum / count);
+  }
+  return result;
+}
+
+// Blank (0 fixtures) and double (2+ fixtures) gameweeks per team across
+// [fromGw, fromGw+numGws-1] -- the single biggest missing input for real chip-
+// timing advice (Bench Boost/Triple Captain want a double, Free Hit wants a blank).
+// Exposed on the /manager-squad/advisor response now (as `upcoming_chip_windows`)
+// even though Chip Watch itself doesn't consume it yet (still MOCK_ADVISOR's
+// hand-written content -- see task #214 for wiring this in), so the data's already
+// there once that wiring happens instead of a second round-trip later.
+// `allTeams` is derived from the WHOLE fixtures array, not just the window -- a
+// team could plausibly have zero fixtures anywhere inside a short window near
+// season end, and deriving the roster only from windowed fixtures would silently
+// drop such a team from consideration instead of correctly flagging it as blank
+// for every gameweek in the window.
+export function getUpcomingChipWindows(fixtures, fromGw, numGws = 5) {
+  const toGw = fromGw + numGws - 1;
+  const allTeams = new Set();
+  for (const f of fixtures || []) {
+    allTeams.add(f.team_h);
+    allTeams.add(f.team_a);
+  }
+
+  const countsByGw = new Map(); // gw -> Map<team_id, fixture count>
+  for (const f of fixtures || []) {
+    if (f.event < fromGw || f.event > toGw) continue;
+    const gwCounts = countsByGw.get(f.event) || new Map();
+    gwCounts.set(f.team_h, (gwCounts.get(f.team_h) || 0) + 1);
+    gwCounts.set(f.team_a, (gwCounts.get(f.team_a) || 0) + 1);
+    countsByGw.set(f.event, gwCounts);
+  }
+
+  const windows = [];
+  for (let gw = fromGw; gw <= toGw; gw++) {
+    const gwCounts = countsByGw.get(gw) || new Map();
+    const blankTeams = [...allTeams].filter((t) => !gwCounts.has(t));
+    const doubleTeams = [...gwCounts.entries()].filter(([, count]) => count >= 2).map(([t]) => t);
+    if (blankTeams.length > 0 || doubleTeams.length > 0) {
+      windows.push({ gameweek: gw, blank_teams: blankTeams, double_teams: doubleTeams });
+    }
+  }
+  return windows;
+}
+
+// Real Bench Boost evaluation, added 2026-08-24 after a user caught Chip Watch naming
+// a specific real player ("Jordan Pickford") who wasn't even on their actual bench --
+// the ORIGINAL sin here wasn't "this chip is mock", it was that the mock text made a
+// checkable, false claim about a specific manager's specific squad. This replaces that
+// hand-written reason with the manager's ACTUAL bench (from `picks`, squad_position >
+// 11 -- mirrors fpl-data-ingester's own `pick.position > 11` bench derivation), each
+// player's live availability (poolMap), and whether their team even has a fixture THIS
+// gameweek and how tough it is (fixtureThisGwMap -- callers pass
+// `getFixtureRunMap(seasonFixtures, gw, 1)`, a single-gameweek window). Pure, no I/O.
+//
+// Still leaves one thing mock: WHICH chip to highlight is hardcoded to Bench Boost
+// (Wildcard/Free Hit/Triple Captain each need a completely different signal this
+// function doesn't compute) -- that's why the row stays tagged `preview: true` on the
+// frontend even once this wires in, not because the bench data itself is fake anymore.
+export function evaluateBenchBoost(picks, poolMap, fixtureThisGwMap = new Map()) {
+  const bench = (picks || []).filter((p) => p.squad_position > 11);
+  if (bench.length === 0) return null;
+
+  const enriched = bench.map((p) => {
+    const live = poolMap.get(p.player_id);
+    const available = !!live && live.status === 'a';
+    const difficulty = fixtureThisGwMap.get(p.player_team);
+    const playing = difficulty !== undefined;
+    const favorableFixture = playing && difficulty <= 3;
+    return { player_id: p.player_id, name: p.player_name, available, playing, favorable_fixture: favorableFixture };
+  });
+
+  const contributing = enriched.filter((p) => p.available && p.playing);
+  const benchTotal = enriched.length;
+  const contributingCount = contributing.length;
+  // "Worth it" is deliberately a high bar -- Bench Boost only pays off if MOST of the
+  // bench is both available and actually playing, not just one useful sub among four
+  // non-factors. 0.75 means "3 of 4" for a normal bench, without hardcoding the
+  // literal number 4 (a manager could in principle have a different bench size if the
+  // data's ever incomplete).
+  const recommended = benchTotal > 0 && contributingCount / benchTotal >= 0.75;
+
+  const names = (list) => list.map((p) => p.name).join(', ');
+  let reason;
+  if (contributingCount === 0) {
+    reason = `None of your bench (${names(enriched)}) look set to feature this week -- hold off on Bench Boost for now.`;
+  } else if (recommended) {
+    const favorable = contributing.filter((p) => p.favorable_fixture);
+    const fixtureNote = favorable.length > 0 ? ' with playable fixtures' : '';
+    reason = `${contributingCount} of your ${benchTotal} bench players (${names(contributing)}) look set to feature this week${fixtureNote} -- a genuine option for Bench Boost, or worth saving for a double gameweek if one's coming up.`;
+  } else {
+    reason = `Only ${contributingCount} of your ${benchTotal} bench players (${names(contributing)}) look set to contribute this week -- probably not enough of your bench in play for Bench Boost to pay off right now.`;
+  }
+
+  return { recommended, contributing_count: contributingCount, bench_total: benchTotal, bench: enriched, reason };
+}
+
+// ---- Shared candidate-scoring formula (tasks #207-209) ----
+// Originally suggestTransfer's own private `score` closure; pulled out to module scope
+// once evaluateTripleCaptain (below) needed the exact same "how good is this player
+// right now" formula for a completely different purpose (ranking the manager's OWN
+// starters for the armband, not ranking pool-wide transfer-in candidates) -- keeping
+// one definition means the two can never quietly drift apart.
+
+// xgi_per_90 (xG+xA per 90 minutes) and ict_index (FPL's own blended Influence/
+// Creativity/Threat season total) both catch a player whose recent output has been
+// earned (or lucky) beyond what raw form/ep_next alone show. ict_index is a season-
+// cumulative counting stat with a much bigger natural range than ep_next/form, so it's
+// divided down heavily -- meant to meaningfully separate a genuine standout from a
+// placeholder, not dominate the gameweek-scale signals it's added alongside. Missing/
+// unparseable values (common for goalkeepers, who rarely have a meaningful xGI) fall
+// back to 0, same convention as every other stat here.
+function underlyingQualityBonus(el) {
+  const xgi90 = parseFloat(el.xgi_per_90) || 0;
+  const ict = parseFloat(el.ict_index) || 0;
+  return xgi90 * 6 + ict / 40;
+}
+
+// Deliberately small and subtractive (a tie-breaker, not a primary signal): a
+// genuinely better, heavily-owned player should still usually win over a marginal
+// differential, but when two candidates are otherwise close, this favors the
+// lower-owned one.
+function differentialBonus(el) {
+  return -((parseFloat(el.selected_by_percent) || 0) / 20);
+}
+
+// FPL's own difficulty scale runs 1 (easiest) to 5 (hardest), with 3 as the natural
+// midpoint, so this reads as a bonus for a below-average (easier) run and a penalty
+// for an above-average (harder) one, rather than an unsigned raw difficulty number
+// that would always subtract. A team absent from fixtureRunMap (no fixtures in the
+// window, i.e. a blank) contributes no adjustment at all rather than being guessed at.
+function fixtureRunBonus(el, fixtureRunMap) {
+  if (!fixtureRunMap.has(el.team)) return 0;
+  return (3 - fixtureRunMap.get(el.team)) * 1.5;
+}
+
+// ep_next (forward-looking) weighted above form (backward-looking) rather than either
+// alone -- ep_next is FPL's own next-gameweek projection, the more directly relevant
+// number for "who should I bring in/captain NOW", but it can be a thin, noisy single-
+// gameweek estimate early in a run of fixtures; blending in current form as a
+// secondary signal favors an in-form player over a pure one-gameweek FPL projection
+// when the two disagree, without ignoring the projection entirely. Underlying quality,
+// ownership, and fixture-run are all secondary bonuses layered on top -- none of them
+// can flip a large ep_next/form gap on their own.
+export function scorePlayer(el, fixtureRunMap = new Map()) {
+  return (parseFloat(el.ep_next) || 0) * 2 + (parseFloat(el.form) || 0)
+    + underlyingQualityBonus(el) + differentialBonus(el) + fixtureRunBonus(el, fixtureRunMap);
+}
+
+// Triple Captain evaluation, added 2026-08-24 (task #218) as part of "which chip
+// should you actually be considering" -- reuses scorePlayer (the exact formula
+// suggestTransfer uses to rank transfer-in candidates) applied to the manager's own
+// STARTING XI (squad_position <= 11 -- captaining a bench player who might not even
+// play makes no sense) rather than the wider pool. Doesn't require the suggested
+// player to already be wearing the armband -- this answers "who's your best captain
+// OPTION this week", which the manager is always free to switch to. Pure, no I/O.
+export function evaluateTripleCaptain(picks, poolMap, fixtureRunMap = new Map()) {
+  const starters = (picks || []).filter((p) => p.squad_position <= 11);
+  let best = null;
+  let bestScore = -Infinity;
+  for (const p of starters) {
+    const live = poolMap.get(p.player_id);
+    if (!live || live.status !== 'a') continue; // can't usefully captain someone not playing
+    const s = scorePlayer(live, fixtureRunMap);
+    if (s > bestScore) {
+      bestScore = s;
+      best = { player_id: p.player_id, name: p.player_name };
+    }
+  }
+  if (!best) return null;
+  // Heuristic cutoff, same spirit as evaluateBenchBoost's 75% bar -- a genuinely
+  // strong Triple Captain week should clear a meaningfully high combined score, not
+  // just "the least bad of your 11". Not yet tuned against real outcome data (no
+  // season history to calibrate against), so treat this as a starting estimate.
+  const recommended = bestScore >= 20;
+  const reason = recommended
+    ? `${best.name} is your standout armband option this week -- strong projected returns and a favorable matchup make Triple Captain worth considering.`
+    : `${best.name} is your best captain option this week, but nothing on your squad looks strong enough right now to justify burning Triple Captain on it.`;
+  return { recommended, player: best, score: Math.round(bestScore * 10) / 10, reason };
+}
+
+// Free Hit evaluation (task #218) -- Free Hit exists to cover a bad gameweek (a blank,
+// or several key players out at once), so the signal here is simply "how much of your
+// STARTING XI has no fixture at all this week". Reuses the same single-gameweek
+// fixtureThisGwMap evaluateBenchBoost's caller already builds (getFixtureRunMap(...,
+// gw, 1)) rather than a separate scan. Pure, no I/O.
+export function evaluateFreeHit(picks, fixtureThisGwMap = new Map()) {
+  const starters = (picks || []).filter((p) => p.squad_position <= 11);
+  if (starters.length === 0) return null;
+  const blank = starters.filter((p) => !fixtureThisGwMap.has(p.player_team));
+  const blankCount = blank.length;
+  const total = starters.length;
+  // A third or more of the starting XI blanking is a real problem worth covering --
+  // below that, the manager likely has enough bench cover to autosub through it
+  // without burning the chip. Heuristic, not tuned against real outcomes yet.
+  const recommended = total > 0 && blankCount / total >= 0.35;
+  const names = blank.map((p) => p.player_name).join(', ');
+  const reason = blankCount === 0
+    ? 'Your starting XI all have fixtures this week -- no reason to burn Free Hit right now.'
+    : recommended
+      ? `${blankCount} of your ${total} starters (${names}) have no fixture this week -- a real case for Free Hit to fill the gaps just for this gameweek.`
+      : `${blankCount} of your ${total} starters (${names}) blank this week, but that's probably coverable with your bench rather than needing Free Hit.`;
+  return { recommended, blank_count: blankCount, starters_total: total, reason };
+}
+
+// Wildcard evaluation (task #218) -- deliberately the weakest signal of the four:
+// Wildcard's real value is a full squad rebuild, a judgment call (fixture swings,
+// price trajectory, transfer targets) far beyond what's captured here. This only
+// checks a cheap, objective proxy -- how much of the CURRENT squad is actively a
+// problem right now (unavailable, or ice-cold form) -- as a "your squad might be due
+// for an overhaul" nudge, not a genuine wildcard-timing recommendation. Pure, no I/O.
+export function evaluateWildcard(picks, poolMap) {
+  if (!picks || picks.length === 0) return null;
+  const troubled = picks.filter((p) => {
+    const live = poolMap.get(p.player_id);
+    if (!live) return false; // pool/picks mismatch -- not a real signal either way
+    const coldForm = (parseFloat(live.form) || 0) < 2.0;
+    return live.status !== 'a' || coldForm;
+  });
+  const total = picks.length;
+  const troubledCount = troubled.length;
+  const recommended = total > 0 && troubledCount / total >= 0.27; // roughly 4 of 15
+  const names = troubled.map((p) => p.player_name).join(', ');
+  const reason = troubledCount === 0
+    ? 'Your squad looks healthy right now -- no obvious case for a Wildcard rebuild.'
+    : recommended
+      ? `${troubledCount} of your ${total} players (${names}) are either unavailable or out of form -- worth considering a Wildcard, though this is a rough squad-health check, not a full rebuild plan.`
+      : `${troubledCount} of your ${total} players (${names}) are unavailable or out of form -- not quite enough on its own to justify a Wildcard.`;
+  return { recommended, troubled_count: troubledCount, squad_total: total, reason };
+}
+
+// "Which chip should you actually be considering" (task #218) -- combines all four
+// per-chip evaluations above into one ranked comparison, replacing Chip Watch's old
+// behavior of always defaulting to Bench Boost regardless of which chip's signal is
+// actually strongest this week. Each chip's raw evaluation uses a different internal
+// scale (a 0-1 bench-contribution ratio vs. an unbounded captain score vs. a blank-
+// starter ratio), so `signal` here normalizes each into a comparable 0-1 value purely
+// for RANKING which chip to lead with -- each entry's own `recommended` flag/`reason`
+// still comes straight from its dedicated evaluate* function, untouched.
+//
+// Only chips NOT already in usedChips are considered -- no point ranking a chip the
+// manager can't play again. Assistant Manager is never evaluated -- it's a "whose
+// tactics to copy" choice, not a "when" timing decision the other four share, so it
+// doesn't fit this comparison at all. Pure, no I/O.
+export function evaluateChipOptions(picks, poolMap, fixtureThisGwMap, fixtureRunMap, usedChips = []) {
+  const used = new Set(usedChips);
+  const entries = [];
+
+  if (!used.has('bboost')) {
+    const r = evaluateBenchBoost(picks, poolMap, fixtureThisGwMap);
+    if (r) entries.push({ chip: 'bboost', signal: r.bench_total > 0 ? r.contributing_count / r.bench_total : 0, recommended: r.recommended, reason: r.reason, detail: r });
+  }
+  if (!used.has('3xc')) {
+    const r = evaluateTripleCaptain(picks, poolMap, fixtureRunMap);
+    if (r) entries.push({ chip: '3xc', signal: Math.max(0, Math.min(1, r.score / 30)), recommended: r.recommended, reason: r.reason, detail: r });
+  }
+  if (!used.has('freehit')) {
+    const r = evaluateFreeHit(picks, fixtureThisGwMap);
+    if (r) entries.push({ chip: 'freehit', signal: r.starters_total > 0 ? r.blank_count / r.starters_total : 0, recommended: r.recommended, reason: r.reason, detail: r });
+  }
+  if (!used.has('wildcard')) {
+    const r = evaluateWildcard(picks, poolMap);
+    if (r) entries.push({ chip: 'wildcard', signal: r.squad_total > 0 ? r.troubled_count / r.squad_total : 0, recommended: r.recommended, reason: r.reason, detail: r });
+  }
+
+  entries.sort((a, b) => b.signal - a.signal);
+  const best = entries.find((e) => e.recommended) || null;
+  return { chips: entries, best };
+}
+
 // FPL's own single-letter availability code -> a short, user-facing reason clause.
 // Mirrors AVAILABILITY_STATUS_LABEL in ManagerSquad.jsx (kept as a separate constant
 // here rather than shared/imported -- this is backend response text, that one's
@@ -612,7 +929,12 @@ const AVAILABILITY_REASON = {
 // budget, and returns either a real suggestion or a clear "why not" reason -- never
 // throws, never returns something silently wrong for the frontend to render as if it
 // were a real number.
-export function suggestTransfer(picks, poolMap, bankTenths) {
+//
+// fixtureRunMap (task #209, added 2026-08-24) -- optional Map<team_id, avgDifficulty>
+// from getFixtureRunMap, defaulting to an empty Map so every existing caller/test that
+// doesn't pass one keeps working exactly as before (a missing team_id in the map reads
+// as "no adjustment", same as a team with no upcoming fixtures in the window).
+export function suggestTransfer(picks, poolMap, bankTenths, fixtureRunMap = new Map()) {
   if (!picks || picks.length === 0 || !poolMap || poolMap.size === 0) {
     return { found: false, reason: 'no_data' };
   }
@@ -665,14 +987,12 @@ export function suggestTransfer(picks, poolMap, bankTenths) {
     };
   }
 
-  // ep_next (forward-looking) weighted above form (backward-looking) rather than
-  // either alone -- ep_next is FPL's own next-gameweek projection, the more directly
-  // relevant number for "who should I bring in NOW", but it can be a thin, noisy
-  // single-gameweek estimate early in a run of fixtures; blending in current form as a
-  // secondary signal favors an in-form player over a pure one-gameweek FPL projection
-  // when the two disagree, without ignoring the projection entirely.
-  const score = (el) => (parseFloat(el.ep_next) || 0) * 2 + (parseFloat(el.form) || 0);
-  candidates.sort((a, b) => score(b) - score(a));
+  // Ranking formula (tasks #207-209: underlying quality, differential nudge, fixture-
+  // run) lives in the shared scorePlayer() above evaluateTripleCaptain -- factored out
+  // once that function needed the identical "how good is this player right now"
+  // calculation for a different purpose (ranking the manager's own starters for the
+  // armband, not pool-wide transfer-in candidates).
+  candidates.sort((a, b) => scorePlayer(b, fixtureRunMap) - scorePlayer(a, fixtureRunMap));
   const inCandidate = candidates[0];
 
   const epOut = parseFloat(outCandidate.live.ep_next) || 0;
@@ -720,19 +1040,28 @@ export function suggestTransfer(picks, poolMap, bankTenths) {
 // needs, so folding them in would make every ordinary squad-view load pay for work
 // only the advisor modal actually uses.
 //
-// used_chips is fetched regardless of whether picks were found -- chip usage isn't
-// tied to a specific gameweek's picks the way the transfer suggestion is, so there's
-// no reason to gate it behind the same early return.
+// used_chips and upcoming_chip_windows are both fetched regardless of whether picks
+// were found -- neither is tied to a specific gameweek's squad the way the transfer
+// suggestion is (chip usage is per-manager but season-wide; the fixture calendar is
+// the same for every manager), so there's no reason to gate either behind the same
+// early return.
 export async function handleSquadAdvisor(queryParams, corsHeaders) {
   const entryId = parseInt(queryParams.entry_id, 10);
   if (!entryId) {
     return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'entry_id is required' }) };
   }
 
-  const season = await getCurrentSeason();
+  const { season, seasonId } = await getCurrentSeasonInfo();
   const requestedGw = queryParams.gw ? parseInt(queryParams.gw, 10) : await getActiveGameweek();
   const { gw, picks } = await resolvePicksForEntry(season, entryId, requestedGw);
-  const usedChips = await getUsedChips(season, entryId);
+  // Fetched once, shared by getFixtureRunMap/getUpcomingChipWindows below -- both used
+  // to independently call getSeasonFixtures themselves, which meant two full Scans of
+  // fpl_fixture_data per request for data that's identical either way.
+  const [usedChips, seasonFixtures] = await Promise.all([
+    getUsedChips(season, entryId),
+    getSeasonFixtures(seasonId)
+  ]);
+  const upcomingChipWindows = getUpcomingChipWindows(seasonFixtures, gw);
 
   if (!picks || picks.length === 0) {
     const seasonStarted = await hasSeasonStarted();
@@ -744,7 +1073,8 @@ export async function handleSquadAdvisor(queryParams, corsHeaders) {
         gameweek: gw,
         entry_id: entryId,
         transfer: { found: false, reason: seasonStarted ? 'no_data' : 'season_not_started' },
-        used_chips: usedChips
+        used_chips: usedChips,
+        upcoming_chip_windows: upcomingChipWindows
       })
     };
   }
@@ -753,12 +1083,23 @@ export async function handleSquadAdvisor(queryParams, corsHeaders) {
     getFullPlayerPool(),
     getBankTenths(season, entryId, gw)
   ]);
+  const fixtureRunMap = getFixtureRunMap(seasonFixtures, gw);
+  // Bench Boost/Free Hit are single-gameweek decisions, not a multi-gameweek run --
+  // reuses getFixtureRunMap with numGws=1 rather than a separate helper, since
+  // "average difficulty across N fixtures for this team" collapses to "this team's
+  // one fixture's difficulty" when N=1 (and a team absent from the map has no fixture
+  // this week at all -- exactly the blank signal Free Hit cares about).
+  const fixtureThisGwMap = getFixtureRunMap(seasonFixtures, gw, 1);
+  // Ranks all four timing chips (Bench Boost, Triple Captain, Free Hit, Wildcard)
+  // against each other and surfaces whichever one's signal is actually strongest this
+  // week, rather than Chip Watch always defaulting to Bench Boost regardless.
+  const chipRecommendation = evaluateChipOptions(picks, poolMap, fixtureThisGwMap, fixtureRunMap, usedChips);
 
-  const transfer = suggestTransfer(picks, poolMap, bankTenths);
+  const transfer = suggestTransfer(picks, poolMap, bankTenths, fixtureRunMap);
 
   return {
     statusCode: 200,
     headers: corsHeaders,
-    body: JSON.stringify({ season, gameweek: gw, entry_id: entryId, transfer, used_chips: usedChips })
+    body: JSON.stringify({ season, gameweek: gw, entry_id: entryId, transfer, used_chips: usedChips, upcoming_chip_windows: upcomingChipWindows, chip_recommendation: chipRecommendation })
   };
 }
