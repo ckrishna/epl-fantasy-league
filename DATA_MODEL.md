@@ -617,6 +617,35 @@ New `/trends` and `/trends/managers` endpoints in `stats-api`, backing a new "Tr
 
 ---
 
+## Manager Squad + Squad Advisor (GH #44)
+
+`/manager-squad` (`stats-api`, `handlers/manager-squad.mjs`) powers the "click a manager in Standings" pitch view -- current picks, form, next-two-fixtures, and live player availability. Not previously documented in this file; described briefly here because the Advisor endpoint below shares its picks-resolution logic. Picks are resolved via `resolvePicksForEntry(season, entryId, requestedGw)`, which walks backward through `fpl_entry_picks` from the active/requested gameweek until it finds a gameweek this manager actually has data for (a manager who joined mid-season, or a gap in ingestion, means the exact requested gameweek may have nothing stored).
+
+**`/manager-squad/advisor` (added 2026-08-24, tasks #196-202) -- the Advisor feature's first real, non-mock suggestion: a transfer.** GH #44 originally shipped as a hand-written mock preview (a pulsing sparkle button opening a modal with three illustrative "moves" -- transfer, captain, fixture-watch -- none backed by real data). Direct instruction scoped this pass to exactly one of the three: the transfer suggestion, sourced from the FULL ~700-player FPL pool rather than just the manager's own bench. Captain and fixture-run suggestions are still `MOCK_ADVISOR`'s hand-written content in `ManagerSquad.jsx`, now explicitly tagged "Preview" in the modal so they're not mistaken for the real suggestion next to them.
+
+**Algorithm (`suggestTransfer(picks, poolMap, bankTenths)` in `manager-squad.mjs` -- pure, no I/O, unit-tested directly against hand-built fixtures):**
+1. **Pick the OUT candidate.** Considers the manager's full 15, not just starters -- an unavailable bench player is just as worth flagging as a starter. Availability trumps form entirely: anyone not `status: 'a'` (doubtful/injured/suspended/unavailable) scores far below the worst possible form value, so an injured player is always flagged first even over a teammate with genuinely colder form. Among all-available players, lowest current form breaks the tie.
+2. **Find IN candidates.** Same `element_type` (position) as the OUT player, `status: 'a'`, not already owned, and affordable: `now_cost <= outNowCost + bankTenths`.
+3. **Rank candidates.** `ep_next * 2 + form` -- FPL's own forward-looking next-gameweek projection, weighted above the backward-looking form average without ignoring it (a single-gameweek `ep_next` can be a thin, noisy estimate early in a run of fixtures).
+4. Returns `{found: true, out, in, delta_pts, reason}`, or `{found: false, reason}` where `reason` is one of `no_data` (no picks at all, or every owned player_id is missing from the live pool -- a stale-data mismatch), `no_affordable_upgrade` (a real OUT candidate exists but nothing in the pool fits the budget), or `season_not_started`.
+
+**Data sources -- deliberately live, not read from already-ingested tables:**
+- **Full player pool** (`getFullPlayerPool()`) -- a live `bootstrap-static` fetch, the same endpoint `getAvailabilityMap()`/`hasSeasonStarted()` already hit elsewhere in this handler. Deliberately NOT read from the `players` DynamoDB table, which `fpl-bootstrap` only refreshes once a WEEK -- price/form/ownership/availability can all move daily (sometimes hourly near a deadline), and a suggestion built on week-old numbers is worse than not suggesting one. Fails open to an empty `Map` on any fetch error, which `suggestTransfer` reads as "nothing to suggest right now" rather than a 500.
+- **Bank** (`getBankTenths()`) -- queries `fpl_entry_gameweek.bank` for the resolved gameweek. Unit-conversion note: `fpl_entry_gameweek.bank`/`.value` are stored in WHOLE £m (`storeGameweekSummary` divides FPL's raw tenths by 10 before writing), the opposite convention from bootstrap-static's `now_cost` (tenths) -- converted back to tenths here (`Math.round(bank * 10)`, guarding against float noise like `1.5 * 10 === 14.999999999998`) so every price comparison in this file stays in one consistent unit. Fails open to `0` (no spare budget) on any error -- can only make a suggestion MORE conservative, never suggest something the manager genuinely can't afford.
+- **Picks** -- shares `resolvePicksForEntry()` with `/manager-squad` (factored out of `handleManagerSquad`'s own inline loop this pass, so both handlers' "walk back to the most recent gameweek with real data" logic can't quietly drift apart).
+
+**Route ordering:** `/manager-squad/advisor` is checked in `index.mjs` BEFORE the plain `/manager-squad` substring match -- `/manager-squad/advisor` also contains `/manager-squad` as a substring, same ordering trick already used for `/trends/managers` vs `/trends`. Without it, every advisor request would silently fall through to `handleManagerSquad` and get back the wrong response shape.
+
+**Known limitations:**
+- No elite-ownership/differential signal -- GH #43 (ownership-aware suggestions) is unstarted; ranking only weighs `ep_next`/`form`, not `selected_by_percent`.
+- Single suggestion only, not a full transfer plan -- doesn't account for a manager's actual remaining free transfers, the point cost of a second hit, or interactions between multiple simultaneous transfers.
+- No independent multi-gameweek fixture-run input -- `ep_next` implicitly bakes in FPL's own view of the immediate next fixture, but the algorithm doesn't weigh a longer run the way GenBI's own `getFixtureRun()` (see above) does.
+- Captain and fixture-run cards in the same modal are still the original hand-written mock content -- not a gap in the transfer algorithm itself, but worth flagging so nobody assumes the whole Advisor modal is real now.
+
+**Frontend wiring:** `getSquadAdvisor(entryId, gw)` (`src/api/client.js`) mirrors `getManagerSquad`'s convention of throwing on a non-OK response rather than silently returning fake data. `AdvisorModal` (`ManagerSquad.jsx`) fetches it on open and renders a `found: false` response as its own honest "nothing to suggest right now" card (with a reason-specific message) rather than treating it as an error. The dev-only `/__advisor-preview` route (`mockSquad` prop, no real `entryId` to query) skips the fetch entirely and falls back to `MOCK_ADVISOR`'s placeholder transfer instead, so that page still has something to render. `suggestTransfer`/`handleSquadAdvisor` are covered by `lambda/stats-api/tests/squad-advisor.test.mjs`.
+
+---
+
 ## Gap analysis (2026-07-29, via `scripts/find_gaps.py`)
 
 Ran a full scan of both league tables against the expected 11 managers × 38 gameweeks. Two distinct issues found:

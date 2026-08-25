@@ -67,22 +67,20 @@
      onto the legend row itself, see that comment). */
 }
 
-/* ---- Advisor entry point (GH #44 preview -- see MOCK_ADVISOR in ManagerSquad.jsx) ----
-   Centered on the legend row itself -- same height as "Preview FC"/"GW4", not floating
-   above the whole card -- sitting in the empty middle gap between the identity block
-   and the GW/points block (see .squad-legend's position:relative below, which anchors
-   this). Gold, not the app's usual green accent: this badge sits on the pitch's green
-   turf, and green-on-green was low-contrast and easy to miss entirely -- exactly the
+/* ---- Advisor entry point (GH #44 -- see MOCK_ADVISOR in ManagerSquad.jsx) ----
+   Sits inline next to the "?" help icon per direct feedback (previously absolutely
+   centered, floating over the whole legend row -- moved to the left, paired with help,
+   so the right column is free for the team/manager identity). Sized down from the
+   original 44px floating badge to sit comfortably next to the 20px help circle.
+   Gold, not the app's usual green accent: this badge sits on the pitch's green turf,
+   and green-on-green was low-contrast and easy to miss entirely -- exactly the
    opposite of "obvious to click." Fixed colors like the rest of this file (not theme
    tokens), since it always sits on the always-dark-green pitch regardless of app theme. */
 .squad-advisor-btn {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 5;
-  width: 44px;
-  height: 44px;
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: none;
   background: radial-gradient(circle at 35% 30%, rgba(255, 205, 60, 0.65), #241a06 72%);
@@ -104,7 +102,7 @@
    cycles rather than a continuous "notice me" throb. */
 .squad-advisor-btn-ring {
   position: absolute;
-  inset: -6px;
+  inset: -4px;
   border-radius: 50%;
   border: 2px solid rgba(255, 205, 60, 0.7);
   animation: squad-advisor-pulse 2s ease-out infinite;
@@ -143,32 +141,31 @@
   font-size: 12px;
   color: #ffffff;
   padding: 0 4px 2px;
-  /* Anchors .squad-advisor-btn's absolute centering above. */
-  position: relative;
 }
 
-/* Left column: help icon + team/manager name, grouped together so they occupy a
-   single grid cell (matching how they used to sit as the first two flex children). */
+/* Left column: help icon + Advisor sparkle, side by side -- per direct feedback, the
+   Advisor entry point moved here from its old floating/absolute position, paired
+   right next to help rather than centered over the whole row. */
 .squad-legend-left {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+}
+
+/* Right column: team/manager name -- moved here from the left per direct feedback, so
+   the two icon buttons and the identity text sit on opposite sides of the centered
+   points badge. Right-aligned so the text reads as anchored to the card's right edge,
+   not just left-aligned text that happens to sit in the right column. */
+.squad-legend-right {
+  min-width: 0;
+  text-align: right;
 }
 
 /* Truncates rather than wraps -- per the mock's own annotation ("truncate name if
    needed"), the name should give way to the centered points badge instead of pushing
    it off-center. */
 .squad-legend-identity {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Deliberately empty -- reserves room on the right for a center/right Advisor icon
-   (a separate, not-yet-merged feature branch) per direct instruction. Being the same
-   minmax(0, 1fr) width as the left column is also what keeps the points badge
-   mathematically centered in the row. */
-.squad-legend-advisor-slot {
   min-width: 0;
 }
 
@@ -186,6 +183,7 @@
   margin: 1px 0 0;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 5px;
   min-width: 0;
 }
@@ -348,54 +346,114 @@
   font-style: italic;
 }
 
-.squad-advisor-headline {
-  margin: 0 0 18px;
-  padding: 10px 12px;
-  background: var(--accent-soft);
-  border-left: 3px solid var(--accent);
-  border-radius: 6px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
+/* ---- Row list (redesigned 2026-08-24) ----
+   Replaces the earlier one-card-at-a-time pager (Move 1 of 3, prev/next, dots) --
+   direct feedback called that "not intuitive." Now a short, scannable list of
+   collapsed rows (icon + title + one-line teaser); clicking a row expands an inline
+   detail panel below it. Only one row is ever open at a time -- enforced by
+   AdvisorModal's own `expanded` state, not by anything in this CSS -- so the modal
+   never grows tall with every row's detail showing at once. */
+.squad-advisor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* One move card at a time (see AdvisorModal's stepper state) -- a bordered surface
-   distinct from the headline strip above it, so it reads as "the thing you're paging
-   through" rather than blending into the rest of the modal's text. */
-.squad-advisor-card {
-  background: var(--bg-surface-alt);
+.squad-advisor-row-wrap {
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 14px;
-  /* Fixed floor, not just enough-for-content -- without this, a short move (fixture
-     watch, no OUT/IN row) is visibly shorter than a transfer card, and the whole modal
-     bounces in height as you page through. Comfortably fits the tallest move's content
-     at this modal's max-width. */
-  min-height: 132px;
+  background: var(--bg-surface-alt);
+  overflow: hidden;
+  transition: border-color 0.15s;
 }
 
-.squad-advisor-card-header {
+.squad-advisor-row-wrap.open {
+  border-color: var(--accent);
+}
+
+.squad-advisor-row {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 10px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
 }
 
-.squad-advisor-card-rank {
-  font-size: 11px;
+/* Small circle badge -- matches the app's existing letter/2-letter badge language
+   (help "?", captain "C"/"V", chip codes) instead of a new icon set. See rowIcon() in
+   ManagerSquad.jsx for what each row shows. */
+.squad-advisor-row-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.squad-advisor-row-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Flags the 3 still-mock rows (Captain/Chip/Differential) right on the collapsed row,
+   not just inside the expanded detail -- so the honesty label is visible before a tap,
+   not after. Squad Change never gets this tag once real data loads. */
+.squad-advisor-row-preview-tag {
+  flex-shrink: 0;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.squad-advisor-row-teaser {
+  flex-shrink: 0;
+  max-width: 38%;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squad-advisor-row-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--text-muted);
 }
 
-.squad-advisor-section-title {
-  margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
+/* Indented to roughly align under the row's title (past the icon + gap), so the
+   detail content reads as "belonging to" the row it expanded from. */
+.squad-advisor-row-detail {
+  padding: 10px 12px 12px 48px;
+  border-top: 1px solid var(--border);
 }
 
 .squad-advisor-transfer {
@@ -432,78 +490,11 @@
   font-size: 16px;
 }
 
-.squad-advisor-delta {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
 .squad-advisor-reason {
   margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text-secondary);
-}
-
-/* ---- Card stepper controls -- prev/next buttons + dots, same row, matching the
-   ranked-move-cards direction (one move at a time, paged, not a scrolling list). Button
-   based rather than swipe-only so paging works identically with a mouse on desktop. */
-.squad-advisor-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.squad-advisor-nav-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.squad-advisor-nav-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.squad-advisor-nav-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.squad-advisor-dots {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.squad-advisor-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  background: var(--border);
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-}
-
-.squad-advisor-dot:hover {
-  background: var(--text-muted);
-}
-
-.squad-advisor-dot.active {
-  background: var(--accent);
-  transform: scale(1.25);
 }
 
 .squad-help-modal-body {

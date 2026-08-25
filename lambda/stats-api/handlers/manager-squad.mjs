@@ -105,6 +105,24 @@ async function getPicksForGW(season, entryId, gw) {
   return result.Items || [];
 }
 
+// Shared by handleManagerSquad and handleSquadAdvisor -- both need "the most recent
+// gameweek this entry actually has picks for," walking backward from the requested/
+// active gameweek since a manager who joined mid-season (or a gap in our own data)
+// means the exact active gameweek may have nothing stored yet. Factored out rather
+// than left duplicated in each handler, same reasoning as every other shared query
+// helper in this file (getFormMap, getTeamNameMap, ...) -- two copies of a "walk
+// backward until you find data" loop are exactly the kind of thing that quietly drifts
+// out of sync when one gets a fix the other doesn't.
+async function resolvePicksForEntry(season, entryId, requestedGw) {
+  let gw = requestedGw;
+  let picks = await getPicksForGW(season, entryId, gw);
+  while ((!picks || picks.length === 0) && gw > 1) {
+    gw -= 1;
+    picks = await getPicksForGW(season, entryId, gw);
+  }
+  return { gw, picks };
+}
+
 async function getFormMap(seasonId, gw) {
   try {
     const result = await dynamodb.send(new QueryCommand({
@@ -359,13 +377,8 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
 
   const season = await getCurrentSeason();
   const { seasonId } = await getCurrentSeasonInfo();
-  let gw = queryParams.gw ? parseInt(queryParams.gw, 10) : await getActiveGameweek();
-
-  let picks = await getPicksForGW(season, entryId, gw);
-  while ((!picks || picks.length === 0) && gw > 1) {
-    gw -= 1;
-    picks = await getPicksForGW(season, entryId, gw);
-  }
+  const requestedGw = queryParams.gw ? parseInt(queryParams.gw, 10) : await getActiveGameweek();
+  const { gw, picks } = await resolvePicksForEntry(season, entryId, requestedGw);
 
   if (!picks || picks.length === 0) {
     const seasonStarted = await hasSeasonStarted();
@@ -469,5 +482,248 @@ export async function handleManagerSquad(queryParams, corsHeaders) {
       active_chip: activeChip,
       players
     })
+  };
+}
+
+// ---- Squad Advisor (GH #44 -- "suggest squad moves using league + global FPL data") ----
+// First real (non-mock) piece: a single transfer suggestion. Captain and fixture-
+// outlook suggestions are still the hand-written MOCK_ADVISOR content in
+// ManagerSquad.jsx's AdvisorModal -- deliberately scoped down to just transfers for
+// this pass (direct instruction), not because the other two are harder.
+
+// Full ~700-player pool, live from bootstrap-static -- deliberately NOT read from the
+// `players` DynamoDB table (written once a WEEK by fpl-bootstrap), same reasoning as
+// getAvailabilityMap above: form/price/ownership/availability can all move daily, and a
+// transfer suggestion built on week-old numbers is worse than not suggesting one.
+// Returns a Map keyed by element id (== player_id everywhere else in this file) so
+// callers can do O(1) lookups for both squad members (to find their OWN price/form)
+// and pool candidates. Fails open to an EMPTY map, not a thrown error -- the caller
+// (handleSquadAdvisor) treats an empty pool as "can't suggest anything right now"
+// rather than a 500, same fail-open convention as every other live bootstrap-static
+// read in this file.
+async function getFullPlayerPool() {
+  try {
+    const response = await fetch(`${FPL_API}/bootstrap-static/`, { headers: FPL_FETCH_HEADERS });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const pool = new Map();
+    for (const el of data.elements || []) {
+      pool.set(el.id, {
+        id: el.id,
+        web_name: el.web_name,
+        team: el.team,
+        // FPL's own element_type (1 GKP / 2 DEF / 3 MID / 4 FWD) -- the SAME numeric
+        // id already stored as player_position on every fpl_entry_picks row, so no
+        // label mapping/reverse-lookup needed to compare a pool candidate's position
+        // against a squad player's position.
+        element_type: el.element_type,
+        // Tenths of a million (FPL's own convention, e.g. 125 = £12.5m) -- kept in
+        // this unit throughout the advisor logic, NOT converted to whole £m, since
+        // fpl_entry_gameweek's bank/value are the odd one out here (see
+        // getBankTenths below, which converts TO this unit instead).
+        now_cost: typeof el.now_cost === 'number' ? el.now_cost : null,
+        form: el.form,
+        selected_by_percent: el.selected_by_percent,
+        // FPL's own forward-looking projection for the next gameweek -- used as the
+        // primary suggestion signal (see suggestTransfer) precisely because it's
+        // forward-looking, unlike `form` which is a backward-looking rolling average.
+        ep_next: el.ep_next,
+        status: el.status || 'a'
+      });
+    }
+    return pool;
+  } catch (err) {
+    console.error('getFullPlayerPool error:', err);
+    return new Map();
+  }
+}
+
+// fpl_entry_gameweek.bank is stored in whole £m (fpl-data-ingester's
+// storeGameweekSummary divides FPL's raw tenths by 10 before writing it) -- the
+// opposite convention from bootstrap-static's now_cost (tenths). Converted back to
+// tenths here (rounded, since floating-point £m math like 1.5 * 10 can land on
+// 14.999999999998) so every price comparison in this file's advisor logic can stay in
+// one consistent unit instead of mixing two. Fails open to 0 (no spare budget) rather
+// than throwing -- assuming zero bank on an error is the safe direction: it can only
+// make the suggestion MORE conservative (fewer affordable candidates), never suggest
+// something the manager genuinely can't afford.
+async function getBankTenths(season, entryId, gw) {
+  try {
+    const result = await dynamodb.send(new QueryCommand({
+      TableName: 'fpl_entry_gameweek',
+      KeyConditionExpression: 'season_entry = :se AND gameweek = :gw',
+      ExpressionAttributeValues: { ':se': `${season}#${entryId}`, ':gw': gw }
+    }));
+    const bank = result.Items?.[0]?.bank;
+    return typeof bank === 'number' ? Math.round(bank * 10) : 0;
+  } catch (err) {
+    console.error('getBankTenths error:', err);
+    return 0;
+  }
+}
+
+// FPL's own single-letter availability code -> a short, user-facing reason clause.
+// Mirrors AVAILABILITY_STATUS_LABEL in ManagerSquad.jsx (kept as a separate constant
+// here rather than shared/imported -- this is backend response text, that one's
+// frontend UI copy, and they're allowed to drift independently even though they
+// currently say the same things).
+const AVAILABILITY_REASON = {
+  d: 'is a doubt',
+  i: 'is injured',
+  s: 'is suspended',
+  u: 'is unavailable',
+  n: 'is not available'
+};
+
+// Pure -- no I/O, no DynamoDB/fetch calls -- so this can be unit tested directly
+// against hand-built picks/pool fixtures without any mock-fetch/mock-dynamo
+// scaffolding. Takes the manager's raw picks (from fpl_entry_picks, NOT the enriched
+// `players` array handleManagerSquad builds -- this needs player_id/player_position
+// only, both already present on the raw pick rows) plus the live player pool and
+// budget, and returns either a real suggestion or a clear "why not" reason -- never
+// throws, never returns something silently wrong for the frontend to render as if it
+// were a real number.
+export function suggestTransfer(picks, poolMap, bankTenths) {
+  if (!picks || picks.length === 0 || !poolMap || poolMap.size === 0) {
+    return { found: false, reason: 'no_data' };
+  }
+
+  // Which of the manager's OWN 15 is the best candidate to transfer OUT. Availability
+  // trumps form entirely -- an injured/suspended player who can't even play is a much
+  // stronger "get rid of this" signal than merely cold form, so anyone not fully
+  // available ('a') is scored far below the worst possible form value, guaranteeing
+  // they're picked first if more than one player on the squad has an issue. Among
+  // players who ARE all available, plain current form (lower = weaker) breaks the tie.
+  // Considers the WHOLE 15, not just starters -- a transfer applies to the whole
+  // squad, and an unavailable bench player is just as worth flagging as a starter.
+  let outCandidate = null;
+  let outScore = Infinity;
+  for (const pick of picks) {
+    const live = poolMap.get(pick.player_id);
+    if (!live) continue; // pool/picks mismatch (stale player_id) -- skip, don't crash
+    const available = live.status === 'a';
+    const form = parseFloat(live.form);
+    const score = available ? (Number.isNaN(form) ? 0 : form) : -1000;
+    if (score < outScore) {
+      outScore = score;
+      outCandidate = { pick, live };
+    }
+  }
+  if (!outCandidate) {
+    return { found: false, reason: 'no_data' };
+  }
+
+  const ownedIds = new Set(picks.map((p) => p.player_id));
+  const outNowCost = outCandidate.live.now_cost ?? 0;
+  const budgetCeiling = outNowCost + (bankTenths || 0);
+
+  // Same position, actually available to play, not already on the squad, and
+  // affordable with the outgoing player's own price plus whatever's left in the bank
+  // -- a "suggestion" the manager can't actually afford isn't useful advice.
+  const candidates = [...poolMap.values()].filter((el) =>
+    el.element_type === outCandidate.pick.player_position &&
+    el.status === 'a' &&
+    !ownedIds.has(el.id) &&
+    typeof el.now_cost === 'number' &&
+    el.now_cost <= budgetCeiling
+  );
+
+  if (candidates.length === 0) {
+    return {
+      found: false,
+      reason: 'no_affordable_upgrade',
+      out: { player_id: outCandidate.pick.player_id, name: outCandidate.live.web_name }
+    };
+  }
+
+  // ep_next (forward-looking) weighted above form (backward-looking) rather than
+  // either alone -- ep_next is FPL's own next-gameweek projection, the more directly
+  // relevant number for "who should I bring in NOW", but it can be a thin, noisy
+  // single-gameweek estimate early in a run of fixtures; blending in current form as a
+  // secondary signal favors an in-form player over a pure one-gameweek FPL projection
+  // when the two disagree, without ignoring the projection entirely.
+  const score = (el) => (parseFloat(el.ep_next) || 0) * 2 + (parseFloat(el.form) || 0);
+  candidates.sort((a, b) => score(b) - score(a));
+  const inCandidate = candidates[0];
+
+  const epOut = parseFloat(outCandidate.live.ep_next) || 0;
+  const epIn = parseFloat(inCandidate.ep_next) || 0;
+  const deltaPts = Math.round((epIn - epOut) * 10) / 10;
+
+  const priceIn = (inCandidate.now_cost / 10).toFixed(1);
+  const priceOut = (outNowCost / 10).toFixed(1);
+
+  const reasonParts = [];
+  if (outCandidate.live.status !== 'a') {
+    reasonParts.push(`${outCandidate.live.web_name} ${AVAILABILITY_REASON[outCandidate.live.status] || 'is unavailable'}`);
+  } else {
+    reasonParts.push(`${outCandidate.live.web_name} has cooled off (form ${outCandidate.live.form ?? '0.0'})`);
+  }
+  reasonParts.push(`${inCandidate.web_name} is projected ${epIn.toFixed(1)} pts next gameweek at £${priceIn}m, vs £${priceOut}m for ${outCandidate.live.web_name}`);
+
+  return {
+    found: true,
+    out: {
+      player_id: outCandidate.pick.player_id,
+      name: outCandidate.live.web_name,
+      price: Number(priceOut),
+      form: outCandidate.live.form ?? null,
+      ep_next: epOut,
+      availability_status: outCandidate.live.status
+    },
+    in: {
+      player_id: inCandidate.id,
+      name: inCandidate.web_name,
+      price: Number(priceIn),
+      form: inCandidate.form ?? null,
+      ep_next: epIn
+    },
+    delta_pts: deltaPts,
+    reason: reasonParts.join('. ') + '.'
+  };
+}
+
+// Powers the Advisor modal's real transfer suggestion (see AdvisorModal in
+// ManagerSquad.jsx). Deliberately a SEPARATE endpoint from /manager-squad rather than
+// an extra field bolted onto that response -- the advisor needs its own live
+// bootstrap-static fetch (full player pool, not just this manager's 15) and its own
+// fpl_entry_gameweek query (bank), neither of which the plain squad view needs, so
+// folding them in would make every ordinary squad-view load pay for work only the
+// advisor modal actually uses.
+export async function handleSquadAdvisor(queryParams, corsHeaders) {
+  const entryId = parseInt(queryParams.entry_id, 10);
+  if (!entryId) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'entry_id is required' }) };
+  }
+
+  const season = await getCurrentSeason();
+  const requestedGw = queryParams.gw ? parseInt(queryParams.gw, 10) : await getActiveGameweek();
+  const { gw, picks } = await resolvePicksForEntry(season, entryId, requestedGw);
+
+  if (!picks || picks.length === 0) {
+    const seasonStarted = await hasSeasonStarted();
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        season,
+        gameweek: gw,
+        entry_id: entryId,
+        transfer: { found: false, reason: seasonStarted ? 'no_data' : 'season_not_started' }
+      })
+    };
+  }
+
+  const [poolMap, bankTenths] = await Promise.all([
+    getFullPlayerPool(),
+    getBankTenths(season, entryId, gw)
+  ]);
+
+  const transfer = suggestTransfer(picks, poolMap, bankTenths);
+
+  return {
+    statusCode: 200,
+    headers: corsHeaders,
+    body: JSON.stringify({ season, gameweek: gw, entry_id: entryId, transfer })
   };
 }

@@ -4,7 +4,7 @@ import { handleGenBI, handleGenBIFeedback } from './handlers/genbi.mjs';
 import { handleSeasons } from './handlers/seasons.mjs';
 import { handleFeedbackSubmit } from './handlers/feedback.mjs';
 import { handleTrends, handleTrendsManagers } from './handlers/trends.mjs';
-import { handleManagerSquad } from './handlers/manager-squad.mjs';
+import { handleManagerSquad, handleSquadAdvisor } from './handlers/manager-squad.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,6 +54,13 @@ export async function handler(event) {
 
     if (path.includes('/trends')) {
       return await handleTrends(queryParams, corsHeaders);
+    }
+
+    // Checked before the plain /manager-squad route below since '/manager-squad/advisor'
+    // also contains '/manager-squad' as a substring (same ordering trick as
+    // /trends/managers vs /trends above).
+    if (path.includes('/manager-squad/advisor')) {
+      return await handleSquadAdvisor(queryParams, corsHeaders);
     }
 
     if (path.includes('/manager-squad')) {

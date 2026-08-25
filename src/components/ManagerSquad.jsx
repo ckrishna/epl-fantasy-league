@@ -11,7 +11,7 @@
 // one fixed club-badge color regardless of light/dark theme -- deliberately NOT
 // theme-aware).
 import { useEffect, useState } from 'react';
-import { getManagerSquad } from '../api/client';
+import { getManagerSquad, getSquadAdvisor } from '../api/client';
 import '../styles/ManagerSquad.css';
 
 const POSITION_ORDER = ['GKP', 'DEF', 'MID', 'FWD'];
@@ -96,18 +96,32 @@ const JERSEY_PATH = 'M22 8 L38 1 Q50 10 62 1 L78 8 L96 21 L82 35 L78 30 L78 85 Q
 const JERSEY_COLLAR_PATH = 'M38 1 Q50 10 62 1 L57 9 Q50 14 43 9 Z';
 
 // MOCK CONTENT -- GH #44 ("Advisor: suggest squad moves using league + global FPL
-// data") has no real backend yet. This is a look-and-feel preview only, using
-// hand-written placeholder suggestions so the design can be reviewed before any of the
-// actual projection/analysis logic is built. Swap this out for a real getSquadAdvice()
-// API call (mirroring getManagerSquad) once that backend exists -- moves is the one
-// array AdvisorModal below actually renders (already sorted highest-impact first, the
-// way a real backend response should arrive too -- the UI doesn't re-sort).
+// data"). Four categories, redesigned 2026-08-24 per direct feedback on the original
+// one-card-at-a-time layout ("not intuitive") into a short, scannable list -- see
+// AdvisorModal below. Squad Change is now REAL (see getSquadAdvisor/buildTransferMove
+// -- direct instruction scoped the first real pass to exactly this, sourced from the
+// full player pool, not just the manager's own bench). Captain Pick, Chip Watch, and
+// Differential Pick are still this hand-written placeholder content -- AdvisorModal
+// marks them `preview: true` so nobody mistakes them for real advice now that Squad
+// Change genuinely is. Differential is scoped to "top 100 overall FPL ranks" per direct
+// instruction, not our own league's ownership (which we DO already compute for GenBI,
+// via computeOwnershipAggregates -- deliberately not reused here, since FPL exposes no
+// top-100-overall ownership feed, so this stays hand-written either way for now).
+// Uses a real current player's name (not a generic placeholder like "Low-owned
+// Midfielder") for Captain Pick/Chip Watch/Differential Pick's `name` field, per direct
+// feedback that a fake-sounding placeholder read as confusing rather than obviously
+// illustrative -- a user asked "who is the low owned midfielder?" expecting a real
+// answer. The stat attached to it (e.g. "4% owned, top 100") is still illustrative, not
+// computed -- the `preview: true` tag + subtitle are what actually communicate that,
+// not the name itself.
+// The 'transfer' entry below is kept only as the source for the dev-only
+// /__advisor-preview page (see mockTransferMove), which has no real entryId to query.
 const MOCK_ADVISOR = {
-  headline: 'Illustrative preview -- 3 moves could gain an estimated +9.4 pts over the next 3 gameweeks',
   moves: [
     {
       kind: 'transfer',
-      title: 'Transfer',
+      title: 'Squad Change',
+      teaser: '+4.2 pts',
       delta: '+4.2 pts',
       out: { name: 'Struggling Def' },
       in: { name: 'In-form Def' },
@@ -115,20 +129,42 @@ const MOCK_ADVISOR = {
     },
     {
       kind: 'captain',
-      title: 'Captain',
+      title: 'Captain Pick',
+      teaser: '+3.1 pts',
       delta: '+3.1 pts',
       name: 'Erling Haaland',
       reason: 'Home fixture against a defense that’s conceded in 5 of their last 6, and nailed-on penalty duty -- vs your current armband.'
     },
     {
-      kind: 'fixture',
-      title: 'Fixture watch',
-      delta: null,
-      name: 'Arsenal-heavy squad',
-      reason: 'GW7-9 average difficulty 2.0 (easy) for Arsenal, and 3 of your players are Arsenal. Your Everton defender has the opposite run (4.3, hard) -- worth watching.'
+      kind: 'chip',
+      title: 'Chip Watch',
+      teaser: 'Bench Boost',
+      chipKey: 'bboost',
+      name: 'Bench Boost',
+      reason: 'Your bench looks unusually strong this week -- Jordan Pickford and 2 of your other 3 subs are nailed starters with winnable fixtures. Worth weighing now, or saving for a double gameweek.'
+    },
+    {
+      kind: 'differential',
+      title: 'Differential Pick',
+      teaser: '4% owned (top 100)',
+      name: 'Morgan Gibbs-White',
+      reason: 'Owned by just 4% of the top 100 overall ranks but trending up in form -- a lower-risk way to chase a rank gain than a heavily-owned template pick.'
     }
   ]
 };
+
+// Small circle badge shown on each collapsed row -- matches the app's existing
+// letter/2-letter badge language (the "?" help button, captain "C"/"V" badges, chip
+// codes on the points badge) rather than introducing a new icon set. Chip Watch uses
+// the real chip abbreviation (CHIP_CODES) for whichever chip is actually being
+// suggested, so the badge stays accurate if the suggested chip ever changes.
+function rowIcon(move) {
+  if (move.kind === 'transfer') return '⇄'; // ⇄
+  if (move.kind === 'captain') return 'C';
+  if (move.kind === 'chip') return CHIP_CODES[move.chipKey] || '★';
+  if (move.kind === 'differential') return '%';
+  return '•';
+}
 
 function difficultyTier(d) {
   if (d <= 2) return 'easy';
@@ -412,8 +448,19 @@ function SparkleIcon({ size = 20 }) {
 
 // One move's actual content -- kept separate from the stepper chrome below so adding a
 // new `kind` later (e.g. "chip") only means adding a case here, not touching navigation.
+// The transfer move now has two extra states a mock move never had: `loading` (still
+// waiting on getSquadAdvisor) and `noSuggestion` (the real backend came back with
+// found: false -- e.g. no affordable upgrade, or no picks data yet) -- both render as
+// plain text instead of the OUT/IN boxes, which only make sense once there's an actual
+// pair of players to show.
 function AdvisorMoveBody({ move }) {
   if (move.kind === 'transfer') {
+    if (move.loading) {
+      return <p className="squad-advisor-transfer-name">Fetching a live suggestion&hellip;</p>;
+    }
+    if (move.noSuggestion) {
+      return null;
+    }
     return (
       <div className="squad-advisor-transfer">
         <div className="squad-advisor-transfer-side squad-advisor-out">
@@ -431,19 +478,108 @@ function AdvisorMoveBody({ move }) {
   return <p className="squad-advisor-transfer-name">{move.name}</p>;
 }
 
-// Preview panel for GH #44 -- see the MOCK_ADVISOR comment above for why every number
-// and name in here is hand-written, not computed. Deliberately labeled "preview" in two
-// places (subtitle + headline) so nobody mistakes placeholder content for real advice.
+// Everything but the transfer move is still hand-written MOCK_ADVISOR content --
+// tagged `preview: true` so the card header can flag it honestly now that the transfer
+// card next to it is real (buildTransferMove below). Filters the mock transfer entry
+// back out since a real one takes its place as moves[0] once fetched/loaded.
+function mockPreviewMoves() {
+  return MOCK_ADVISOR.moves
+    .filter((m) => m.kind !== 'transfer')
+    .map((m) => ({ ...m, preview: true }));
+}
+
+// The dev-only /__advisor-preview page (isMockPreview) has no real entryId to query --
+// falls back to MOCK_ADVISOR's own placeholder transfer instead of fetching, so that
+// page still has a transfer card to review.
+function mockTransferMove() {
+  const mock = MOCK_ADVISOR.moves.find((m) => m.kind === 'transfer');
+  return { ...mock, preview: true };
+}
+
+// FPL's own single-letter availability codes don't appear here -- getSquadAdvisor's
+// `transfer.reason` is one of a small fixed set ('no_data' | 'season_not_started' |
+// 'no_affordable_upgrade') rather than free text, so this can give each one an honest,
+// specific explanation instead of a generic "couldn't suggest anything".
+function transferUnavailableReason(transfer) {
+  if (transfer.reason === 'season_not_started') {
+    return "The season hasn't started yet -- check back once the Gameweek 1 deadline passes.";
+  }
+  if (transfer.reason === 'no_affordable_upgrade') {
+    return transfer.out
+      ? `${transfer.out.name} looks like the weakest link in your squad right now, but no affordable upgrade was found within your current budget.`
+      : 'No affordable upgrade was found within your current budget.';
+  }
+  return "We don't have enough picks data yet to suggest a transfer.";
+}
+
+// Short label shown on the collapsed row when there's no real delta to show (loading,
+// or a found:false response) -- keeps the row scannable even before it's expanded.
+function transferUnavailableTeaser(transfer) {
+  if (!transfer) return 'No data yet';
+  if (transfer.reason === 'no_affordable_upgrade') return 'No upgrade in budget';
+  return 'No data yet';
+}
+
+// Builds the Squad Change row from a real /manager-squad/advisor response. `found:
+// false` isn't an error -- it's a legitimate "nothing to suggest right now" answer --
+// so it renders as its own explanatory row (AdvisorMoveBody's noSuggestion case)
+// rather than being treated as a fetch failure.
+function buildTransferMove(transfer) {
+  if (!transfer || !transfer.found) {
+    return {
+      kind: 'transfer',
+      title: 'Squad Change',
+      teaser: transferUnavailableTeaser(transfer),
+      delta: null,
+      noSuggestion: true,
+      reason: transferUnavailableReason(transfer || {})
+    };
+  }
+  const sign = transfer.delta_pts > 0 ? '+' : '';
+  const delta = `${sign}${transfer.delta_pts} pts`;
+  return {
+    kind: 'transfer',
+    title: 'Squad Change',
+    teaser: delta,
+    delta,
+    out: { name: transfer.out.name },
+    in: { name: transfer.in.name },
+    reason: transfer.reason
+  };
+}
+
+// Redesigned 2026-08-24 per direct feedback that the original one-card-at-a-time
+// pager ("Move 1 of 3", prev/next, dots) wasn't intuitive. Now a short, scannable list
+// of 4 rows -- Squad Change, Captain Pick, Chip Watch, Differential Pick -- collapsed
+// by default (icon + title + one-line teaser only), each expanding IN PLACE on click
+// to reveal the full detail (OUT/IN or name, plus the reason) rather than opening a
+// separate view. Only one row expands at a time (an accordion, not independent
+// toggles) -- keeps the modal from growing tall with everything open at once, and
+// matches "grab your attention, click each to get more info" -- one focus at a time.
 //
-// Ranked move cards: one move at a time, highest-impact first, paged with prev/next
-// buttons + dots rather than a scrolling list of sections -- chosen over the earlier
-// all-at-once layout specifically so a manager sees "here's move #1" before anything
-// else, matching how the app owner wanted this reviewed. Buttons (not touch-swipe-only)
-// so paging works the same on desktop as on mobile.
-function AdvisorModal({ onClose }) {
-  const [index, setIndex] = useState(0);
-  const moves = MOCK_ADVISOR.moves;
-  const move = moves[index];
+// Squad Change is real (GH #44's first non-mock piece, fetched live from
+// getSquadAdvisor); Captain Pick/Chip Watch/Differential Pick are still
+// MOCK_ADVISOR's hand-written content, each tagged `preview: true` in its row.
+function AdvisorModal({ onClose, entryId, gw, isMockPreview }) {
+  const [expanded, setExpanded] = useState(null);
+  const [transferMove, setTransferMove] = useState(isMockPreview ? mockTransferMove() : null);
+  const [transferError, setTransferError] = useState(false);
+
+  useEffect(() => {
+    if (isMockPreview) return;
+    getSquadAdvisor(entryId, gw)
+      .then((data) => setTransferMove(buildTransferMove(data.transfer)))
+      .catch((err) => {
+        console.error('getSquadAdvisor failed:', err.message);
+        setTransferError(true);
+      });
+  }, [entryId, gw, isMockPreview]);
+
+  const resolvedTransferMove = transferError
+    ? { kind: 'transfer', title: 'Squad Change', teaser: "Couldn't load", delta: null, noSuggestion: true, reason: "Couldn't load a transfer suggestion right now. Try again in a moment." }
+    : (transferMove || { kind: 'transfer', title: 'Squad Change', teaser: 'Loading…', delta: null, loading: true });
+
+  const moves = [resolvedTransferMove, ...mockPreviewMoves()];
 
   return (
     <div className="squad-help-overlay" onClick={onClose}>
@@ -456,53 +592,41 @@ function AdvisorModal({ onClose }) {
           <button type="button" className="squad-close-btn" onClick={onClose} aria-label="Close">&times;</button>
         </div>
 
-        <p className="squad-advisor-subtitle">Preview -- illustrative suggestions, not wired to real projections yet.</p>
+        <p className="squad-advisor-subtitle">
+          {isMockPreview
+            ? 'Preview -- illustrative suggestions, not wired to real projections yet.'
+            : 'Squad Change below is live, using real FPL data. Captain, chip, and differential picks are still an illustrative preview.'}
+        </p>
 
-        <p className="squad-advisor-headline">{MOCK_ADVISOR.headline}</p>
+        <div className="squad-advisor-list">
+          {moves.map((move) => {
+            const isOpen = expanded === move.kind;
+            return (
+              <div key={move.kind} className={`squad-advisor-row-wrap ${isOpen ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="squad-advisor-row"
+                  onClick={() => setExpanded(isOpen ? null : move.kind)}
+                  aria-expanded={isOpen}
+                >
+                  <span className="squad-advisor-row-icon" aria-hidden="true">{rowIcon(move)}</span>
+                  <span className="squad-advisor-row-title">
+                    {move.title}
+                    {move.preview && <span className="squad-advisor-row-preview-tag">Preview</span>}
+                  </span>
+                  <span className="squad-advisor-row-teaser">{move.teaser}</span>
+                  <span className="squad-advisor-row-chevron" aria-hidden="true">{isOpen ? '−' : '+'}</span>
+                </button>
 
-        <div className="squad-advisor-card">
-          <div className="squad-advisor-card-header">
-            <span className="squad-advisor-card-rank">Move {index + 1} of {moves.length}</span>
-            {move.delta && <span className="squad-advisor-delta">{move.delta}</span>}
-          </div>
-          <p className="squad-advisor-section-title">{move.title}</p>
-          <AdvisorMoveBody move={move} />
-          <p className="squad-advisor-reason">{move.reason}</p>
-        </div>
-
-        <div className="squad-advisor-nav">
-          <button
-            type="button"
-            className="squad-advisor-nav-btn"
-            onClick={() => setIndex((i) => Math.max(0, i - 1))}
-            disabled={index === 0}
-            aria-label="Previous move"
-          >
-            &larr;
-          </button>
-
-          <div className="squad-advisor-dots">
-            {moves.map((m, i) => (
-              <button
-                key={m.kind}
-                type="button"
-                className={`squad-advisor-dot ${i === index ? 'active' : ''}`}
-                onClick={() => setIndex(i)}
-                aria-label={`Go to move ${i + 1}: ${m.title}`}
-                aria-current={i === index}
-              />
-            ))}
-          </div>
-
-          <button
-            type="button"
-            className="squad-advisor-nav-btn"
-            onClick={() => setIndex((i) => Math.min(moves.length - 1, i + 1))}
-            disabled={index === moves.length - 1}
-            aria-label="Next move"
-          >
-            &rarr;
-          </button>
+                {isOpen && (
+                  <div className="squad-advisor-row-detail">
+                    <AdvisorMoveBody move={move} />
+                    {move.reason && <p className="squad-advisor-reason">{move.reason}</p>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -820,34 +944,14 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
 
       {!loading && !error && squad && squad.players.length > 0 && (
         <div className="squad-pitch">
-          {/* Three-column grid row: left column (help icon + team/manager name, which
-              truncates per direct feedback -- "truncate name if needed") and right
-              column (reserved Advisor slot) are equal-width (minmax(0, 1fr) each), so
-              the points badge in the middle column sits mathematically centered in the
-              row regardless of how long the name is, instead of just being "next to"
-              the name. The chip is shown once (in the badge's own bar below the
-              number) -- no separate tag next to the name. */}
+          {/* Three-column grid row: left column (help icon + Advisor sparkle, side by
+              side) and right column (team/manager name, truncates per direct feedback --
+              "truncate name if needed") are equal-width (minmax(0, 1fr) each), so the
+              points badge in the middle column sits mathematically centered in the row
+              regardless of how long the name is, instead of just being "next to" the
+              name. The chip is shown once (in the badge's own bar below the number) --
+              no separate tag next to the name. */}
           <div className="squad-legend">
-            {/* Floating, always-pulsing "AI" entry point -- centered on the legend row
-                itself (same height as the team name / GW total, not floating above the
-                whole card) so it reads as level with the header rather than a stray
-                badge, while still sitting in the empty middle gap between the identity
-                block and the GW/points block so it doesn't cover either. See
-                MOCK_ADVISOR above: this opens a look-and-feel preview only, GH #44's
-                real suggestion logic doesn't exist yet. */}
-            <button
-              type="button"
-              className="squad-advisor-btn"
-              onClick={() => setShowAdvisor(true)}
-              aria-haspopup="dialog"
-              aria-label="Get suggested moves to improve this squad"
-              title="Get suggested moves to improve this squad"
-            >
-              <span className="squad-advisor-btn-ring" aria-hidden="true" />
-              <span className="squad-advisor-btn-ring squad-advisor-btn-ring-delay" aria-hidden="true" />
-              <SparkleIcon />
-            </button>
-
             <div className="squad-legend-left">
               <button
                 type="button"
@@ -860,16 +964,23 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
                 ?
               </button>
 
-              <div className="squad-legend-identity">
-                <p className="squad-legend-team" title={teamName}>{teamName}</p>
-                {managerName && (
-                  <p className="squad-legend-manager">
-                    <span className="squad-legend-manager-text" title={managerName}>
-                      {managerName}
-                    </span>
-                  </p>
-                )}
-              </div>
+              {/* Always-pulsing "AI" entry point -- moved next to the help icon per
+                  direct feedback (was previously floating, absolutely centered over
+                  the whole row). See MOCK_ADVISOR above: the transfer move in this
+                  modal is real (GH #44, tasks #196-202); captain/fixture-run are still
+                  hand-written preview content. */}
+              <button
+                type="button"
+                className="squad-advisor-btn"
+                onClick={() => setShowAdvisor(true)}
+                aria-haspopup="dialog"
+                aria-label="Get suggested moves to improve this squad"
+                title="Get suggested moves to improve this squad"
+              >
+                <span className="squad-advisor-btn-ring" aria-hidden="true" />
+                <span className="squad-advisor-btn-ring squad-advisor-btn-ring-delay" aria-hidden="true" />
+                <SparkleIcon size={14} />
+              </button>
             </div>
 
             {typeof squad.team_gw_points_net === 'number' && (
@@ -885,10 +996,18 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
               </div>
             )}
 
-            {/* Empty on purpose -- reserves the right side of this row for the
-                center/right Advisor icon (a separate, not-yet-merged feature branch),
-                per direct instruction to leave this space alone. */}
-            <div className="squad-legend-advisor-slot" aria-hidden="true" />
+            <div className="squad-legend-right">
+              <div className="squad-legend-identity">
+                <p className="squad-legend-team" title={teamName}>{teamName}</p>
+                {managerName && (
+                  <p className="squad-legend-manager">
+                    <span className="squad-legend-manager-text" title={managerName}>
+                      {managerName}
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {POSITION_ORDER.map((pos) => (
@@ -934,7 +1053,14 @@ export default function ManagerSquad({ entryId, teamName, managerName, onClose, 
         />
       )}
 
-      {showAdvisor && <AdvisorModal onClose={() => setShowAdvisor(false)} />}
+      {showAdvisor && (
+        <AdvisorModal
+          onClose={() => setShowAdvisor(false)}
+          entryId={entryId}
+          gw={squad?.gameweek}
+          isMockPreview={!!mockSquad}
+        />
+      )}
     </div>
   );
 }

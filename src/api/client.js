@@ -105,6 +105,20 @@ export async function getManagerSquad(entryId, gw = null) {
   return res.json();
 }
 
+// Real transfer suggestion for the Advisor modal (GH #44) -- a separate endpoint from
+// getManagerSquad above, same reasoning as the backend split (handleSquadAdvisor does
+// its own live full-player-pool fetch + bank lookup that a plain squad view doesn't
+// need). Same failure convention as getManagerSquad: throws on a non-OK response
+// rather than silently returning fake data, so AdvisorModal can show an explicit
+// "couldn't load" state instead of a mock-looking number that isn't real.
+export async function getSquadAdvisor(entryId, gw = null) {
+  const params = new URLSearchParams({ entry_id: entryId });
+  if (gw) params.set('gw', gw);
+  const res = await fetch(`${API_BASE}/manager-squad/advisor?${params.toString()}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function getTrendingPlayers(gw = null, limit = 10) {
   try {
     const res = await fetch(`${API_BASE}/players/trending?gw=${gw}&limit=${limit}`);
