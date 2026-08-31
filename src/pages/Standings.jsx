@@ -49,11 +49,54 @@ function lineItemLabel(item) {
       return `Gameweek ${item.gameweek} win` + (item.tieCount > 1 ? ` (split ${item.tieCount} ways)` : '');
     case 'gw_reassigned':
       return `Gameweek ${item.gameweek} win — runner-up payout*` + (item.tieCount > 1 ? ` (split ${item.tieCount} ways)` : '');
+    case 'gw_win_group':
+      return `${item.count} Gameweek wins`;
+    case 'gw_reassigned_group':
+      return `${item.count} Gameweek wins — runner-up payout*`;
     case 'top_split':
       return `Season ${ordinal(item.rank)}-place payout`;
     default:
       return item.type;
   }
+}
+
+// Consolidates every gw_win (and, separately, every gw_reassigned) line item into one
+// row once there's more than one -- per direct feedback, a manager with a lot of GW
+// wins made this modal grow one row per win instead of staying a short summary. A
+// single win still gets its own specific "Gameweek N win" row (unchanged, and reads
+// better than "1 Gameweek win" would) -- only 2+ collapses into a count. The
+// individual gameweek numbers aren't lost, just moved to the row's hover title instead
+// of staying inline, since the user asked for the count specifically, not a shorter
+// list of the same numbers. top_split rows (season-end payout, always 1-3 of them) are
+// left alone -- they were never the source of the list growing long.
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function consolidateLineItems(items) {
+  const gwWins = items.filter((i) => i.type === 'gw_win');
+  const gwReassigned = items.filter((i) => i.type === 'gw_reassigned');
+  const rest = items.filter((i) => i.type !== 'gw_win' && i.type !== 'gw_reassigned');
+
+  const winEntries = gwWins.length > 1
+    ? [{
+        type: 'gw_win_group',
+        count: gwWins.length,
+        gameweeks: gwWins.map((i) => i.gameweek),
+        amount: round2(gwWins.reduce((sum, i) => sum + i.amount, 0))
+      }]
+    : gwWins;
+
+  const reassignedEntries = gwReassigned.length > 1
+    ? [{
+        type: 'gw_reassigned_group',
+        count: gwReassigned.length,
+        gameweeks: gwReassigned.map((i) => i.gameweek),
+        amount: round2(gwReassigned.reduce((sum, i) => sum + i.amount, 0))
+      }]
+    : gwReassigned;
+
+  return [...winEntries, ...reassignedEntries, ...rest];
 }
 
 // Sort order for the breakdown list: buy-in first (the starting cost), then every GW
@@ -78,8 +121,8 @@ function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
   // different questions. leagueFinances.js still computes it internally (untouched,
   // in case a future feature genuinely needs true profit/loss), it just isn't
   // rendered anywhere in this UI anymore.
-  const items = sortLineItems(finance.breakdown || []).filter((i) => i.type !== 'buy_in');
-  const hasReassigned = items.some((i) => i.type === 'gw_reassigned');
+  const items = consolidateLineItems(sortLineItems(finance.breakdown || []).filter((i) => i.type !== 'buy_in'));
+  const hasReassigned = items.some((i) => i.type === 'gw_reassigned' || i.type === 'gw_reassigned_group');
   const totalWon = Math.round(finance.totalWon);
   return (
     <div className="money-breakdown-overlay" onClick={onClose}>
@@ -94,7 +137,15 @@ function MoneyBreakdownModal({ teamName, managerName, finance, onClose }) {
 
         <ul className="money-breakdown-list">
           {items.map((item, i) => (
-            <li key={i} className="money-breakdown-row">
+            <li
+              key={i}
+              className="money-breakdown-row"
+              // Consolidated rows (gw_win_group/gw_reassigned_group) don't list which
+              // gameweeks individually anymore -- that's the whole point of grouping
+              // them -- but the specific weeks are still available on hover instead of
+              // just disappearing.
+              title={item.gameweeks ? `GW${item.gameweeks.join(', GW')}` : undefined}
+            >
               <span className="money-breakdown-label">{lineItemLabel(item)}</span>
               <span className={`money-breakdown-amount ${item.amount >= 0 ? 'money-breakdown-amount-positive' : 'money-breakdown-amount-negative'}`}>
                 {item.amount >= 0 ? '+' : '−'}${Math.abs(item.amount).toFixed(2)}
