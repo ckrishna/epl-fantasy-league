@@ -509,6 +509,23 @@ async function storeGameweekSummary(manager, picksData, gw, season, livePoints =
   }
 }
 
+// Sort key is player_id ALONE (not `${position}#${element}`, despite the attribute's
+// name -- kept as-is rather than renamed, to avoid a second unrelated churn on top of
+// this fix) -- found live 2026-08-24: a manager's squad view showed several players
+// TWICE, once as a starter and once on the bench. Root cause: this table's sort key
+// used to be `${pick.position}#${pick.element}`, and FPL's own auto-substitution
+// processing can change a player's `position` for an ALREADY-STORED gameweek between
+// two hourly polls (gwsToFetch re-fetches the active gameweek AND the one before it
+// every run, specifically so post-autosub scores settle in -- see gwsToFetch above).
+// A changed `position` meant a changed sort key, so PutCommand's "overwrite by exact
+// key" never found the old row to replace -- it just left it behind, orphaned,
+// alongside the new one. Same failure mode independent of autosubs whenever a manager
+// edits their squad_position ordering (e.g. reordering the bench) between two polls of
+// an upcoming, not-yet-locked gameweek. Using player_id alone means this table can only
+// ever hold ONE row per (season, entry, gameweek, player) going forward, however many
+// times `position` legitimately changes in between -- see
+// scripts/dedupe-picks.mjs for cleaning up rows already duplicated by the old key
+// before this fix shipped.
 async function storePicks(manager, picksData, playerMap, gw, season, livePoints = new Map()) {
   const picks = picksData.picks;
   const batch = [];
@@ -518,7 +535,7 @@ async function storePicks(manager, picksData, playerMap, gw, season, livePoints 
 
     const item = {
       season_entry_gw: `${season}#${manager.entry_id}#${gw.id}`,
-      position_player: `${pick.position}#${pick.element}`,
+      position_player: String(pick.element),
       season,
       entry_id: manager.entry_id,
       gameweek: gw.id,
