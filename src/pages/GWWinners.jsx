@@ -114,31 +114,45 @@ function GWDetail({ gameweek, season, leagueId }) {
   return (
     <div className="winners-table-section">
       <h3>Gameweek {gameweek} &mdash; Full Standings</h3>
-      <table className="winners-table">
-        <thead>
-          <tr>
-            {DETAIL_COLUMNS.map((col) => (
-              <SortableTh key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((m) => (
-            <tr key={m.manager_id} className={m.rank === 1 ? 'top-1' : ''}>
-              <td className="gw-cell">{m.rank}</td>
-              <td className="team-cell desktop-only">{m.real_name}</td>
-              <td className="manager-cell">{m.team_nickname || m.real_name}</td>
-              <td className="gross-points desktop-only">{m.points_this_week}</td>
-              <td className="transfer-cost desktop-only">
-                {m.transfer_cost > 0 ? `-${m.transfer_cost}` : '—'}
-              </td>
-              <td className="net-points">
-                <strong>{m.net_points}</strong>
-              </td>
+      {/* .winners-table-scroll: a defensive fallback, not the primary mobile layout --
+          .desktop-only above is what's SUPPOSED to drop this to 3 columns on a phone.
+          But if the table is ever wider than its container for any reason (an
+          environment where that media query doesn't apply the way it does in every
+          browser tested here, a font/zoom setting that widens the rendered text, a
+          screen narrower than typical), there was nothing to fall back on: App.css's
+          `html, body { overflow-x: hidden }` is a global defensive floor against a wide
+          element shoving the whole PAGE sideways, and its side effect on an unwrapped
+          table is to silently CLIP whatever doesn't fit instead of letting it scroll --
+          exactly the "right side isn't shown" report this fixes. Same
+          overflow-x: auto + -webkit-overflow-scrolling: touch pattern already used for
+          Stats.jsx's suggested-questions row and the mobile stats-grid. */}
+      <div className="winners-table-scroll">
+        <table className="winners-table">
+          <thead>
+            <tr>
+              {DETAIL_COLUMNS.map((col) => (
+                <SortableTh key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.map((m) => (
+              <tr key={m.manager_id} className={m.rank === 1 ? 'top-1' : ''}>
+                <td className="gw-cell">{m.rank}</td>
+                <td className="team-cell desktop-only">{m.real_name}</td>
+                <td className="manager-cell">{m.team_nickname || m.real_name}</td>
+                <td className="gross-points desktop-only">{m.points_this_week}</td>
+                <td className="transfer-cost desktop-only">
+                  {m.transfer_cost > 0 ? `-${m.transfer_cost}` : '—'}
+                </td>
+                <td className="net-points">
+                  <strong>{m.net_points}</strong>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {rows.length === 0 && (
         <p className="no-data">No standings data available for this gameweek</p>
@@ -330,37 +344,41 @@ export default function GWWinners({ season = null, seasonLabel = null, resetKey 
             </div>
           )}
         </div>
-        <table className="winners-table">
-          <thead>
-            <tr>
-              {WINNERS_COLUMNS.map((col) => (
-                <SortableTh key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sortedWinners.map((w) => (
-              <tr
-                key={`${w.gameweek}-${w.entry_id}`}
-                className={`winners-row-link ${w.isTied ? 'winners-row-tied' : ''}`}
-                onClick={() => setSelectedGW(w.gameweek)}
-                title={w.isTied ? `Tied for the win in GW${w.gameweek} -- view full standings` : `View full GW${w.gameweek} standings`}
-              >
-                <td className="gw-cell">{w.gameweek}</td>
-                <td className="team-cell desktop-only">{w.real_name}</td>
-                <td className="manager-cell">{w.team_nickname || w.real_name}</td>
-                <td className="gross-points desktop-only">{w.gross_points}</td>
-                <td className="transfer-cost desktop-only">
-                  {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
-                </td>
-                <td className="net-points">
-                  {w.isTied && <span className="tied-badge">Tied</span>}
-                  <strong>{w.net_points}</strong>
-                </td>
+        {/* See the matching comment on GWDetail's table above -- same defensive
+            horizontal-scroll fallback, same reason. */}
+        <div className="winners-table-scroll">
+          <table className="winners-table">
+            <thead>
+              <tr>
+                {WINNERS_COLUMNS.map((col) => (
+                  <SortableTh key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sortedWinners.map((w) => (
+                <tr
+                  key={`${w.gameweek}-${w.entry_id}`}
+                  className={`winners-row-link ${w.isTied ? 'winners-row-tied' : ''}`}
+                  onClick={() => setSelectedGW(w.gameweek)}
+                  title={w.isTied ? `Tied for the win in GW${w.gameweek} -- view full standings` : `View full GW${w.gameweek} standings`}
+                >
+                  <td className="gw-cell">{w.gameweek}</td>
+                  <td className="team-cell desktop-only">{w.real_name}</td>
+                  <td className="manager-cell">{w.team_nickname || w.real_name}</td>
+                  <td className="gross-points desktop-only">{w.gross_points}</td>
+                  <td className="transfer-cost desktop-only">
+                    {w.transfer_cost > 0 ? `-${w.transfer_cost}` : '—'}
+                  </td>
+                  <td className="net-points">
+                    {w.isTied && <span className="tied-badge">Tied</span>}
+                    <strong>{w.net_points}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {filteredWinners.length === 0 && winners.length > 0 && (
           <p className="no-data">No wins for this manager yet</p>

@@ -197,6 +197,20 @@
   border-color: var(--accent);
 }
 
+/* Lets the table itself scroll horizontally within its own box instead of relying on
+   App.css's `html, body { overflow-x: hidden }` (a defensive floor against a wide
+   element shoving the whole PAGE sideways) as the only thing standing between a
+   too-wide table and the edge of the screen -- that global rule stops the page from
+   shifting, but its side effect on an unwrapped table is to silently CLIP whatever
+   doesn't fit, with no way to reach it. `.desktop-only` below is still the primary
+   mobile fix (drops to 3 columns so the table fits without scrolling on a typical
+   phone); this is the fallback for any width/zoom/environment where it doesn't quite
+   fit anyway. Same pattern as Stats.css's `.queries-list`. */
+.winners-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .winners-table {
   width: 100%;
   border-collapse: collapse;
